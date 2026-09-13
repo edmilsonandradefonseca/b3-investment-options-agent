@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "b3-investment-options-agent"
+version = "0.1.0"
+description = "Local-first investment and options decision copilot for the Brazilian B3 market."
+readme = "README.md"
+requires-python = ">=3.14,<3.15"
+license = { text = "Private" }
+authors = [
+    { name = "Edmilson Fonseca" }
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<9",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"

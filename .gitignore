@@ -1,1 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Tooling
+.ruff_cache/
+.mypy_cache/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project data
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# Upstream internal Git metadata
 upstream/TradingAgents/.git/
+
+# Build artifacts
+*.egg-info/
