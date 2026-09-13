@@ -86,3 +86,44 @@ def test_missing_vault_raises(tmp_path: Path):
 
     with pytest.raises(FileNotFoundError):
         store.list_notes()
+from datetime import datetime, timezone
+
+from b3_agent.knowledge.models import KnowledgeRecord
+
+
+def test_record_discovery_creates_versioned_note(tmp_path: Path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+
+    store = ObsidianKnowledgeStore(vault)
+
+    now = datetime.now(timezone.utc)
+
+    record = KnowledgeRecord(
+        knowledge_id="TEST-001",
+        topic="Test Discovery",
+        category="test",
+        status="DISCOVERED",
+        version="1.0",
+        created_at=now,
+        updated_at=now,
+        source="unit-test",
+        evidence="Test evidence",
+        content="Test content",
+    )
+
+    path = store.record_discovery(record)
+
+    assert path == Path(
+        "00_System/Knowledge/TEST-001/v1.0.md"
+    )
+
+    content = store.read_note(path)
+
+    assert "# Test Discovery" in content
+    assert "- Knowledge ID: TEST-001" in content
+    assert "- Status: DISCOVERED" in content
+    assert "- Version: 1.0" in content
+    assert "- Source: unit-test" in content
+    assert "Test evidence" in content
+    assert "Test content" in content

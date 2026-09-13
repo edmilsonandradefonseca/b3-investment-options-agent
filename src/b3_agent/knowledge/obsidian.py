@@ -1,4 +1,6 @@
-from pathlib import Path
+﻿from pathlib import Path
+
+from .models import KnowledgeRecord
 
 
 class ObsidianKnowledgeStore:
@@ -25,7 +27,9 @@ class ObsidianKnowledgeStore:
         path = self._safe_path(relative_path)
 
         if not path.is_file():
-            raise FileNotFoundError(f"Obsidian note does not exist: {relative_path}")
+            raise FileNotFoundError(
+                f"Obsidian note does not exist: {relative_path}"
+            )
 
         return path.read_text(encoding="utf-8")
 
@@ -51,6 +55,48 @@ class ObsidianKnowledgeStore:
                 matches.append(relative_path)
 
         return matches
+
+    def record_discovery(self, record: KnowledgeRecord) -> Path:
+        """Persist a knowledge discovery as a versioned Markdown record."""
+        if not record.knowledge_id.strip():
+            raise ValueError("knowledge_id must not be empty")
+
+        if not record.version.strip():
+            raise ValueError("version must not be empty")
+
+        relative_path = (
+            Path("00_System")
+            / "Knowledge"
+            / record.knowledge_id
+            / f"v{record.version}.md"
+        )
+
+        content = f"""# {record.topic}
+
+## Metadata
+
+- Knowledge ID: {record.knowledge_id}
+- Category: {record.category}
+- Status: {record.status}
+- Version: {record.version}
+- Created At: {record.created_at.isoformat()}
+- Updated At: {record.updated_at.isoformat()}
+- Source: {record.source}
+- Validated At: {record.validated_at.isoformat() if record.validated_at else ""}
+- Validated By: {record.validated_by or ""}
+- Previous Version: {record.previous_version or ""}
+
+## Evidence
+
+{record.evidence}
+
+## Content
+
+{record.content}
+"""
+
+        self.write_note(relative_path, content)
+        return relative_path
 
     def _safe_path(self, relative_path: str | Path) -> Path:
         """Resolve a vault-relative path without allowing vault escape."""
