@@ -1,5 +1,5 @@
+﻿from datetime import date
 from datetime import datetime
-import json
 
 import pytest
 
@@ -16,7 +16,25 @@ def test_empty_ticker_is_rejected():
     adapter = BrapiAdapter()
 
     with pytest.raises(ValueError, match="ticker must not be empty"):
-        adapter.get_market_data("")
+        adapter.get_market_data(
+            "",
+            date(2026, 9, 1),
+            date(2026, 9, 10),
+        )
+
+
+def test_invalid_date_range_is_rejected():
+    adapter = BrapiAdapter()
+
+    with pytest.raises(
+        ValueError,
+        match="start date must be on or before end date",
+    ):
+        adapter.get_market_data(
+            "PETR4",
+            date(2026, 9, 10),
+            date(2026, 9, 1),
+        )
 
 
 def test_response_without_results_is_rejected(monkeypatch):
@@ -28,7 +46,7 @@ def test_response_without_results_is_rejected(monkeypatch):
             return False
 
         def read(self):
-            return json.dumps({"results": []}).encode("utf-8")
+            return b'{"results": []}'
 
     monkeypatch.setattr(
         "urllib.request.urlopen",
@@ -41,18 +59,32 @@ def test_response_without_results_is_rejected(monkeypatch):
         ValueError,
         match="brapi returned no market data",
     ):
-        adapter.get_market_data("PETR4")
+        adapter.get_market_data(
+            "PETR4",
+            date(2026, 9, 1),
+            date(2026, 9, 10),
+        )
 
 
-def test_missing_required_field_is_rejected(monkeypatch):
+def test_historical_data_is_mapped_to_data_contract(monkeypatch):
+    timestamp = 1788978600
+
     payload = {
         "results": [
             {
-                "regularMarketOpen": 48.50,
-                "regularMarketDayHigh": 49.12,
-                "regularMarketDayLow": 48.09,
-                "regularMarketPrice": 49.00,
-                # volume intentionally missing
+                "symbol": "PETR4",
+                "data": {
+                    "historicalDataPrice": [
+                        {
+                            "date": timestamp,
+                            "open": 48.50,
+                            "high": 49.12,
+                            "low": 48.09,
+                            "close": 49.00,
+                            "volume": 27610000,
+                        }
+                    ]
+                },
             }
         ]
     }
@@ -65,7 +97,70 @@ def test_missing_required_field_is_rejected(monkeypatch):
             return False
 
         def read(self):
-            return json.dumps(payload).encode("utf-8")
+            return __import__("json").dumps(payload).encode("utf-8")
+
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda *args, **kwargs: FakeResponse(),
+    )
+
+    adapter = BrapiAdapter()
+
+    data = adapter.get_market_data(
+        "petr4",
+        date(2026, 9, 1),
+        date(2026, 9, 10),
+    )
+
+    assert len(data) == 1
+
+    record = data[0]
+
+    assert record.ticker == "PETR4"
+    assert record.instrument_id == "PETR4"
+    assert record.open == 48.50
+    assert record.high == 49.12
+    assert record.low == 48.09
+    assert record.close == 49.00
+    assert record.volume == 27610000.0
+    assert record.currency == "BRL"
+    assert record.source == "brapi"
+    assert isinstance(record.observation_timestamp, datetime)
+    assert isinstance(record.available_timestamp, datetime)
+    assert isinstance(record.ingested_at, datetime)
+    assert record.source_record_id == f"PETR4:{timestamp}"
+
+
+def test_missing_historical_field_is_rejected(monkeypatch):
+    payload = {
+        "results": [
+            {
+                "symbol": "PETR4",
+                "data": {
+                    "historicalDataPrice": [
+                        {
+                            "date": 1788978600,
+                            "open": 48.50,
+                            "high": 49.12,
+                            "low": 48.09,
+                            "close": 49.00,
+                            # volume intentionally missing
+                        }
+                    ]
+                },
+            }
+        ]
+    }
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def read(self):
+            return __import__("json").dumps(payload).encode("utf-8")
 
     monkeypatch.setattr(
         "urllib.request.urlopen",
@@ -78,18 +173,21 @@ def test_missing_required_field_is_rejected(monkeypatch):
         ValueError,
         match="missing required fields",
     ):
-        adapter.get_market_data("PETR4")
+        adapter.get_market_data(
+            "PETR4",
+            date(2026, 9, 1),
+            date(2026, 9, 10),
+        )
 
 
-def test_market_data_is_mapped_to_data_contract(monkeypatch):
+def test_empty_historical_data_is_rejected(monkeypatch):
     payload = {
         "results": [
             {
-                "regularMarketOpen": 48.50,
-                "regularMarketDayHigh": 49.12,
-                "regularMarketDayLow": 48.09,
-                "regularMarketPrice": 49.00,
-                "regularMarketVolume": 27610000,
+                "symbol": "PETR4",
+                "data": {
+                    "historicalDataPrice": []
+                },
             }
         ]
     }
@@ -102,7 +200,7 @@ def test_market_data_is_mapped_to_data_contract(monkeypatch):
             return False
 
         def read(self):
-            return json.dumps(payload).encode("utf-8")
+            return __import__("json").dumps(payload).encode("utf-8")
 
     monkeypatch.setattr(
         "urllib.request.urlopen",
@@ -110,17 +208,13 @@ def test_market_data_is_mapped_to_data_contract(monkeypatch):
     )
 
     adapter = BrapiAdapter()
-    data = adapter.get_market_data("petr4")
 
-    assert data.ticker == "PETR4"
-    assert data.instrument_id == "PETR4"
-    assert data.open == 48.50
-    assert data.high == 49.12
-    assert data.low == 48.09
-    assert data.close == 49.00
-    assert data.volume == 27610000.0
-    assert data.currency == "BRL"
-    assert data.source == "brapi"
-    assert isinstance(data.observation_timestamp, datetime)
-    assert isinstance(data.available_timestamp, datetime)
-    assert isinstance(data.ingested_at, datetime)
+    with pytest.raises(
+        ValueError,
+        match="no historical data",
+    ):
+        adapter.get_market_data(
+            "PETR4",
+            date(2026, 9, 1),
+            date(2026, 9, 10),
+        )
