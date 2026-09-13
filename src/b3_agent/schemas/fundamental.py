@@ -1,5 +1,5 @@
-﻿from dataclasses import dataclass
-from datetime import date, datetime
+from dataclasses import dataclass
+from datetime import date
 
 from .common import DataRecord
 
@@ -11,4 +11,5 @@ class StockFundamental(DataRecord):
     period_start: date | None = None
     period_end: date | None = None
     report_date: date | None = None
+    period_type: str | None = None
     unit: str | None = None

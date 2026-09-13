@@ -1,5 +1,4 @@
-﻿from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass
 
 from .common import DataRecord
 
@@ -11,5 +10,6 @@ class StockMarketData(DataRecord):
     low: float
     close: float
     volume: float
+    adjusted_close: float | None = None
     vwap: float | None = None
     currency: str = "BRL"

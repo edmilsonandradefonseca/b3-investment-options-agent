@@ -26,10 +26,12 @@ class OptionQuote(DataRecord):
     last: float | None
     mid: float | None
     volume: float
-    open_interest: float
+    open_interest: float | None
     implied_volatility: float | None = None
     delta: float | None = None
     gamma: float | None = None
     theta: float | None = None
     vega: float | None = None
     rho: float | None = None
+
+
