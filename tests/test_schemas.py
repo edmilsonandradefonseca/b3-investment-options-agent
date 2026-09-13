@@ -127,3 +127,34 @@ def test_macro_schema():
     )
 
     assert record.indicator == "SELIC"
+def test_stock_market_data_to_dict_includes_market_fields():
+    from datetime import datetime, timezone
+
+    from b3_agent.schemas.market import StockMarketData
+
+    timestamp = datetime(2026, 9, 13, 18, 0, tzinfo=timezone.utc)
+
+    data = StockMarketData(
+        instrument_id="PETR4",
+        ticker="PETR4",
+        observation_timestamp=timestamp,
+        available_timestamp=timestamp,
+        source="brapi",
+        ingested_at=timestamp,
+        open=48.50,
+        high=49.12,
+        low=48.09,
+        close=49.00,
+        volume=27610000.0,
+    )
+
+    result = data.to_dict()
+
+    assert result["ticker"] == "PETR4"
+    assert result["open"] == 48.50
+    assert result["high"] == 49.12
+    assert result["low"] == 48.09
+    assert result["close"] == 49.00
+    assert result["volume"] == 27610000.0
+    assert result["currency"] == "BRL"
+    assert result["observation_timestamp"] == "2026-09-13T18:00:00+00:00"

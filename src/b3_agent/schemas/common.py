@@ -1,4 +1,4 @@
-﻿from dataclasses import dataclass
+﻿from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Any
 
@@ -21,15 +21,11 @@ class DataRecord:
         return self.available_timestamp <= decision_timestamp
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "instrument_id": self.instrument_id,
-            "ticker": self.ticker,
-            "observation_timestamp": self.observation_timestamp.isoformat(),
-            "available_timestamp": self.available_timestamp.isoformat(),
-            "source": self.source,
-            "ingested_at": self.ingested_at.isoformat(),
-            "schema_version": self.schema_version,
-            "source_record_id": self.source_record_id,
-            "quality_status": self.quality_status,
-            "quality_flags": self.quality_flags,
-        }
+        """Serialize the complete dataclass, including subclass fields."""
+        data = asdict(self)
+
+        for key, value in data.items():
+            if isinstance(value, datetime):
+                data[key] = value.isoformat()
+
+        return data
