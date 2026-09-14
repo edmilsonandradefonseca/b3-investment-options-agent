@@ -33,7 +33,6 @@ class PutAnalysisEngine:
         contract_multiplier: float,
         as_of: date,
         fair_value: float | None = None,
-        risk_free_rate: float = 0.0,
     ) -> PutOpportunity:
         if not option_id.strip():
             raise ValueError("option_id must not be empty")
@@ -50,8 +49,6 @@ class PutAnalysisEngine:
             raise ValueError("expiration_date must be after as_of")
         if fair_value is not None and fair_value <= 0:
             raise ValueError("fair_value must be positive")
-        if risk_free_rate < -1:
-            raise ValueError("risk_free_rate is invalid")
 
         effective_price = strike - premium
         if effective_price <= 0:
