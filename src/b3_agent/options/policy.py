@@ -19,7 +19,7 @@ class OptionsPolicy:
     def __post_init__(self) -> None:
         if self.min_put_annualized_return < 0:
             raise ValueError("min_put_annualized_return cannot be negative")
-        if self.min_put_margin_of_safety < 0 or self.min_put_margin_of_safety >= 1:
+        if not 0 <= self.min_put_margin_of_safety < 1:
             raise ValueError("min_put_margin_of_safety must be between 0 and 1")
         if self.min_call_annualized_premium_return < 0:
             raise ValueError("min_call_annualized_premium_return cannot be negative")
@@ -30,7 +30,9 @@ class OptionsPolicy:
 
     def evaluate_put(self, opportunity: PutOpportunity) -> str:
         if opportunity.margin_of_safety is None:
-            return "HOLD_WAIT"
+            return "AVOID"
+        if opportunity.margin_of_safety < 0:
+            return "AVOID"
         return (
             "SELL_PUT"
             if opportunity.annualized_return >= self.min_put_annualized_return
@@ -39,6 +41,8 @@ class OptionsPolicy:
         )
 
     def evaluate_call(self, opportunity: CallOpportunity) -> str:
+        if opportunity.strike <= 0 or opportunity.current_price <= 0:
+            return "AVOID"
         if opportunity.annualized_premium_return < self.min_call_annualized_premium_return:
             return "HOLD_WAIT"
         if opportunity.total_return_if_assigned < self.min_call_total_return_if_assigned:
