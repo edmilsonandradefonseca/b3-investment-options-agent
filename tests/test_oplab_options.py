@@ -26,7 +26,7 @@ def test_oplab_get_options_maps_option_chain():
 
     adapter = OplabOptionsAdapter()
 
-    with patch(
+    with patch.dict("os.environ", {"OPLAB_API_TOKEN": "test-token"}), patch(
         "b3_agent.providers.oplab.options.urllib.request.urlopen"
     ) as mock_urlopen:
         response = mock_urlopen.return_value.__enter__.return_value
@@ -84,7 +84,7 @@ def test_oplab_options_rejects_unsupported_option_type():
 
     adapter = OplabOptionsAdapter()
 
-    with patch(
+    with patch.dict("os.environ", {"OPLAB_API_TOKEN": "test-token"}), patch(
         "b3_agent.providers.oplab.options.urllib.request.urlopen"
     ) as mock_urlopen:
         response = mock_urlopen.return_value.__enter__.return_value
