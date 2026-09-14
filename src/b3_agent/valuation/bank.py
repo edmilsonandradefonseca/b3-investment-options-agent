@@ -22,7 +22,7 @@ class BankValuationEngine:
         justified_pb = (roe - terminal_growth_rate) / (cost_of_equity - terminal_growth_rate)
         return book_value_per_share * justified_pb
 
-    def value_bank(
+    def value_pb_roe(
         self,
         inputs: ValuationInputs,
         *,
@@ -32,26 +32,26 @@ class BankValuationEngine:
         cost_of_equity_bear: float,
         cost_of_equity_base: float,
         cost_of_equity_bull: float,
-        terminal_growth_bear: float,
-        terminal_growth_base: float,
-        terminal_growth_bull: float,
+        growth_bear: float,
+        growth_base: float,
+        growth_bull: float,
     ) -> ValuationRange:
         """Return Bear/Base/Bull equity value per share using justified P/B."""
         if inputs.book_value_per_share is None:
             raise ValueError("book_value_per_share is required for bank valuation")
         scenarios = (
-            (roe_bear, cost_of_equity_bear, terminal_growth_bear),
-            (roe_base, cost_of_equity_base, terminal_growth_base),
-            (roe_bull, cost_of_equity_bull, terminal_growth_bull),
+            (roe_bear, cost_of_equity_bear, growth_bear),
+            (roe_base, cost_of_equity_base, growth_base),
+            (roe_bull, cost_of_equity_bull, growth_bull),
         )
         if any(roe < 0 for roe, _, _ in scenarios):
             raise ValueError("ROE cannot be negative")
         if any(rate <= 0 for _, rate, _ in scenarios):
             raise ValueError("cost of equity must be positive")
         if any(growth < 0 for _, _, growth in scenarios):
-            raise ValueError("terminal growth rates cannot be negative")
+            raise ValueError("growth rates cannot be negative")
         if any(rate <= growth for _, rate, growth in scenarios):
-            raise ValueError("cost of equity must be greater than terminal growth rate")
+            raise ValueError("cost of equity must be greater than growth rate")
 
         values = tuple(
             self._value_per_share(inputs.book_value_per_share, roe, ke, growth)
@@ -77,10 +77,25 @@ class BankValuationEngine:
                 "cost_of_equity_bear": cost_of_equity_bear,
                 "cost_of_equity_base": cost_of_equity_base,
                 "cost_of_equity_bull": cost_of_equity_bull,
-                "terminal_growth_bear": terminal_growth_bear,
-                "terminal_growth_base": terminal_growth_base,
-                "terminal_growth_bull": terminal_growth_bull,
+                "growth_bear": growth_bear,
+                "growth_base": growth_base,
+                "growth_bull": growth_bull,
             },
             source_refs=inputs.source_refs,
             quality_status=inputs.quality_status,
         )
+
+    def value_bank(self, inputs: ValuationInputs, **kwargs) -> ValuationRange:
+        """Backward-compatible alias for value_pb_roe."""
+        mapped = {
+            "roe_bear": kwargs["roe_bear"],
+            "roe_base": kwargs["roe_base"],
+            "roe_bull": kwargs["roe_bull"],
+            "cost_of_equity_bear": kwargs["cost_of_equity_bear"],
+            "cost_of_equity_base": kwargs["cost_of_equity_base"],
+            "cost_of_equity_bull": kwargs["cost_of_equity_bull"],
+            "growth_bear": kwargs.get("growth_bear", kwargs["terminal_growth_bear"]),
+            "growth_base": kwargs.get("growth_base", kwargs["terminal_growth_base"]),
+            "growth_bull": kwargs.get("growth_bull", kwargs["terminal_growth_bull"]),
+        }
+        return self.value_pb_roe(inputs, **mapped)
