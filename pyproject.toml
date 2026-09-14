@@ -12,7 +12,9 @@ license = { text = "Private" }
 authors = [
     { name = "Edmilson Fonseca" }
 ]
-dependencies = []
+dependencies = [
+    "openpyxl>=3.1,<4",
+]
 
 [project.optional-dependencies]
 dev = [
