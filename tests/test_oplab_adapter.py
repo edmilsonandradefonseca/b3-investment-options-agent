@@ -18,7 +18,7 @@ def test_oplab_get_market_data_maps_stock_response():
 
     adapter = OplabAdapter()
 
-    with patch(
+    with patch.dict("os.environ", {"OPLAB_API_TOKEN": "test-token"}), patch(
         "b3_agent.providers.oplab.adapter.urllib.request.urlopen"
     ) as mock_urlopen:
         response = mock_urlopen.return_value.__enter__.return_value
