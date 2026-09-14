@@ -54,6 +54,8 @@ class DCFValuationEngine:
             raise ValueError("shares_outstanding is required for DCF valuation")
         if inputs.shares_outstanding <= 0:
             raise ValueError("shares_outstanding must be positive")
+        if not fcf_bear or not fcf_base or not fcf_bull:
+            raise ValueError("DCF forecast cannot be empty")
         if any(rate <= 0 for rate in (discount_rate_bear, discount_rate_base, discount_rate_bull)):
             raise ValueError("discount rates must be positive")
         if any(growth < 0 for growth in (terminal_growth_bear, terminal_growth_base, terminal_growth_bull)):
@@ -66,8 +68,6 @@ class DCFValuationEngine:
             raise ValueError("discount_rate_bull must be greater than terminal_growth_bull")
         if not (len(fcf_bear) == len(fcf_base) == len(fcf_bull)):
             raise ValueError("DCF scenarios must use the same forecast horizon")
-        if not fcf_bear or not fcf_base or not fcf_bull:
-            raise ValueError("DCF forecast cannot be empty")
 
         values = (
             self._present_value(
