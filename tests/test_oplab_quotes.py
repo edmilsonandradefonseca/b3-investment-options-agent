@@ -26,7 +26,7 @@ def test_oplab_get_option_quotes_maps_market_data():
 
     adapter = OplabOptionQuoteAdapter()
 
-    with patch(
+    with patch.dict("os.environ", {"OPLAB_API_TOKEN": "test-token"}), patch(
         "b3_agent.providers.oplab.quotes.urllib.request.urlopen"
     ) as mock_urlopen:
         response = mock_urlopen.return_value.__enter__.return_value
@@ -87,7 +87,7 @@ def test_oplab_option_quotes_treat_zero_market_values_as_unavailable():
 
     adapter = OplabOptionQuoteAdapter()
 
-    with patch(
+    with patch.dict("os.environ", {"OPLAB_API_TOKEN": "test-token"}), patch(
         "b3_agent.providers.oplab.quotes.urllib.request.urlopen"
     ) as mock_urlopen:
         response = mock_urlopen.return_value.__enter__.return_value
