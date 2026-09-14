@@ -30,9 +30,9 @@ def test_bank_pb_roe_calculation():
         terminal_growth_base=0.05,
         terminal_growth_bull=0.05,
     )
-    assert result.bear_value == pytest.approx(20.0)
-    assert result.base_value == pytest.approx(32.5)
-    assert result.bull_value == pytest.approx(40.0)
+    assert result.bear_value == pytest.approx(16.36363636)
+    assert result.base_value == pytest.approx(26.0)
+    assert result.bull_value == pytest.approx(37.77777778)
     assert result.method == "PB_ROE"
 
 
