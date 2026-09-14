@@ -20,6 +20,8 @@ class ValuationInputs:
     book_value_per_share: float | None = None
     ebitda: float | None = None
     enterprise_value: float | None = None
+    net_debt: float | None = None
+    shares_outstanding: float | None = None
     free_cash_flow: float | None = None
     revenue: float | None = None
     roe: float | None = None
