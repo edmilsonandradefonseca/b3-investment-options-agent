@@ -60,7 +60,7 @@ def test_produces_accumulate_from_latest_point_in_time_market_price():
     assert result[0].action == "ACCUMULATE"
     assert result[0].expected_return == pytest.approx((20.0 / 15.5) - 1.0)
     assert "brapi" in result[0].source_refs
-    assert result[0].quant_features_ref == "quant:ITUB4:2026-09-11"
+    assert result[0].quant_features_ref == "quant:ITUB4:2026-09-11 23:59:00"
 
 
 def test_excludes_future_market_observation():
