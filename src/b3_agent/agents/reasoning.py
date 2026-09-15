@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
+from b3_agent.agents.context import AgentContext
 from b3_agent.llm.client import LLMClient
 from b3_agent.schemas.decision import DecisionProposal
 
@@ -37,7 +38,9 @@ class InvestmentReasoningAgent:
     def __init__(self, llm: LLMClient):
         self.llm = llm
 
-    def decide(self, context: dict[str, Any]) -> DecisionProposal:
+    def decide(self, context: AgentContext | dict[str, Any]) -> DecisionProposal:
+        """Produce a structured proposal without changing upstream facts."""
+        payload = context.to_payload() if isinstance(context, AgentContext) else context
         result = self.llm.complete_json(
             instructions=(
                 "Act as the investment reasoning component of a decision copilot. "
@@ -45,7 +48,7 @@ class InvestmentReasoningAgent:
                 "Do not invent data or calculations. If evidence is insufficient, "
                 "prefer WAIT or NO_CHANGE. Return a structured proposal for human review."
             ),
-            input_text=json.dumps(context, ensure_ascii=False, default=str),
+            input_text=json.dumps(payload, ensure_ascii=False, default=str),
             schema_name="investment_decision",
             schema=_DECISION_SCHEMA,
         )
