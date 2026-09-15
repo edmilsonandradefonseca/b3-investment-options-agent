@@ -7,7 +7,7 @@ from b3_agent.knowledge.obsidian import ObsidianKnowledgeStore
 from b3_agent.knowledge.retrieval import ObsidianRetriever
 from b3_agent.orchestration.context import build_deterministic_context
 from b3_agent.orchestration.workflow import build_workflow
-from b3_agent.schemas.opportunity import Opportunity, OpportunitySet
+from b3_agent.schemas.opportunity import Opportunity, OpportunityAssessment, OpportunitySet
 from b3_agent.schemas.position import PortfolioContext, Position
 
 
@@ -64,9 +64,19 @@ def test_deterministic_context_reaches_reasoning_without_mutation(tmp_path: Path
         quality_status="VALIDATED",
         rationale="Golden opportunity for integration testing.",
     )
+    assessment = OpportunityAssessment(
+        opportunity_id=opportunity.opportunity_id,
+        eligible=True,
+        attractiveness="ATTRACTIVE",
+        portfolio_fit="GOOD",
+        ranking_evidence_refs=opportunity.evidence_refs,
+        evidence_refs=opportunity.evidence_refs,
+        ranking_key=(0, 0, 0, 0, -0.12, 0, 0, 0, opportunity.opportunity_id),
+        rationale=opportunity.rationale,
+    )
     opportunity_set = OpportunitySet(
         as_of=date(2026, 9, 11),
-        ranked_opportunities=(),
+        ranked_opportunities=(assessment,),
         rejected_opportunities=(),
         ranking_policy_version="1.0",
         source_refs=("deterministic-test",),
@@ -82,6 +92,8 @@ def test_deterministic_context_reaches_reasoning_without_mutation(tmp_path: Path
     assert context["portfolio"]["positions"][0]["quantity"] == 100.0
     assert context["portfolio"]["cash"] == 1000.0
     assert context["opportunities"]["quality_status"] == "VALIDATED"
+    assert context["opportunities"]["ranked_opportunities"][0]["opportunity_id"] == "opp-petr4-001"
+    assert context["opportunities"]["ranked_opportunities"][0]["attractiveness"] == "ATTRACTIVE"
     assert opportunity.action == "BUY"
     assert opportunity.expected_return == 0.12
 
