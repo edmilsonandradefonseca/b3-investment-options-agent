@@ -1,0 +1,1 @@
+MCP MVP requires the Python `mcp` package. Add `mcp` to the project dependencies before merging the MCP server into main.
