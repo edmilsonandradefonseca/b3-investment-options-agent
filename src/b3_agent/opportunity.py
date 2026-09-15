@@ -94,6 +94,17 @@ class OpportunityIntelligenceEngine:
                     evidence_refs=opportunity.evidence_refs,
                     ranking_key=ranking_key,
                     rationale=opportunity.rationale,
+                    ticker=opportunity.ticker,
+                    instrument_type=opportunity.instrument_type,
+                    action=opportunity.action,
+                    as_of=opportunity.as_of,
+                    expected_return=opportunity.expected_return,
+                    capital_requirement=opportunity.capital_requirement,
+                    liquidity_value=opportunity.liquidity_value,
+                    valuation_range_ref=opportunity.valuation_range_ref,
+                    options_analysis_ref=opportunity.options_analysis_ref,
+                    quant_features_ref=opportunity.quant_features_ref,
+                    source_refs=opportunity.source_refs,
                 )
             )
 
