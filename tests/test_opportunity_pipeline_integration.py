@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
 
 from b3_agent.opportunity_options import OptionsOpportunityProducer
-from b3_agent.opportunity_pipeline import OpportunityPipeline
+from b3_agent.opportunity_pipeline import OpportunityPipeline, StockOpportunityInput
 from b3_agent.opportunity_stock import StockOpportunityProducer
 from b3_agent.options.analysis import OptionsAnalysis
 from b3_agent.options.put import PutAnalysisEngine
@@ -29,7 +29,6 @@ def _stock_record(ticker: str, close: float, observed: datetime) -> StockMarketD
 def test_stock_and_options_converge_into_deterministic_opportunity_set():
     as_of = date(2026, 9, 11)
     observed = datetime(2026, 9, 11, 17, tzinfo=timezone.utc)
-    stock = StockOpportunityService(producer=StockOpportunityProducer())
     valuation = ValuationRange(
         instrument_id="ITUB4",
         ticker="ITUB4",
@@ -43,13 +42,6 @@ def test_stock_and_options_converge_into_deterministic_opportunity_set():
         sell_price=25.0,
         source_refs=("valuation-engine",),
     )
-    stock_opportunities = stock.produce(
-        [_stock_record("ITUB4", 15.50, observed)],
-        valuation,
-        as_of=as_of,
-        source_refs=("BRAPI",),
-    )
-
     put = PutAnalysisEngine().analyze(
         option_id="ITUBV200",
         underlying_ticker="ITUB4",
@@ -60,15 +52,17 @@ def test_stock_and_options_converge_into_deterministic_opportunity_set():
         as_of=as_of,
     )
     options_analysis = OptionsAnalysis(puts=(put,), source_refs=("OPLAB",))
-    option_opportunities = OptionsOpportunityProducer().produce(
-        options_analysis,
-        as_of=as_of,
-        source_refs=("OPLAB",),
-    )
 
-    result = OpportunityPipeline().build(
-        [*stock_opportunities, *option_opportunities],
+    result = OpportunityPipeline().build_from_inputs(
         as_of=as_of,
+        stock_inputs=(
+            StockOpportunityInput(
+                records=(_stock_record("ITUB4", 15.50, observed),),
+                valuation=valuation,
+                source_refs=("BRAPI",),
+            ),
+        ),
+        options_analyses=(options_analysis,),
         source_refs=("BTG",),
     )
 
