@@ -103,11 +103,12 @@ class OpportunityPipeline:
             )
 
         for analysis in options_analyses:
+            analysis_sources = tuple(dict.fromkeys((*analysis.source_refs, *source_refs)))
             opportunities.extend(
                 self._options_producer.produce(
                     analysis,
                     as_of=as_of,
-                    source_refs=source_refs,
+                    source_refs=analysis_sources,
                 )
             )
 
