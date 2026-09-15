@@ -15,7 +15,7 @@ from b3_agent.repositories.portfolio import PortfolioRepository
 
 st.set_page_config(page_title="B3 Investment Copilot", page_icon="📊", layout="wide")
 st.title("B3 Investment Copilot")
-st.caption("MVP • deterministic portfolio intelligence • read-only")
+st.caption("MVP V0.3 • deterministic portfolio intelligence • read-only")
 
 
 def load_context():
@@ -46,54 +46,183 @@ for p in positions:
             "Ticker": p.ticker,
             "Tipo": p.instrument_type,
             "Quantidade": p.quantity,
-            "Valor de mercado": p.market_value,
             "Preço": p.market_price,
-            "Vencimento": getattr(p, "expiration_date", None),
-            "Tipo opção": getattr(p, "option_type", None),
-            "Strike": getattr(p, "strike", None),
+            "Valor de mercado": p.market_value,
+            "Vencimento": p.expiration_date,
+            "Tipo opção": p.option_type,
+            "Strike": p.strike,
+            "Underlying": p.underlying_ticker,
+            "Multiplicador": p.contract_multiplier,
         }
     )
 
 df = pd.DataFrame(rows)
 
-stock_value = float(df.loc[df["Tipo"] == "STOCK", "Valor de mercado"].fillna(0).sum())
-option_value = float(df.loc[df["Tipo"] == "OPTION", "Valor de mercado"].fillna(0).sum())
+stock_df = df[df["Tipo"] == "STOCK"]
+option_df = df[df["Tipo"] == "OPTION"].copy()
+option_df["Tipo opção"] = option_df["Tipo opção"].fillna("").astype(str).str.upper()
+
+stock_value = float(stock_df["Valor de mercado"].fillna(0).sum())
+option_value = float(option_df["Valor de mercado"].fillna(0).sum())
 market_value = stock_value + option_value
 
+# ------------------------------------------------------------------
+# Sidebar
+# ------------------------------------------------------------------
+with st.sidebar:
+    st.header("Portfolio")
+    st.write(f"**As of:** {context.as_of}")
+    st.write(f"**Quality:** {context.quality_status}")
+    st.write("**Source**")
+    for source in context.source_refs:
+        st.write(f"- {source}")
+    st.divider()
+    st.write("**Arquivo**")
+    st.code(str(Path(os.getenv("B3_AGENT_PORTFOLIO_FILE", "")).resolve()), language="text")
+
+# ------------------------------------------------------------------
+# Overview
+# ------------------------------------------------------------------
+st.header("Overview")
 c1, c2, c3, c4 = st.columns(4)
-c1.metric("Posições", len(df))
-c2.metric("Valor de mercado", f"R$ {market_value:,.2f}")
-c3.metric("Ações", f"R$ {stock_value:,.2f}")
-c4.metric("Opções", f"R$ {option_value:,.2f}")
+c1.metric("Valor de mercado", f"R$ {market_value:,.2f}")
+c2.metric("Posições", len(df))
+c3.metric("Ações", len(stock_df))
+c4.metric("Opções", len(option_df))
+
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Valor em ações", f"R$ {stock_value:,.2f}")
+c2.metric("Valor em opções", f"R$ {option_value:,.2f}")
+c3.metric("Puts", int((option_df["Tipo opção"] == "PUT").sum()))
+c4.metric("Calls", int((option_df["Tipo opção"] == "CALL").sum()))
 
 st.divider()
 
-left, right = st.columns([1.6, 1])
+left, right = st.columns([1, 1])
 with left:
-    st.subheader("Portfolio")
-    types = ["TODOS"] + sorted(df["Tipo"].dropna().unique().tolist())
-    selected = st.selectbox("Instrumento", types)
-    view = df if selected == "TODOS" else df[df["Tipo"] == selected]
-    st.dataframe(view, use_container_width=True, hide_index=True)
-
-with right:
-    st.subheader("Distribuição")
+    st.subheader("Distribuição por instrumento")
     distribution = (
         df.groupby("Tipo", dropna=False)["Valor de mercado"]
         .sum()
-        .reset_index()
-        .rename(columns={"Valor de mercado": "Valor"})
+        .rename("Valor")
     )
-    st.bar_chart(distribution.set_index("Tipo"))
+    st.bar_chart(distribution, width="stretch")
 
-st.divider()
-st.subheader("Portfolio Intelligence")
-st.write(
-    "A camada de inteligência abaixo é produzida pelo mesmo engine determinístico "
-    "utilizado pelo MCP; o dashboard não cria decisões de investimento."
+with right:
+    st.subheader("Concentração por ticker")
+    concentration = (
+        df.groupby("Ticker", dropna=False)["Valor de mercado"]
+        .sum()
+        .abs()
+        .sort_values(ascending=False)
+        .head(10)
+    )
+    st.bar_chart(concentration, width="stretch")
+
+# ------------------------------------------------------------------
+# Tabs
+# ------------------------------------------------------------------
+tab_portfolio, tab_options, tab_intelligence = st.tabs(
+    ["Portfolio", "Options Intelligence", "Portfolio Intelligence"]
 )
 
-with st.expander("Exposures", expanded=True):
+with tab_portfolio:
+    st.subheader("Portfolio")
+
+    f1, f2 = st.columns([1, 2])
+    with f1:
+        types = ["TODOS"] + sorted(df["Tipo"].dropna().unique().tolist())
+        selected_type = st.selectbox("Instrumento", types, key="portfolio_type")
+    with f2:
+        ticker_search = st.text_input("Ticker", placeholder="Ex.: PETR4", key="portfolio_ticker")
+
+    view = df.copy()
+    if selected_type != "TODOS":
+        view = view[view["Tipo"] == selected_type]
+    if ticker_search:
+        search = ticker_search.strip().upper()
+        view = view[
+            view["Ticker"].str.upper().str.contains(search, na=False)
+            | view["Underlying"].fillna("").astype(str).str.upper().str.contains(search, na=False)
+        ]
+
+    st.caption(f"Exibindo {len(view)} de {len(df)} posições.")
+    st.dataframe(view, width="stretch", hide_index=True)
+
+with tab_options:
+    st.subheader("Options Intelligence")
+    st.caption("Visão determinística das posições de opções existentes no portfolio.")
+
+    puts = option_df[option_df["Tipo opção"] == "PUT"]
+    calls = option_df[option_df["Tipo opção"] == "CALL"]
+    short_options = option_df[option_df["Quantidade"] < 0]
+    long_options = option_df[option_df["Quantidade"] > 0]
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Opções", len(option_df))
+    c2.metric("Puts", len(puts))
+    c3.metric("Calls", len(calls))
+    c4.metric("Vendidas", len(short_options))
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Compradas", len(long_options))
+    c2.metric("Assignment capital", f"R$ {intelligence.capital_risk.assignment_capital:,.2f}")
+    c3.metric("Cash após assignment", f"R$ {intelligence.capital_risk.cash_after_assignment:,.2f}")
+    c4.metric("Uncovered call shares", f"{intelligence.capital_risk.uncovered_call_shares:,.0f}")
+
+    st.divider()
+
+    st.markdown("#### Options Book")
+    option_columns = [
+        "Ticker", "Underlying", "Tipo opção", "Strike", "Vencimento",
+        "Quantidade", "Preço", "Valor de mercado", "Multiplicador",
+    ]
+    st.dataframe(
+        option_df[option_columns].sort_values(["Vencimento", "Underlying", "Strike"], na_position="last"),
+        width="stretch",
+        hide_index=True,
+    )
+
+    st.markdown("#### Exposure by Underlying")
+    option_underlying = (
+        option_df.assign(
+            Underlying=option_df["Underlying"].fillna(option_df["Ticker"])
+        )
+        .groupby(["Underlying", "Tipo opção"], dropna=False)
+        .agg(
+            Posicoes=("Ticker", "count"),
+            Quantidade=("Quantidade", "sum"),
+            Valor=("Valor de mercado", "sum"),
+        )
+        .reset_index()
+        .sort_values("Valor", key=lambda s: s.abs(), ascending=False)
+    )
+    st.dataframe(option_underlying, width="stretch", hide_index=True)
+
+    st.markdown("#### Expirations")
+    expirations = (
+        option_df.groupby("Vencimento", dropna=False)
+        .agg(
+            Posicoes=("Ticker", "count"),
+            Valor=("Valor de mercado", "sum"),
+        )
+        .reset_index()
+        .sort_values("Vencimento", na_position="last")
+    )
+    st.dataframe(expirations, width="stretch", hide_index=True)
+
+    st.info(
+        "O multiplicador e os valores apresentados são os existentes no PortfolioContext. "
+        "O dashboard não infere ou altera contratos B3."
+    )
+
+with tab_intelligence:
+    st.subheader("Portfolio Intelligence")
+    st.write(
+        "A camada de inteligência é produzida pelo mesmo engine determinístico "
+        "utilizado pelo MCP; o dashboard não cria decisões de investimento."
+    )
+
     exposures = getattr(intelligence, "exposures", ())
     exposure_rows = []
     for e in exposures:
@@ -104,13 +233,32 @@ with st.expander("Exposures", expanded=True):
                 "Valor bruto": e.gross_market_value,
                 "Peso": e.weight,
                 "Opções": e.option_count,
+                "Short options": e.short_option_count,
                 "Assignment capital": e.assignment_capital,
-                "Covered calls": e.covered_call_count,
+                "Covered call contracts": e.covered_call_contracts,
+                "Call coverage ratio": e.call_coverage_ratio,
             }
         )
+
     if exposure_rows:
-        st.dataframe(pd.DataFrame(exposure_rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(exposure_rows), width="stretch", hide_index=True)
     else:
         st.info("Nenhuma exposição calculada.")
 
-st.caption(f"As of: {context.as_of} • Quality: {context.quality_status} • Source: {', '.join(context.source_refs)}")
+    st.markdown("#### Capital Risk")
+    risk = intelligence.capital_risk
+    risk_rows = [
+        {"Metric": "Cash", "Value": risk.cash},
+        {"Metric": "Assignment capital", "Value": risk.assignment_capital},
+        {"Metric": "Cash after assignment", "Value": risk.cash_after_assignment},
+        {"Metric": "Fully cash secured", "Value": risk.fully_cash_secured},
+        {"Metric": "Uncovered call shares", "Value": risk.uncovered_call_shares},
+    ]
+    st.dataframe(pd.DataFrame(risk_rows), width="stretch", hide_index=True)
+
+st.divider()
+st.caption(
+    f"As of: {context.as_of} • Quality: {context.quality_status} • "
+    f"Source: {', '.join(context.source_refs)}"
+)
+st.caption("Read-only MVP • No order execution • No LLM override of deterministic facts")
