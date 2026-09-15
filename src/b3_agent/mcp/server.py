@@ -17,6 +17,7 @@ from mcp.server.fastmcp import FastMCP
 
 from b3_agent.config import settings
 from b3_agent.portfolio import PortfolioIntelligenceEngine
+from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
 from b3_agent.repositories.portfolio import PortfolioRepository
 from b3_agent.schemas.position import PortfolioContext
 
@@ -58,8 +59,9 @@ def get_system_capabilities() -> dict[str, object]:
 def get_portfolio_context() -> dict[str, Any]:
     """Return the current point-in-time portfolio snapshot from the configured source.
 
-    The tool reads real project data and never fabricates positions when the source
-    is unavailable. Configure B3_AGENT_PORTFOLIO_FILE or use data/portfolio.json.
+    JSON sources use the normalized PortfolioRepository. XLSX sources use the
+    existing deterministic BTG Renda Variavel ingestion pipeline. The tool never
+    fabricates positions when the source is unavailable.
     """
     context = _load_portfolio_context()
     return _serialize(context)
@@ -80,6 +82,10 @@ def _load_portfolio_context() -> PortfolioContext:
         if configured
         else settings.data_dir / "portfolio.json"
     )
+
+    if source_path.suffix.lower() in {".xlsx", ".xlsm"}:
+        return BtgRendaVariavelLoader().load(source_path)
+
     return PortfolioRepository(source_path).load()
 
 
