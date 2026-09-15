@@ -35,11 +35,13 @@ class Position:
             raise ValueError("average_cost cannot be negative")
         if self.market_price is not None and self.market_price < 0:
             raise ValueError("market_price cannot be negative")
-        if self.market_value is not None and self.market_value < 0:
-            raise ValueError("market_value cannot be negative")
+        # Market value is signed because broker statements mark short positions
+        # as negative. This preserves source semantics for Portfolio Intelligence.
         if self.instrument_type == "OPTION":
             if self.strike is None or self.expiration_date is None or self.option_type is None:
-                raise ValueError("option positions require strike, expiration_date and option_type")
+                raise ValueError(
+                    "option positions require strike, expiration_date and option_type"
+                )
 
 
 @dataclass(frozen=True)
