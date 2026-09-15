@@ -1,15 +1,12 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 
-from b3_agent.opportunity_options import OptionsOpportunityProducer
 from b3_agent.opportunity_pipeline import OpportunityPipeline, StockOpportunityInput
-from b3_agent.opportunity_stock import StockOpportunityProducer
 from b3_agent.options.analysis import OptionsAnalysis
 from b3_agent.options.put import PutAnalysisEngine
 from b3_agent.orchestration.context import build_deterministic_context
 from b3_agent.schemas.market import StockMarketData
 from b3_agent.schemas.position import PortfolioContext
 from b3_agent.schemas.valuation import ValuationRange
-from b3_agent.stock_opportunity_service import StockOpportunityService
 
 
 def _stock_record(ticker: str, close: float, observed: datetime) -> StockMarketData:
@@ -30,7 +27,7 @@ def _stock_record(ticker: str, close: float, observed: datetime) -> StockMarketD
 
 def test_stock_and_options_converge_into_deterministic_opportunity_set_and_context():
     as_of = date(2026, 9, 11)
-    observed = datetime(2026, 9, 11, 17, tzinfo=timezone.utc)
+    observed = datetime(2026, 9, 11, 17)
     valuation = ValuationRange(
         instrument_id="ITUB4",
         ticker="ITUB4",
