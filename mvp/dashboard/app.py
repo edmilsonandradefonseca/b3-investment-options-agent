@@ -15,7 +15,7 @@ from b3_agent.repositories.portfolio import PortfolioRepository
 
 st.set_page_config(page_title="B3 Investment Copilot", page_icon="📊", layout="wide")
 st.title("B3 Investment Copilot")
-st.caption("MVP V0.3 • deterministic portfolio intelligence • read-only")
+st.caption("MVP V0.4 • deterministic position intelligence • read-only")
 
 
 def load_context():
@@ -43,6 +43,7 @@ rows = []
 for p in positions:
     rows.append(
         {
+            "Position ID": p.position_id,
             "Ticker": p.ticker,
             "Tipo": p.instrument_type,
             "Quantidade": p.quantity,
@@ -122,8 +123,8 @@ with right:
 # ------------------------------------------------------------------
 # Tabs
 # ------------------------------------------------------------------
-tab_portfolio, tab_options, tab_intelligence = st.tabs(
-    ["Portfolio", "Options Intelligence", "Portfolio Intelligence"]
+tab_portfolio, tab_options, tab_position, tab_intelligence = st.tabs(
+    ["Portfolio", "Options Intelligence", "Position Analysis", "Portfolio Intelligence"]
 )
 
 with tab_portfolio:
@@ -147,7 +148,7 @@ with tab_portfolio:
         ]
 
     st.caption(f"Exibindo {len(view)} de {len(df)} posições.")
-    st.dataframe(view, width="stretch", hide_index=True)
+    st.dataframe(view.drop(columns=["Position ID"]), width="stretch", hide_index=True)
 
 with tab_options:
     st.subheader("Options Intelligence")
@@ -215,6 +216,83 @@ with tab_options:
         "O multiplicador e os valores apresentados são os existentes no PortfolioContext. "
         "O dashboard não infere ou altera contratos B3."
     )
+
+with tab_position:
+    st.subheader("Position Analysis")
+    st.caption("Detalhamento determinístico de uma posição individual. Sem recomendação de compra ou venda.")
+
+    assessment_by_id = {assessment.position_id: assessment for assessment in intelligence.assessments}
+    position_ids = df["Position ID"].tolist()
+
+    selected_position_id = st.selectbox(
+        "Selecione a posição",
+        position_ids,
+        format_func=lambda pid: (
+            f"{pid} — {df.loc[df['Position ID'] == pid, 'Ticker'].iloc[0]}"
+            f" ({df.loc[df['Position ID'] == pid, 'Tipo'].iloc[0]})"
+        ),
+        key="position_analysis_id",
+    )
+
+    selected = df.loc[df["Position ID"] == selected_position_id].iloc[0]
+    assessment = assessment_by_id.get(selected_position_id)
+
+    if assessment is None:
+        st.warning("Não foi encontrada avaliação determinística para esta posição.")
+    else:
+        st.markdown("#### Position facts")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Ticker", selected["Ticker"])
+        c2.metric("Instrumento", selected["Tipo"])
+        c3.metric("Side", assessment.side)
+        c4.metric("Lifecycle", assessment.lifecycle.state)
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Quantidade", f"{selected['Quantidade']:,.2f}")
+        market_price = selected["Preço"]
+        c2.metric("Preço", "—" if pd.isna(market_price) else f"R$ {float(market_price):,.4f}")
+        market_position_value = selected["Valor de mercado"]
+        c3.metric(
+            "Valor de mercado",
+            "—" if pd.isna(market_position_value) else f"R$ {float(market_position_value):,.2f}",
+        )
+        c4.metric("Underlying", assessment.underlying_ticker)
+
+        st.markdown("#### Instrument details")
+        details = {
+            "Position ID": assessment.position_id,
+            "Ticker": assessment.ticker,
+            "Underlying": assessment.underlying_ticker,
+            "Instrument type": assessment.instrument_type,
+            "Side": assessment.side,
+            "Expiration": selected["Vencimento"] if not pd.isna(selected["Vencimento"]) else None,
+            "Option type": selected["Tipo opção"] if not pd.isna(selected["Tipo opção"]) else None,
+            "Strike": selected["Strike"] if not pd.isna(selected["Strike"]) else None,
+            "Contract multiplier": selected["Multiplicador"],
+        }
+        st.dataframe(pd.DataFrame([details]), width="stretch", hide_index=True)
+
+        st.markdown("#### Deterministic risk mechanics")
+        risk_rows = [
+            {"Metric": "Assignment capital", "Value": assessment.assignment_capital},
+            {"Metric": "Deliverable shares", "Value": assessment.deliverable_shares},
+            {"Metric": "Lifecycle state", "Value": assessment.lifecycle.state},
+            {"Metric": "Lifecycle as of", "Value": assessment.lifecycle.as_of},
+        ]
+        if assessment.lifecycle.reason:
+            risk_rows.append({"Metric": "Lifecycle reason", "Value": assessment.lifecycle.reason})
+        st.dataframe(pd.DataFrame(risk_rows), width="stretch", hide_index=True)
+
+        if assessment.instrument_type == "OPTION":
+            option_type = (selected["Tipo opção"] or "").upper()
+            if assessment.side == "SHORT" and option_type == "PUT":
+                st.info("Esta posição é uma short put; o assignment capital é calculado deterministicamente a partir de quantidade, strike e multiplicador.")
+            elif assessment.side == "SHORT" and option_type == "CALL":
+                st.info("Esta posição é uma short call; deliverable shares representa a quantidade potencialmente entregável segundo o multiplicador armazenado.")
+            else:
+                st.info("A posição não gera assignment capital nem deliverable shares no modelo determinístico atual.")
+        else:
+            st.info("Para ações, a análise individual permanece factual e não transforma exposição em recomendação de investimento.")
 
 with tab_intelligence:
     st.subheader("Portfolio Intelligence")
