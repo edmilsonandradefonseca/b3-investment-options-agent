@@ -5,7 +5,9 @@ from b3_agent.opportunity_pipeline import OpportunityPipeline, StockOpportunityI
 from b3_agent.opportunity_stock import StockOpportunityProducer
 from b3_agent.options.analysis import OptionsAnalysis
 from b3_agent.options.put import PutAnalysisEngine
+from b3_agent.orchestration.context import build_deterministic_context
 from b3_agent.schemas.market import StockMarketData
+from b3_agent.schemas.position import PortfolioContext
 from b3_agent.schemas.valuation import ValuationRange
 from b3_agent.stock_opportunity_service import StockOpportunityService
 
@@ -26,7 +28,7 @@ def _stock_record(ticker: str, close: float, observed: datetime) -> StockMarketD
     )
 
 
-def test_stock_and_options_converge_into_deterministic_opportunity_set():
+def test_stock_and_options_converge_into_deterministic_opportunity_set_and_context():
     as_of = date(2026, 9, 11)
     observed = datetime(2026, 9, 11, 17, tzinfo=timezone.utc)
     valuation = ValuationRange(
@@ -92,3 +94,22 @@ def test_stock_and_options_converge_into_deterministic_opportunity_set():
     assert option_assessment.ticker == "ITUB4"
     assert option_assessment.action == "SELL_PUT"
     assert option_assessment.options_analysis_ref == "ITUBV200"
+
+    portfolio = PortfolioContext(
+        as_of=as_of,
+        positions=(),
+        cash=1000.0,
+        source_refs=("BTG:Renda Variavel",),
+        quality_status="VALIDATED",
+    )
+    context = build_deterministic_context(
+        portfolio_context=portfolio,
+        opportunity_set=result,
+    )
+    context_items = context["opportunities"]["ranked_opportunities"]
+    assert {item["opportunity_id"] for item in context_items} == {
+        "ITUB4:ACCUMULATE:PB_ROE",
+        "SELL_PUT:ITUBV200",
+    }
+    assert all(item["eligible"] is True for item in context_items)
+    assert all(item["source_refs"] for item in context_items)
