@@ -27,7 +27,8 @@ def _stock_record(ticker: str, close: float, observed: datetime) -> StockMarketD
 
 
 def test_stock_and_options_converge_into_deterministic_opportunity_set():
-    as_of = datetime(2026, 9, 11, 23, 59, tzinfo=timezone.utc)
+    as_of = date(2026, 9, 11)
+    observed = datetime(2026, 9, 11, 17, tzinfo=timezone.utc)
     stock = StockOpportunityService(producer=StockOpportunityProducer())
     valuation = ValuationRange(
         instrument_id="ITUB4",
@@ -43,7 +44,7 @@ def test_stock_and_options_converge_into_deterministic_opportunity_set():
         source_refs=("valuation-engine",),
     )
     stock_opportunities = stock.produce(
-        [_stock_record("ITUB4", 15.50, datetime(2026, 9, 11, 17, tzinfo=timezone.utc))],
+        [_stock_record("ITUB4", 15.50, observed)],
         valuation,
         as_of=as_of,
         source_refs=("BRAPI",),
@@ -56,7 +57,7 @@ def test_stock_and_options_converge_into_deterministic_opportunity_set():
         expiration_date=date(2026, 10, 16),
         premium=0.60,
         contract_multiplier=1.0,
-        as_of=date(2026, 9, 11),
+        as_of=as_of,
     )
     options_analysis = OptionsAnalysis(puts=(put,), source_refs=("OPLAB",))
     option_opportunities = OptionsOpportunityProducer().produce(
@@ -65,28 +66,29 @@ def test_stock_and_options_converge_into_deterministic_opportunity_set():
         source_refs=("OPLAB",),
     )
 
-    pipeline = OpportunityPipeline()
-    result = pipeline.build(
+    result = OpportunityPipeline().build(
         [*stock_opportunities, *option_opportunities],
         as_of=as_of,
-        source_refs=("BTG", "BRAPI", "OPLAB"),
+        source_refs=("BTG",),
     )
 
     assert result.as_of == as_of
     assert result.quality_status == "VALIDATED"
     assert result.ranking_policy_version == "1.0"
     assert {item.opportunity_id for item in result.ranked_opportunities} == {
-        "ACCUMULATE:ITUB4",
+        "ITUB4:ACCUMULATE:PB_ROE",
         "SELL_PUT:ITUBV200",
     }
     assert result.rejected_opportunities == ()
     assert result.source_refs == ("valuation-engine", "BRAPI", "OPLAB", "BTG")
 
     stock_assessment = next(
-        item for item in result.ranked_opportunities if item.opportunity_id == "ACCUMULATE:ITUB4"
+        item for item in result.ranked_opportunities
+        if item.opportunity_id == "ITUB4:ACCUMULATE:PB_ROE"
     )
     option_assessment = next(
-        item for item in result.ranked_opportunities if item.opportunity_id == "SELL_PUT:ITUBV200"
+        item for item in result.ranked_opportunities
+        if item.opportunity_id == "SELL_PUT:ITUBV200"
     )
     assert stock_assessment.ticker == "ITUB4"
     assert stock_assessment.action == "ACCUMULATE"
