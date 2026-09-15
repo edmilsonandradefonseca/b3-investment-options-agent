@@ -5,7 +5,20 @@ capabilities to an AI client, while calculations and investment decisions remain
 inside the B3 domain layer.
 """
 
+from __future__ import annotations
+
+from dataclasses import asdict, is_dataclass
+from datetime import date, datetime
+from pathlib import Path
+import os
+from typing import Any
+
 from mcp.server.fastmcp import FastMCP
+
+from b3_agent.config import settings
+from b3_agent.portfolio import PortfolioIntelligenceEngine
+from b3_agent.repositories.portfolio import PortfolioRepository
+from b3_agent.schemas.position import PortfolioContext
 
 
 mcp = FastMCP(
@@ -23,9 +36,10 @@ def get_system_capabilities() -> dict[str, object]:
     """Return the capabilities exposed by the B3 MCP server."""
     return {
         "server": "B3 Investment Intelligence",
-        "version": "0.1.0",
+        "version": "0.2.0",
         "mode": "read_only",
         "capabilities": [
+            "portfolio_context",
             "portfolio_intelligence",
             "options_analysis",
             "valuation",
@@ -38,6 +52,47 @@ def get_system_capabilities() -> dict[str, object]:
             "orders_supported": False,
         },
     }
+
+
+@mcp.tool()
+def get_portfolio_context() -> dict[str, Any]:
+    """Return the current point-in-time portfolio snapshot from the configured source.
+
+    The tool reads real project data and never fabricates positions when the source
+    is unavailable. Configure B3_AGENT_PORTFOLIO_FILE or use data/portfolio.json.
+    """
+    context = _load_portfolio_context()
+    return _serialize(context)
+
+
+@mcp.tool()
+def get_portfolio_intelligence() -> dict[str, Any]:
+    """Build deterministic portfolio intelligence from the current portfolio context."""
+    context = _load_portfolio_context()
+    intelligence = PortfolioIntelligenceEngine().build(context)
+    return _serialize(intelligence)
+
+
+def _load_portfolio_context() -> PortfolioContext:
+    configured = os.getenv("B3_AGENT_PORTFOLIO_FILE")
+    source_path = (
+        Path(configured).expanduser().resolve()
+        if configured
+        else settings.data_dir / "portfolio.json"
+    )
+    return PortfolioRepository(source_path).load()
+
+
+def _serialize(value: Any) -> Any:
+    if is_dataclass(value):
+        return _serialize(asdict(value))
+    if isinstance(value, dict):
+        return {str(key): _serialize(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_serialize(item) for item in value]
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    return value
 
 
 if __name__ == "__main__":
