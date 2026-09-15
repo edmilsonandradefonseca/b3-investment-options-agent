@@ -77,10 +77,10 @@ class OpportunityIntelligenceEngine:
                 self._rank(self.policy.portfolio_fit_order, fit),
                 self._rank(self.policy.risk_order, risk_value),
                 self._rank(self.policy.valuation_order, valuation_value),
+                expected_return_key,
                 self._rank(self.policy.capital_efficiency_order, capital_value),
                 self._rank(self.policy.diversification_order, diversification_value),
                 self._rank(self.policy.relative_order, relative_value),
-                expected_return_key,
                 opportunity.opportunity_id,
             )
             assessments.append(
