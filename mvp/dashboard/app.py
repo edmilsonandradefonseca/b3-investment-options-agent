@@ -8,6 +8,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from b3_agent.opportunity import OpportunityIntelligenceEngine
 from b3_agent.portfolio import PortfolioIntelligenceEngine
 from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
 from b3_agent.repositories.portfolio import PortfolioRepository
@@ -15,7 +16,7 @@ from b3_agent.repositories.portfolio import PortfolioRepository
 
 st.set_page_config(page_title="B3 Investment Copilot", page_icon="📊", layout="wide")
 st.title("B3 Investment Copilot")
-st.caption("MVP V0.4 • deterministic position intelligence • read-only")
+st.caption("MVP V0.5 • deterministic opportunity intelligence • read-only")
 
 
 def load_context():
@@ -58,7 +59,6 @@ for p in positions:
     )
 
 df = pd.DataFrame(rows)
-
 stock_df = df[df["Tipo"] == "STOCK"]
 option_df = df[df["Tipo"] == "OPTION"].copy()
 option_df["Tipo opção"] = option_df["Tipo opção"].fillna("").astype(str).str.upper()
@@ -67,9 +67,6 @@ stock_value = float(stock_df["Valor de mercado"].fillna(0).sum())
 option_value = float(option_df["Valor de mercado"].fillna(0).sum())
 market_value = stock_value + option_value
 
-# ------------------------------------------------------------------
-# Sidebar
-# ------------------------------------------------------------------
 with st.sidebar:
     st.header("Portfolio")
     st.write(f"**As of:** {context.as_of}")
@@ -81,9 +78,6 @@ with st.sidebar:
     st.write("**Arquivo**")
     st.code(str(Path(os.getenv("B3_AGENT_PORTFOLIO_FILE", "")).resolve()), language="text")
 
-# ------------------------------------------------------------------
-# Overview
-# ------------------------------------------------------------------
 st.header("Overview")
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Valor de mercado", f"R$ {market_value:,.2f}")
@@ -98,45 +92,31 @@ c3.metric("Puts", int((option_df["Tipo opção"] == "PUT").sum()))
 c4.metric("Calls", int((option_df["Tipo opção"] == "CALL").sum()))
 
 st.divider()
-
 left, right = st.columns([1, 1])
 with left:
     st.subheader("Distribuição por instrumento")
-    distribution = (
-        df.groupby("Tipo", dropna=False)["Valor de mercado"]
-        .sum()
-        .rename("Valor")
-    )
+    distribution = df.groupby("Tipo", dropna=False)["Valor de mercado"].sum().rename("Valor")
     st.bar_chart(distribution, width="stretch")
-
 with right:
     st.subheader("Concentração por ticker")
     concentration = (
-        df.groupby("Ticker", dropna=False)["Valor de mercado"]
-        .sum()
-        .abs()
-        .sort_values(ascending=False)
-        .head(10)
+        df.groupby("Ticker", dropna=False)["Valor de mercado"].sum().abs().sort_values(ascending=False).head(10)
     )
     st.bar_chart(concentration, width="stretch")
 
-# ------------------------------------------------------------------
-# Tabs
-# ------------------------------------------------------------------
-tab_portfolio, tab_options, tab_position, tab_intelligence = st.tabs(
-    ["Portfolio", "Options Intelligence", "Position Analysis", "Portfolio Intelligence"]
+
+tab_portfolio, tab_options, tab_position, tab_opportunities, tab_intelligence = st.tabs(
+    ["Portfolio", "Options Intelligence", "Position Analysis", "Opportunities", "Portfolio Intelligence"]
 )
 
 with tab_portfolio:
     st.subheader("Portfolio")
-
     f1, f2 = st.columns([1, 2])
     with f1:
         types = ["TODOS"] + sorted(df["Tipo"].dropna().unique().tolist())
         selected_type = st.selectbox("Instrumento", types, key="portfolio_type")
     with f2:
         ticker_search = st.text_input("Ticker", placeholder="Ex.: PETR4", key="portfolio_ticker")
-
     view = df.copy()
     if selected_type != "TODOS":
         view = view[view["Tipo"] == selected_type]
@@ -146,33 +126,27 @@ with tab_portfolio:
             view["Ticker"].str.upper().str.contains(search, na=False)
             | view["Underlying"].fillna("").astype(str).str.upper().str.contains(search, na=False)
         ]
-
     st.caption(f"Exibindo {len(view)} de {len(df)} posições.")
     st.dataframe(view.drop(columns=["Position ID"]), width="stretch", hide_index=True)
 
 with tab_options:
     st.subheader("Options Intelligence")
     st.caption("Visão determinística das posições de opções existentes no portfolio.")
-
     puts = option_df[option_df["Tipo opção"] == "PUT"]
     calls = option_df[option_df["Tipo opção"] == "CALL"]
     short_options = option_df[option_df["Quantidade"] < 0]
     long_options = option_df[option_df["Quantidade"] > 0]
-
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Opções", len(option_df))
     c2.metric("Puts", len(puts))
     c3.metric("Calls", len(calls))
     c4.metric("Vendidas", len(short_options))
-
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Compradas", len(long_options))
     c2.metric("Assignment capital", f"R$ {intelligence.capital_risk.assignment_capital:,.2f}")
     c3.metric("Cash após assignment", f"R$ {intelligence.capital_risk.cash_after_assignment:,.2f}")
     c4.metric("Uncovered call shares", f"{intelligence.capital_risk.uncovered_call_shares:,.0f}")
-
     st.divider()
-
     st.markdown("#### Options Book")
     option_columns = [
         "Ticker", "Underlying", "Tipo opção", "Strike", "Vencimento",
@@ -180,63 +154,41 @@ with tab_options:
     ]
     st.dataframe(
         option_df[option_columns].sort_values(["Vencimento", "Underlying", "Strike"], na_position="last"),
-        width="stretch",
-        hide_index=True,
+        width="stretch", hide_index=True,
     )
-
     st.markdown("#### Exposure by Underlying")
     option_underlying = (
-        option_df.assign(
-            Underlying=option_df["Underlying"].fillna(option_df["Ticker"])
-        )
+        option_df.assign(Underlying=option_df["Underlying"].fillna(option_df["Ticker"]))
         .groupby(["Underlying", "Tipo opção"], dropna=False)
-        .agg(
-            Posicoes=("Ticker", "count"),
-            Quantidade=("Quantidade", "sum"),
-            Valor=("Valor de mercado", "sum"),
-        )
+        .agg(Posicoes=("Ticker", "count"), Quantidade=("Quantidade", "sum"), Valor=("Valor de mercado", "sum"))
         .reset_index()
         .sort_values("Valor", key=lambda s: s.abs(), ascending=False)
     )
     st.dataframe(option_underlying, width="stretch", hide_index=True)
-
     st.markdown("#### Expirations")
     expirations = (
         option_df.groupby("Vencimento", dropna=False)
-        .agg(
-            Posicoes=("Ticker", "count"),
-            Valor=("Valor de mercado", "sum"),
-        )
+        .agg(Posicoes=("Ticker", "count"), Valor=("Valor de mercado", "sum"))
         .reset_index()
         .sort_values("Vencimento", na_position="last")
     )
     st.dataframe(expirations, width="stretch", hide_index=True)
-
-    st.info(
-        "O multiplicador e os valores apresentados são os existentes no PortfolioContext. "
-        "O dashboard não infere ou altera contratos B3."
-    )
+    st.info("O multiplicador e os valores apresentados são os existentes no PortfolioContext. O dashboard não infere ou altera contratos B3.")
 
 with tab_position:
     st.subheader("Position Analysis")
     st.caption("Detalhamento determinístico de uma posição individual. Sem recomendação de compra ou venda.")
-
     assessment_by_id = {assessment.position_id: assessment for assessment in intelligence.assessments}
     position_ids = df["Position ID"].tolist()
-
     selected_position_id = st.selectbox(
-        "Selecione a posição",
-        position_ids,
+        "Selecione a posição", position_ids,
         format_func=lambda pid: (
             f"{pid} — {df.loc[df['Position ID'] == pid, 'Ticker'].iloc[0]}"
             f" ({df.loc[df['Position ID'] == pid, 'Tipo'].iloc[0]})"
-        ),
-        key="position_analysis_id",
+        ), key="position_analysis_id",
     )
-
     selected = df.loc[df["Position ID"] == selected_position_id].iloc[0]
     assessment = assessment_by_id.get(selected_position_id)
-
     if assessment is None:
         st.warning("Não foi encontrada avaliação determinística para esta posição.")
     else:
@@ -246,18 +198,13 @@ with tab_position:
         c2.metric("Instrumento", selected["Tipo"])
         c3.metric("Side", assessment.side)
         c4.metric("Lifecycle", assessment.lifecycle.state)
-
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Quantidade", f"{selected['Quantidade']:,.2f}")
         market_price = selected["Preço"]
         c2.metric("Preço", "—" if pd.isna(market_price) else f"R$ {float(market_price):,.4f}")
         market_position_value = selected["Valor de mercado"]
-        c3.metric(
-            "Valor de mercado",
-            "—" if pd.isna(market_position_value) else f"R$ {float(market_position_value):,.2f}",
-        )
+        c3.metric("Valor de mercado", "—" if pd.isna(market_position_value) else f"R$ {float(market_position_value):,.2f}")
         c4.metric("Underlying", assessment.underlying_ticker)
-
         st.markdown("#### Instrument details")
         details = {
             "Position ID": assessment.position_id,
@@ -271,7 +218,6 @@ with tab_position:
             "Contract multiplier": selected["Multiplicador"],
         }
         st.dataframe(pd.DataFrame([details]), width="stretch", hide_index=True)
-
         st.markdown("#### Deterministic risk mechanics")
         risk_rows = [
             {"Metric": "Assignment capital", "Value": assessment.assignment_capital},
@@ -282,7 +228,6 @@ with tab_position:
         if assessment.lifecycle.reason:
             risk_rows.append({"Metric": "Lifecycle reason", "Value": assessment.lifecycle.reason})
         st.dataframe(pd.DataFrame(risk_rows), width="stretch", hide_index=True)
-
         if assessment.instrument_type == "OPTION":
             option_type = (selected["Tipo opção"] or "").upper()
             if assessment.side == "SHORT" and option_type == "PUT":
@@ -294,35 +239,63 @@ with tab_position:
         else:
             st.info("Para ações, a análise individual permanece factual e não transforma exposição em recomendação de investimento.")
 
-with tab_intelligence:
-    st.subheader("Portfolio Intelligence")
-    st.write(
-        "A camada de inteligência é produzida pelo mesmo engine determinístico "
-        "utilizado pelo MCP; o dashboard não cria decisões de investimento."
+with tab_opportunities:
+    st.subheader("Opportunity Intelligence")
+    st.caption("Phase 7: convergência determinística de oportunidades upstream. O LLM não ranqueia nem altera estes fatos.")
+    opportunity_engine = OpportunityIntelligenceEngine()
+    opportunity_set = opportunity_engine.assess(())
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Oportunidades elegíveis", len(opportunity_set.ranked_opportunities))
+    c2.metric("Rejeitadas", len(opportunity_set.rejected_opportunities))
+    c3.metric("Policy", opportunity_set.ranking_policy_version)
+
+    st.info(
+        "Nenhuma oportunidade upstream foi fornecida nesta versão. Isso é intencional: "
+        "V0.5 não transforma exposição do portfolio em BUY/SELL sem evidência de valuation, "
+        "options analysis ou outro produtor determinístico."
     )
 
-    exposures = getattr(intelligence, "exposures", ())
-    exposure_rows = []
-    for e in exposures:
-        exposure_rows.append(
-            {
-                "Ticker": e.ticker,
-                "Valor líquido": e.net_market_value,
-                "Valor bruto": e.gross_market_value,
-                "Peso": e.weight,
-                "Opções": e.option_count,
-                "Short options": e.short_option_count,
-                "Assignment capital": e.assignment_capital,
-                "Covered call contracts": e.covered_call_contracts,
-                "Call coverage ratio": e.call_coverage_ratio,
-            }
-        )
+    st.markdown("#### Ranking policy")
+    st.write(
+        "Ordem lexicográfica: eligibility → quality → portfolio fit → risk → valuation → "
+        "capital efficiency → diversification → relative opportunity → expected return → opportunity_id."
+    )
+    st.write("**Policy version:**", opportunity_set.ranking_policy_version)
 
+    st.markdown("#### Ranked opportunities")
+    st.dataframe(
+        pd.DataFrame(columns=["Opportunity ID", "Ticker", "Action", "Attractiveness", "Portfolio fit", "Expected return"]),
+        width="stretch", hide_index=True,
+    )
+
+    st.markdown("#### Rejected opportunities")
+    st.dataframe(
+        pd.DataFrame(columns=["Opportunity ID", "Reasons"]),
+        width="stretch", hide_index=True,
+    )
+    st.caption("ActionCandidate, RelativeOpportunity e PortfolioImpact permanecem não executáveis e só serão preenchidos por produtores upstream com contratos válidos.")
+
+with tab_intelligence:
+    st.subheader("Portfolio Intelligence")
+    st.write("A camada de inteligência é produzida pelo mesmo engine determinístico utilizado pelo MCP; o dashboard não cria decisões de investimento.")
+    exposure_rows = []
+    for e in getattr(intelligence, "exposures", ()):
+        exposure_rows.append({
+            "Ticker": e.ticker,
+            "Valor líquido": e.net_market_value,
+            "Valor bruto": e.gross_market_value,
+            "Peso": e.weight,
+            "Opções": e.option_count,
+            "Short options": e.short_option_count,
+            "Assignment capital": e.assignment_capital,
+            "Covered call contracts": e.covered_call_contracts,
+            "Call coverage ratio": e.call_coverage_ratio,
+        })
     if exposure_rows:
         st.dataframe(pd.DataFrame(exposure_rows), width="stretch", hide_index=True)
     else:
         st.info("Nenhuma exposição calculada.")
-
     st.markdown("#### Capital Risk")
     risk = intelligence.capital_risk
     risk_rows = [
@@ -335,8 +308,5 @@ with tab_intelligence:
     st.dataframe(pd.DataFrame(risk_rows), width="stretch", hide_index=True)
 
 st.divider()
-st.caption(
-    f"As of: {context.as_of} • Quality: {context.quality_status} • "
-    f"Source: {', '.join(context.source_refs)}"
-)
+st.caption(f"As of: {context.as_of} • Quality: {context.quality_status} • Source: {', '.join(context.source_refs)}")
 st.caption("Read-only MVP • No order execution • No LLM override of deterministic facts")
