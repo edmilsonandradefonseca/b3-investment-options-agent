@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 from b3_agent.opportunity_stock import StockOpportunityProducer
 from b3_agent.quant_engine import compute_quant_features
@@ -84,7 +84,7 @@ class StockOpportunityService:
     def _as_datetime(value: AS_OF) -> datetime:
         if isinstance(value, datetime):
             return value
-        return datetime(value.year, value.month, value.day)
+        return datetime.combine(value, time.max)
 
     @staticmethod
     def _observation_is_before_or_at(
