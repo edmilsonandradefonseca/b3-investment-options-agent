@@ -1,3 +1,5 @@
+import pytest
+
 from b3_agent.portfolio.pnl import PnlEngine
 
 
@@ -13,7 +15,7 @@ def test_stock_short_unrealized_pnl():
     pnl = PnlEngine().stock_unrealized(
         position_id="abev3", quantity=-7000, average_cost=16.34, market_price=15.74
     )
-    assert pnl.unrealized_pnl == 4200.0
+    assert pnl.unrealized_pnl == pytest.approx(4200.0)
 
 
 def test_option_premium_and_buyback_are_separate():
