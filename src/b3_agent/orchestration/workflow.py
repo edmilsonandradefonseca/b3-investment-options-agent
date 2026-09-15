@@ -4,6 +4,7 @@ from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
+from b3_agent.agents.context import AgentContext
 from b3_agent.agents.reasoning import InvestmentReasoningAgent
 from b3_agent.agents.risk_validator import RiskValidator
 from b3_agent.knowledge.retrieval import ObsidianRetriever
@@ -41,11 +42,11 @@ def build_workflow(
         }
 
     def reason(state: WorkflowState) -> dict[str, Any]:
-        context = {
-            "request": state["request"],
-            "deterministic_context": state.get("deterministic_context", {}),
-            "retrieved_evidence": state.get("evidence", []),
-        }
+        context = AgentContext(
+            request=state["request"],
+            deterministic_context=state.get("deterministic_context", {}),
+            retrieved_evidence=tuple(state.get("evidence", [])),
+        )
         proposal = reasoning_agent.decide(context)
         return {
             "proposal": {
