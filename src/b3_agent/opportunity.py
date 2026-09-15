@@ -8,7 +8,6 @@ from .schemas.opportunity import Opportunity, OpportunityAssessment, Opportunity
 @dataclass(frozen=True)
 class RankingPolicy:
     version: str = "1.0"
-
     quality_order: tuple[str, ...] = ("VALIDATED", "WARNING")
     portfolio_fit_order: tuple[str, ...] = ("GOOD", "NEUTRAL", "WARNING", "POOR")
     risk_order: tuple[str, ...] = ("LOW", "MEDIUM", "HIGH", "CRITICAL")
@@ -68,6 +67,11 @@ class OpportunityIntelligenceEngine:
             relative_value = relative_assessment.get(opportunity.opportunity_id, "UNKNOWN").upper()
 
             eligible = not reasons
+            expected_return_key = (
+                -opportunity.expected_return
+                if opportunity.expected_return is not None
+                else float("inf")
+            )
             ranking_key = (
                 self._rank(self.policy.quality_order, opportunity.quality_status),
                 self._rank(self.policy.portfolio_fit_order, fit),
@@ -76,7 +80,7 @@ class OpportunityIntelligenceEngine:
                 self._rank(self.policy.capital_efficiency_order, capital_value),
                 self._rank(self.policy.diversification_order, diversification_value),
                 self._rank(self.policy.relative_order, relative_value),
-                -(opportunity.expected_return if opportunity.expected_return is not None else float("inf")),
+                expected_return_key,
                 opportunity.opportunity_id,
             )
             assessments.append(
