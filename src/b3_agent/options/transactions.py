@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -61,7 +60,6 @@ class OptionsTransactionLoader:
                     quantity=quantity,
                     average_cost=_number(row[header["Custo Médio"]]),
                     total_cost=_number(row[header["Custo Total"]]),
-                    transaction_date=None,
                     source_ref="Options Transactions XLSX",
                 )
             )
