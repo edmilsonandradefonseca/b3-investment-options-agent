@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from b3_agent.options.identity import canonical_option_ticker
 from b3_agent.schemas.option_transaction import OptionTransaction
-from b3_agent.schemas.position import PortfolioContext, Position
+from b3_agent.schemas.position import PortfolioContext
 
 
 @dataclass(frozen=True)
@@ -26,7 +27,7 @@ class OptionsReconciliationEngine:
         portfolio: PortfolioContext,
     ) -> OptionReconciliation:
         btg_options = {
-            position.ticker: position
+            canonical_option_ticker(position.ticker): position
             for position in portfolio.positions
             if position.instrument_type == "OPTION"
         }
@@ -34,16 +35,21 @@ class OptionsReconciliationEngine:
         current: list[OptionTransaction] = []
         historical_only: list[OptionTransaction] = []
         mismatches: list[tuple[str, float, float]] = []
+        btg_position_ids: list[str] = []
 
         for transaction in transactions:
-            position = btg_options.get(transaction.option_ticker)
+            canonical_ticker = canonical_option_ticker(transaction.option_ticker)
+            position = btg_options.get(canonical_ticker)
             if position is None:
                 historical_only.append(transaction)
                 continue
+
             current.append(transaction)
+            btg_position_ids.append(position.position_id)
+
             if transaction.quantity != position.quantity:
                 mismatches.append(
-                    (transaction.option_ticker, transaction.quantity, position.quantity)
+                    (canonical_ticker, transaction.quantity, position.quantity)
                 )
 
         quality_status = "WARNING" if mismatches else "VALIDATED"
@@ -51,6 +57,6 @@ class OptionsReconciliationEngine:
             current=tuple(current),
             historical_only=tuple(historical_only),
             quantity_mismatches=tuple(mismatches),
-            btg_position_ids=tuple(sorted(btg_options)),
+            btg_position_ids=tuple(btg_position_ids),
             quality_status=quality_status,
         )
