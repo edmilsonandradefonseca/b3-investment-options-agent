@@ -142,6 +142,17 @@ class OpportunityAssessment:
     evidence_refs: tuple[str, ...] = ()
     ranking_key: tuple[object, ...] = ()
     rationale: str = ""
+    ticker: str = ""
+    instrument_type: str = ""
+    action: str = ""
+    as_of: AS_OF | None = None
+    expected_return: float | None = None
+    capital_requirement: float | None = None
+    liquidity_value: float | None = None
+    valuation_range_ref: str | None = None
+    options_analysis_ref: str | None = None
+    quant_features_ref: str | None = None
+    source_refs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
