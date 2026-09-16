@@ -62,6 +62,8 @@ class B3State(TypedDict, total=False):
     market_agent_analysis: dict[str, Any]
     portfolio_agent_analysis: dict[str, Any]
     options_agent_analysis: dict[str, Any]
+    # Synthesis is an LLM interpretation layer, never a replacement for deterministic facts.
+    synthesis: dict[str, Any]
     insights: list[dict[str, Any]]
     decision_proposal: dict[str, Any] | None
     proposal: dict[str, Any]
