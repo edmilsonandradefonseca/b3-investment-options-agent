@@ -21,10 +21,10 @@ def build_workflow(
     """Build the LangGraph workflow behind the V3.1 orchestrator contract."""
 
     def retrieve(state: B3State) -> dict[str, Any]:
-        question = state.get("user_question") or state.get("request")
-        if not question:
-            raise ValueError("user_question is required")
-        records = retriever.retrieve(question, top_k=5)
+        request = state.get("user_question") or state.get("request")
+        if not request:
+            raise ValueError("workflow requires user_question or request")
+        records = retriever.retrieve(request, top_k=5)
         evidence = [
             {
                 "source_ref": item.source_ref,
@@ -34,50 +34,50 @@ def build_workflow(
             }
             for item in records
         ]
-        return {"evidence": evidence, "user_question": question}
+        return {"user_question": request, "evidence": evidence}
 
     def reason(state: B3State) -> dict[str, Any]:
-        request = state.get("user_question") or state.get("request")
-        if not request:
-            raise ValueError("user_question is required")
-        deterministic_context: dict[str, Any] = {
-            key: state[key]
-            for key in (
-                "portfolio_context",
-                "signals",
-                "threats",
-                "opportunities",
-                "action_candidates",
-                "fundamental_analysis",
-                "market_analysis",
-                "options_analysis",
-                "risk_analysis",
-            )
-            if key in state
+        deterministic_keys = (
+            "portfolio_context",
+            "signals",
+            "threats",
+            "opportunities",
+            "action_candidates",
+            "fundamental_analysis",
+            "market_analysis",
+            "options_analysis",
+            "risk_analysis",
+        )
+        deterministic_context = {
+            key: state[key] for key in deterministic_keys if key in state
         }
-        legacy_context = state.get("deterministic_context") or {}
-        for key, value in legacy_context.items():
-            deterministic_context.setdefault(key, value)
+        legacy_context = state.get("deterministic_context")
+        if isinstance(legacy_context, dict):
+            deterministic_context = {**legacy_context, **deterministic_context}
         context = AgentContext(
-            request=request,
+            request=state["user_question"],
             deterministic_context=deterministic_context,
             retrieved_evidence=tuple(state.get("evidence", [])),
         )
         proposal = reasoning_agent.decide(context)
+        proposal_dict = {
+            "action": proposal.action,
+            "subject_id": proposal.subject_id,
+            "thesis": proposal.thesis,
+            "rationale": proposal.rationale,
+            "evidence_refs": list(proposal.evidence_refs),
+            "risks": list(proposal.risks),
+            "opportunity_cost": proposal.opportunity_cost,
+            "capital_impact": proposal.capital_impact,
+            "confidence": proposal.confidence,
+            "invalidation_conditions": list(proposal.invalidation_conditions),
+            "as_of": proposal.as_of.isoformat() if proposal.as_of else None,
+        }
+        # ``proposal`` is a compatibility alias for the pre-V3.1 workflow
+        # result. The canonical V3.1 field is ``decision_proposal``.
         return {
-            "decision_proposal": {
-                "action": proposal.action,
-                "subject_id": proposal.subject_id,
-                "thesis": proposal.thesis,
-                "rationale": proposal.rationale,
-                "evidence_refs": list(proposal.evidence_refs),
-                "risks": list(proposal.risks),
-                "opportunity_cost": proposal.opportunity_cost,
-                "capital_impact": proposal.capital_impact,
-                "confidence": proposal.confidence,
-                "invalidation_conditions": list(proposal.invalidation_conditions),
-                "as_of": proposal.as_of.isoformat() if proposal.as_of else None,
-            }
+            "decision_proposal": proposal_dict,
+            "proposal": proposal_dict,
         }
 
     def validate(state: B3State) -> dict[str, Any]:
