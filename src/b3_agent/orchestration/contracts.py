@@ -61,6 +61,8 @@ class B3State(TypedDict, total=False):
     risk_analysis: Any
     insights: list[dict[str, Any]]
     decision_proposal: dict[str, Any] | None
+    # Compatibility output alias for pre-V3.1 graph consumers.
+    proposal: dict[str, Any]
     risk_validation: dict[str, Any] | None
     status: str
     sources: list[str]
