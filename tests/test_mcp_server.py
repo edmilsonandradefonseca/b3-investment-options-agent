@@ -11,8 +11,8 @@ def test_mcp_capabilities_are_read_only():
     assert capabilities["governance"]["deterministic_first"] is True
     assert capabilities["governance"]["llm_executes_trades"] is False
     assert capabilities["governance"]["orders_supported"] is False
-    assert "portfolio_context" in capabilities["capabilities"]
-    assert "portfolio_intelligence" in capabilities["capabilities"]
+    assert "get_portfolio_context" in capabilities["capabilities"]
+    assert "get_portfolio_intelligence" in capabilities["capabilities"]
 
 
 def test_get_portfolio_context_uses_configured_source(tmp_path, monkeypatch):
