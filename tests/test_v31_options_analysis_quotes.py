@@ -4,7 +4,14 @@ from b3_agent.options.analysis import OptionsAnalysisEngine
 from b3_agent.schemas.option import OptionContract, OptionQuote
 
 
-def make_quote(option_id: str, *, mid: float | None = 2.0) -> OptionQuote:
+def make_quote(
+    option_id: str,
+    *,
+    mid: float | None = 2.0,
+    last: float | None = 2.0,
+    bid: float | None = 1.9,
+    ask: float | None = 2.1,
+) -> OptionQuote:
     now = datetime(2026, 9, 16, 12, 0, tzinfo=timezone.utc)
     return OptionQuote(
         instrument_id=option_id,
@@ -14,9 +21,9 @@ def make_quote(option_id: str, *, mid: float | None = 2.0) -> OptionQuote:
         source="oplab",
         ingested_at=now,
         option_id=option_id,
-        bid=1.9 if mid is not None else None,
-        ask=2.1 if mid is not None else None,
-        last=2.0 if mid is not None else None,
+        bid=bid,
+        ask=ask,
+        last=last,
         mid=mid,
         volume=100.0,
         open_interest=500.0,
@@ -70,7 +77,7 @@ def test_analyze_quotes_uses_bid_ask_when_mid_and_last_are_missing():
         strike=50.0,
         expiration_date=date(2026, 10, 16),
     )
-    quote = make_quote("PUT2", mid=None)
+    quote = make_quote("PUT2", mid=None, last=None)
     result = OptionsAnalysisEngine().analyze_quotes(
         contracts=(contract,),
         quotes=(quote,),
