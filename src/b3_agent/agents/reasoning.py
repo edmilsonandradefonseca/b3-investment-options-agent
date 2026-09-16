@@ -33,7 +33,7 @@ _DECISION_SCHEMA: dict[str, Any] = {
 
 
 class InvestmentReasoningAgent:
-    """LLM reasoning over deterministic facts and retrieved investor evidence."""
+    """LLM reasoning over deterministic facts, synthesis, and retrieved evidence."""
 
     def __init__(self, llm: LLMClient):
         self.llm = llm
@@ -44,9 +44,11 @@ class InvestmentReasoningAgent:
         result = self.llm.complete_json(
             instructions=(
                 "Act as the investment reasoning component of a decision copilot. "
-                "Use only the supplied deterministic facts and retrieved evidence. "
-                "Do not invent data or calculations. If evidence is insufficient, "
-                "prefer WAIT or NO_CHANGE. Return a structured proposal for human review."
+                "Use the supplied deterministic facts and retrieved evidence as the source of truth. "
+                "The supplied synthesis is a non-authoritative interpretation of independent specialist analyses: "
+                "use it to identify agreements, conflicts, uncertainties and evidence gaps, but do not treat it "
+                "as a replacement for deterministic facts or evidence. Do not invent data or calculations. "
+                "If evidence is insufficient, prefer WAIT or NO_CHANGE. Return a structured proposal for human review."
             ),
             input_text=json.dumps(payload, ensure_ascii=False, default=str),
             schema_name="investment_decision",
