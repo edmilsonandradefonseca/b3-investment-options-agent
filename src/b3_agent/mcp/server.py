@@ -17,6 +17,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from b3_agent.config import settings
+from b3_agent.mcp.orchestrator_server import analyze_b3
 from b3_agent.portfolio import PortfolioIntelligenceEngine
 from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
 from b3_agent.portfolio.position_intelligence import PositionIntelligenceEngine
@@ -48,24 +49,36 @@ mcp = FastMCP(
 @mcp.tool()
 def get_system_capabilities() -> dict[str, object]:
     """Return the V3.1 deterministic MCP capability contract."""
+    tools = [
+        "get_portfolio_context",
+        "get_portfolio_intelligence",
+        "analyze_position",
+        "get_valuation",
+        "get_opportunities",
+        "compare_position_opportunity",
+    ]
     return {
         "server": "B3 Investment Intelligence",
         "version": "0.4.0",
         "mode": "read_only",
-        "tools": [
-            "get_portfolio_context",
-            "get_portfolio_intelligence",
-            "analyze_position",
-            "get_valuation",
-            "get_opportunities",
-            "compare_position_opportunity",
-        ],
+        "tools": tools,
+        "capabilities": [*tools, "orchestrated_analysis"],
         "governance": {
             "deterministic_first": True,
             "llm_executes_trades": False,
             "orders_supported": False,
         },
     }
+
+
+@mcp.tool()
+def analyze_portfolio(
+    task: str,
+    ticker: str | None = None,
+    context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run the canonical V3.1 orchestrator through the MCP transport boundary."""
+    return analyze_b3(task=task, ticker=ticker, context=context)
 
 
 @mcp.tool()
