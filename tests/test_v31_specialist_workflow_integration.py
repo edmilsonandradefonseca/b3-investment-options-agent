@@ -73,8 +73,8 @@ def test_full_specialist_path_preserves_deterministic_analysis(tmp_path: Path):
     assert result["status"] == "PASS"
 
     names = {call["schema_name"] for call in llm.calls}
-    assert {"market_analysis_analysis", "portfolio_analysis_analysis", "options_analysis_analysis", "decision_proposal"} == names
-    synthesis_input = next(call["input_text"] for call in llm.calls if call["schema_name"] == "decision_proposal")
+    assert {"market_analysis_analysis", "portfolio_analysis_analysis", "options_analysis_analysis", "investment_decision"} == names
+    synthesis_input = next(call["input_text"] for call in llm.calls if call["schema_name"] == "investment_decision")
     assert "market_agent_analysis" in synthesis_input
     assert "portfolio_agent_analysis" in synthesis_input
     assert "options_agent_analysis" in synthesis_input
