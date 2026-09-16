@@ -16,6 +16,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from b3_agent.config import settings
+from b3_agent.mcp.orchestrator_server import analyze_b3
 from b3_agent.portfolio import PortfolioIntelligenceEngine
 from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
 from b3_agent.repositories.portfolio import PortfolioRepository
@@ -37,11 +38,12 @@ def get_system_capabilities() -> dict[str, object]:
     """Return the capabilities exposed by the B3 MCP server."""
     return {
         "server": "B3 Investment Intelligence",
-        "version": "0.2.0",
+        "version": "0.3.0",
         "mode": "read_only",
         "capabilities": [
             "portfolio_context",
             "portfolio_intelligence",
+            "orchestrated_analysis",
             "options_analysis",
             "valuation",
             "opportunity_intelligence",
@@ -53,6 +55,16 @@ def get_system_capabilities() -> dict[str, object]:
             "orders_supported": False,
         },
     }
+
+
+@mcp.tool()
+def analyze_portfolio(
+    task: str,
+    ticker: str | None = None,
+    context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Run the V3.1 logical orchestrator through the MCP transport boundary."""
+    return analyze_b3(task=task, ticker=ticker, context=context)
 
 
 @mcp.tool()
