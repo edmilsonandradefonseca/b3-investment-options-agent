@@ -129,9 +129,14 @@ def build_workflow(
     graph.add_node("validate", validate)
     graph.add_edge(START, "retrieve")
     graph.add_edge("retrieve", "deterministic_context")
+    # The three specialists consume the same immutable upstream context and are
+    # independent of one another. LangGraph therefore executes them as a fan-out
+    # and joins all three before synthesis.
     graph.add_edge("deterministic_context", "market_analysis")
-    graph.add_edge("market_analysis", "portfolio_analysis")
-    graph.add_edge("portfolio_analysis", "options_analysis")
+    graph.add_edge("deterministic_context", "portfolio_analysis")
+    graph.add_edge("deterministic_context", "options_analysis")
+    graph.add_edge("market_analysis", "reason")
+    graph.add_edge("portfolio_analysis", "reason")
     graph.add_edge("options_analysis", "reason")
     graph.add_edge("reason", "validate")
     graph.add_edge("validate", END)
