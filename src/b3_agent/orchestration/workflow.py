@@ -21,7 +21,10 @@ def build_workflow(
     """Build the LangGraph workflow behind the V3.1 orchestrator contract."""
 
     def retrieve(state: B3State) -> dict[str, Any]:
-        records = retriever.retrieve(state["user_question"], top_k=5)
+        question = state.get("user_question") or state.get("request")
+        if not question:
+            raise ValueError("user_question is required")
+        records = retriever.retrieve(question, top_k=5)
         evidence = [
             {
                 "source_ref": item.source_ref,
@@ -31,25 +34,33 @@ def build_workflow(
             }
             for item in records
         ]
-        return {"evidence": evidence}
+        return {"evidence": evidence, "user_question": question}
 
     def reason(state: B3State) -> dict[str, Any]:
-        deterministic_keys = (
-            "portfolio_context",
-            "signals",
-            "threats",
-            "opportunities",
-            "action_candidates",
-            "fundamental_analysis",
-            "market_analysis",
-            "options_analysis",
-            "risk_analysis",
-        )
+        request = state.get("user_question") or state.get("request")
+        if not request:
+            raise ValueError("user_question is required")
+        deterministic_context: dict[str, Any] = {
+            key: state[key]
+            for key in (
+                "portfolio_context",
+                "signals",
+                "threats",
+                "opportunities",
+                "action_candidates",
+                "fundamental_analysis",
+                "market_analysis",
+                "options_analysis",
+                "risk_analysis",
+            )
+            if key in state
+        }
+        legacy_context = state.get("deterministic_context") or {}
+        for key, value in legacy_context.items():
+            deterministic_context.setdefault(key, value)
         context = AgentContext(
-            request=state["user_question"],
-            deterministic_context={
-                key: state[key] for key in deterministic_keys if key in state
-            },
+            request=request,
+            deterministic_context=deterministic_context,
             retrieved_evidence=tuple(state.get("evidence", [])),
         )
         proposal = reasoning_agent.decide(context)
