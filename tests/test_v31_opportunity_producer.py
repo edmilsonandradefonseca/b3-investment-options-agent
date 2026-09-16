@@ -27,12 +27,13 @@ def test_v31_opportunity_producer_converges_stock_and_option_candidates() -> Non
             ),
         ),
         valuation=ValuationRange(
+            instrument_id="PETR4",
             ticker="PETR4",
             method="TEST",
             as_of=date(2026, 9, 11),
             base_value=50.0,
-            low_value=45.0,
-            high_value=55.0,
+            bear_value=45.0,
+            bull_value=55.0,
             accumulation_price=42.0,
             reduce_price=60.0,
             source_refs=("valuation:test",),
@@ -46,7 +47,7 @@ def test_v31_opportunity_producer_converges_stock_and_option_candidates() -> Non
     )
 
     assert stock_result.quality_status == "VALIDATED"
-    assert stock_result.source_refs == ("BRAPI", "valuation:test")
+    assert stock_result.source_refs == ("valuation:test", "BRAPI")
     assert len(stock_result.ranked_opportunities) == 1
     assert stock_result.ranked_opportunities[0].action == "ACCUMULATE"
     assert len(stock_result.action_candidates) == 1
