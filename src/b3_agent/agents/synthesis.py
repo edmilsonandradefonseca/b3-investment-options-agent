@@ -7,6 +7,13 @@ from b3_agent.agents.context import AgentContext
 from b3_agent.llm.client import LLMClient
 
 
+_SPECIALIST_KEYS = (
+    "market_agent_analysis",
+    "portfolio_agent_analysis",
+    "options_agent_analysis",
+)
+
+
 class SynthesisAgent:
     """Reconciles independent specialist analyses into a decision-ready context.
 
@@ -21,14 +28,13 @@ class SynthesisAgent:
     def synthesize(self, context: AgentContext | dict[str, Any]) -> dict[str, Any]:
         payload = context.to_payload() if isinstance(context, AgentContext) else context
         facts = payload.get("deterministic_context", {})
+        if not isinstance(facts, dict):
+            facts = {}
+        deterministic_facts = {
+            key: value for key, value in facts.items() if key not in _SPECIALIST_KEYS
+        }
         specialist_outputs = {
-            key: facts[key]
-            for key in (
-                "market_agent_analysis",
-                "portfolio_agent_analysis",
-                "options_agent_analysis",
-            )
-            if key in facts
+            key: facts[key] for key in _SPECIALIST_KEYS if key in facts
         }
         result = self.llm.complete_json(
             instructions=(
@@ -42,7 +48,7 @@ class SynthesisAgent:
             input_text=json.dumps(
                 {
                     "request": payload.get("request"),
-                    "deterministic_facts": facts,
+                    "deterministic_facts": deterministic_facts,
                     "specialist_analyses": specialist_outputs,
                     "retrieved_evidence": payload.get("retrieved_evidence", []),
                 },
