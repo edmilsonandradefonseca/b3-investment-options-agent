@@ -10,6 +10,7 @@ from b3_agent.agents.specialist import (
     OptionsAnalysisAgent,
     PortfolioAnalysisAgent,
 )
+from b3_agent.agents.synthesis import SynthesisAgent
 from b3_agent.config import settings
 from b3_agent.knowledge.obsidian import ObsidianKnowledgeStore
 from b3_agent.knowledge.retrieval import ObsidianRetriever
@@ -42,6 +43,7 @@ def configure_default_workflow(
         market_agent=MarketAnalysisAgent(llm),
         portfolio_agent=PortfolioAnalysisAgent(llm),
         options_agent=OptionsAnalysisAgent(llm),
+        synthesis_agent=SynthesisAgent(llm),
         reasoning_agent=InvestmentReasoningAgent(llm),
         risk_validator=RiskValidator(),
     )
