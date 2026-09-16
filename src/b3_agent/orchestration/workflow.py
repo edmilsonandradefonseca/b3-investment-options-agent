@@ -37,6 +37,20 @@ def build_workflow(
         ]
         return {"user_question": request, "evidence": evidence}
 
+    def deterministic_context(state: B3State) -> dict[str, Any]:
+        """Expose deterministic opportunity facts without recomputation or LLM use."""
+        opportunity_set = state.get("opportunity_set")
+        if opportunity_set is None:
+            return {}
+        context = opportunity_set_to_context(opportunity_set)
+        return {
+            "opportunities": context["ranked_opportunities"],
+            "action_candidates": context["action_candidates"],
+            "deterministic_context": {
+                "opportunity_set": context,
+            },
+        }
+
     def reason(state: B3State) -> dict[str, Any]:
         deterministic_keys = (
             "portfolio_context",
@@ -52,11 +66,6 @@ def build_workflow(
         deterministic_context = {
             key: state[key] for key in deterministic_keys if key in state
         }
-        opportunity_set = state.get("opportunity_set")
-        if opportunity_set is not None:
-            deterministic_context["opportunity_set"] = opportunity_set_to_context(
-                opportunity_set
-            )
         legacy_context = state.get("deterministic_context")
         if isinstance(legacy_context, dict):
             deterministic_context = {**legacy_context, **deterministic_context}
@@ -79,8 +88,6 @@ def build_workflow(
             "invalidation_conditions": list(proposal.invalidation_conditions),
             "as_of": proposal.as_of.isoformat() if proposal.as_of else None,
         }
-        # ``proposal`` is a compatibility alias for the pre-V3.1 workflow
-        # result. The canonical V3.1 field is ``decision_proposal``.
         return {
             "decision_proposal": proposal_dict,
             "proposal": proposal_dict,
@@ -113,10 +120,12 @@ def build_workflow(
 
     graph = StateGraph(B3State)
     graph.add_node("retrieve", retrieve)
+    graph.add_node("deterministic_context", deterministic_context)
     graph.add_node("reason", reason)
     graph.add_node("validate", validate)
     graph.add_edge(START, "retrieve")
-    graph.add_edge("retrieve", "reason")
+    graph.add_edge("retrieve", "deterministic_context")
+    graph.add_edge("deterministic_context", "reason")
     graph.add_edge("reason", "validate")
     graph.add_edge("validate", END)
     return graph.compile()
