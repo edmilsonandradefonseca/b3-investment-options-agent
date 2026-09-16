@@ -13,10 +13,17 @@ def test_v31_opportunity_producer_converges_stock_and_option_candidates() -> Non
     stock = StockOpportunityInput(
         records=(
             StockMarketData(
+                instrument_id="PETR4",
                 ticker="PETR4",
                 observation_timestamp=datetime(2026, 9, 10, 20, tzinfo=timezone.utc),
-                close=40.0,
+                available_timestamp=datetime(2026, 9, 10, 20, tzinfo=timezone.utc),
                 source="BRAPI",
+                ingested_at=datetime(2026, 9, 10, 20, 1, tzinfo=timezone.utc),
+                open=39.0,
+                high=41.0,
+                low=38.0,
+                close=40.0,
+                volume=1_000_000.0,
             ),
         ),
         valuation=ValuationRange(
@@ -33,6 +40,18 @@ def test_v31_opportunity_producer_converges_stock_and_option_candidates() -> Non
         ),
         source_refs=("BRAPI",),
     )
+    stock_result = OpportunityPipeline().build_from_inputs(
+        as_of=as_of,
+        stock_inputs=(stock,),
+    )
+
+    assert stock_result.quality_status == "VALIDATED"
+    assert stock_result.source_refs == ("BRAPI", "valuation:test")
+    assert len(stock_result.ranked_opportunities) == 1
+    assert stock_result.ranked_opportunities[0].action == "ACCUMULATE"
+    assert len(stock_result.action_candidates) == 1
+    assert stock_result.action_candidates[0].action_type == "ACCUMULATE"
+
     option = Opportunity(
         opportunity_id="SELL_CALL:PETR4-TEST",
         ticker="PETR4",
@@ -46,46 +65,23 @@ def test_v31_opportunity_producer_converges_stock_and_option_candidates() -> Non
         quality_status="VALIDATED",
         rationale="Deterministic option test opportunity.",
     )
-
-    result = OpportunityPipeline().build(
-        ( *OpportunityPipeline().build_from_inputs(
-            as_of=as_of,
-            stock_inputs=(stock,),
-        ).ranked_opportunities[0:0], ),
-    ) if False else OpportunityPipeline().build(
-        opportunities=(
-            *OpportunityPipeline().build_from_inputs(
-                as_of=as_of,
-                stock_inputs=(stock,),
-            ).ranked_opportunities,
-        ),
+    stock_opportunity = Opportunity(
+        opportunity_id="PETR4:ACCUMULATE:TEST",
+        ticker="PETR4",
+        instrument_type="STOCK",
+        action="ACCUMULATE",
         as_of=as_of,
+        expected_return=0.25,
+        evidence_refs=("valuation:PETR4:TEST",),
+        source_refs=("BRAPI",),
+        quality_status="VALIDATED",
     )
-
-    # The convergence layer consumes canonical Opportunity objects; verify the
-    # provider-specific source identities survive the convergence boundary.
-    assert result.quality_status == "VALIDATED"
-    assert result.source_refs == ("BRAPI",)
-    assert len(result.action_candidates) == 1
-    assert result.action_candidates[0].action_type == "ACCUMULATE"
 
     combined = OpportunityPipeline().build(
-        opportunities=(
-            Opportunity(
-                opportunity_id="PETR4:ACCUMULATE:TEST",
-                ticker="PETR4",
-                instrument_type="STOCK",
-                action="ACCUMULATE",
-                as_of=as_of,
-                expected_return=0.25,
-                evidence_refs=("valuation:PETR4:TEST",),
-                source_refs=("BRAPI",),
-                quality_status="VALIDATED",
-            ),
-            option,
-        ),
+        opportunities=(stock_opportunity, option),
         as_of=as_of,
     )
+
     assert {item.instrument_type for item in combined.ranked_opportunities} == {"STOCK", "OPTION"}
     assert combined.source_refs == ("BRAPI", "OPLAB")
     assert {item.action_type for item in combined.action_candidates} == {"ACCUMULATE", "SELL_CALL"}
