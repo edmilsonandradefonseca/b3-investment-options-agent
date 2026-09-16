@@ -42,11 +42,10 @@ class B3State(TypedDict, total=False):
 
     user_question: str
     ticker: str | None
-    # Legacy workflow aliases remain accepted at the graph boundary so existing
-    # deterministic tests and callers can migrate without changing semantics.
     request: str
     deterministic_context: dict[str, Any]
     portfolio_context: Any
+    opportunity_set: Any
     memory_context: list[dict[str, Any]]
     rag_context: list[dict[str, Any]]
     graph_context: list[dict[str, Any]]
@@ -61,7 +60,6 @@ class B3State(TypedDict, total=False):
     risk_analysis: Any
     insights: list[dict[str, Any]]
     decision_proposal: dict[str, Any] | None
-    # Compatibility output alias for pre-V3.1 graph consumers.
     proposal: dict[str, Any]
     risk_validation: dict[str, Any] | None
     status: str
