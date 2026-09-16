@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from b3_agent.config import settings
@@ -30,12 +31,19 @@ def test_default_runtime_composes_orchestrator_with_langgraph(monkeypatch, tmp_p
                 "invalidation_conditions": [],
             }
 
-    monkeypatch.setattr(settings, "obsidian_vault", vault)
-    monkeypatch.setattr(settings, "llm_enabled", True)
-    monkeypatch.setattr(settings, "llm_model", "test-model")
+    monkeypatch.setattr(
+        "b3_agent.config.settings",
+        replace(
+            settings,
+            obsidian_vault=vault,
+            llm_enabled=True,
+            llm_model="test-model",
+        ),
+    )
 
     import b3_agent.orchestration.runtime as runtime
 
+    monkeypatch.setattr(runtime, "settings", __import__("b3_agent.config", fromlist=["settings"]).settings)
     monkeypatch.setattr(runtime, "OpenAIResponsesClient", lambda model: FakeLLM())
     configure_default_workflow(vault_path=vault)
 
