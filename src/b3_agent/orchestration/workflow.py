@@ -60,7 +60,8 @@ def build_workflow(
         keys = (
             "portfolio_context", "signals", "threats", "opportunities",
             "action_candidates", "fundamental_analysis", "market_analysis",
-            "options_analysis", "risk_analysis",
+            "options_analysis", "risk_analysis", "market_agent_analysis",
+            "portfolio_agent_analysis", "options_agent_analysis",
         )
         facts = {key: state[key] for key in keys if key in state}
         legacy = state.get("deterministic_context")
@@ -75,17 +76,17 @@ def build_workflow(
     def market_analysis(state: B3State) -> dict[str, Any]:
         if market_agent is None:
             return {}
-        return {"market_analysis": market_agent.analyze(_agent_context(state)).to_dict()}
+        return {"market_agent_analysis": market_agent.analyze(_agent_context(state)).to_dict()}
 
     def portfolio_analysis(state: B3State) -> dict[str, Any]:
         if portfolio_agent is None:
             return {}
-        return {"portfolio_analysis": portfolio_agent.analyze(_agent_context(state)).to_dict()}
+        return {"portfolio_agent_analysis": portfolio_agent.analyze(_agent_context(state)).to_dict()}
 
     def options_analysis(state: B3State) -> dict[str, Any]:
         if options_agent is None:
             return {}
-        return {"options_analysis": options_agent.analyze(_agent_context(state)).to_dict()}
+        return {"options_agent_analysis": options_agent.analyze(_agent_context(state)).to_dict()}
 
     def reason(state: B3State) -> dict[str, Any]:
         proposal = reasoning_agent.decide(_agent_context(state))
