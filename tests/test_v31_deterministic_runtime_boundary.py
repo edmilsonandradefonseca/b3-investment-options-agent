@@ -1,9 +1,9 @@
 from datetime import date
 
-from b3_agent.orchestration.orchestrator import b3_orchestrator, configure_workflow
-from b3_agent.orchestration.workflow import build_workflow
 from b3_agent.opportunity_pipeline import OpportunityPipeline
 from b3_agent.orchestration.deterministic import opportunity_set_state
+from b3_agent.orchestration.orchestrator import b3_orchestrator, configure_workflow
+from b3_agent.orchestration.workflow import build_workflow
 from b3_agent.schemas.opportunity import Opportunity
 
 
@@ -87,4 +87,4 @@ def test_orchestrator_passes_deterministic_portfolio_and_opportunity_context_to_
     assert response.status == "PASS"
     assert reasoning.context.deterministic_context["portfolio_context"] == portfolio_context
     assert reasoning.context.deterministic_context["opportunity_set"]["ranked_opportunities"][0]["opportunity_id"] == "OPP:PETR4:1"
-    assert reasoning.context.deterministic_context["action_candidates"][0]["opportunity_id"] == "OPP:PETR4:1"
+    assert reasoning.context.deterministic_context["action_candidates"][0]["opportunity_refs"] == ["OPP:PETR4:1"]
