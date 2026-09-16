@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, TypedDict
+from typing import Any
 
 from langgraph.graph import END, START, StateGraph
 
@@ -9,14 +9,7 @@ from b3_agent.agents.reasoning import InvestmentReasoningAgent
 from b3_agent.agents.risk_validator import RiskValidator
 from b3_agent.knowledge.retrieval import ObsidianRetriever
 
-
-class WorkflowState(TypedDict, total=False):
-    request: str
-    deterministic_context: dict[str, Any]
-    evidence: list[dict[str, Any]]
-    proposal: dict[str, Any]
-    risk_validation: dict[str, Any]
-    status: str
+from .contracts import B3State
 
 
 def build_workflow(
@@ -25,31 +18,43 @@ def build_workflow(
     reasoning_agent: InvestmentReasoningAgent,
     risk_validator: RiskValidator,
 ):
-    """Build the MVP LangGraph orchestration without duplicating domain logic."""
+    """Build the LangGraph workflow behind the V3.1 orchestrator contract."""
 
-    def retrieve(state: WorkflowState) -> dict[str, Any]:
-        records = retriever.retrieve(state["request"], top_k=5)
-        return {
-            "evidence": [
-                {
-                    "source_ref": item.source_ref,
-                    "relative_path": item.relative_path,
-                    "snippet": item.snippet,
-                    "score": item.score,
-                }
-                for item in records
-            ]
-        }
+    def retrieve(state: B3State) -> dict[str, Any]:
+        records = retriever.retrieve(state["user_question"], top_k=5)
+        evidence = [
+            {
+                "source_ref": item.source_ref,
+                "relative_path": item.relative_path,
+                "snippet": item.snippet,
+                "score": item.score,
+            }
+            for item in records
+        ]
+        return {"evidence": evidence}
 
-    def reason(state: WorkflowState) -> dict[str, Any]:
+    def reason(state: B3State) -> dict[str, Any]:
+        deterministic_keys = (
+            "portfolio_context",
+            "signals",
+            "threats",
+            "opportunities",
+            "action_candidates",
+            "fundamental_analysis",
+            "market_analysis",
+            "options_analysis",
+            "risk_analysis",
+        )
         context = AgentContext(
-            request=state["request"],
-            deterministic_context=state.get("deterministic_context", {}),
+            request=state["user_question"],
+            deterministic_context={
+                key: state[key] for key in deterministic_keys if key in state
+            },
             retrieved_evidence=tuple(state.get("evidence", [])),
         )
         proposal = reasoning_agent.decide(context)
         return {
-            "proposal": {
+            "decision_proposal": {
                 "action": proposal.action,
                 "subject_id": proposal.subject_id,
                 "thesis": proposal.thesis,
@@ -64,8 +69,8 @@ def build_workflow(
             }
         }
 
-    def validate(state: WorkflowState) -> dict[str, Any]:
-        proposal = state["proposal"]
+    def validate(state: B3State) -> dict[str, Any]:
+        proposal = state["decision_proposal"]
         from b3_agent.schemas.decision import DecisionProposal
 
         decision = DecisionProposal(
@@ -89,7 +94,7 @@ def build_workflow(
             "status": result.status,
         }
 
-    graph = StateGraph(WorkflowState)
+    graph = StateGraph(B3State)
     graph.add_node("retrieve", retrieve)
     graph.add_node("reason", reason)
     graph.add_node("validate", validate)
