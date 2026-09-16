@@ -16,11 +16,13 @@ Agent V0.1 adds three specialist reasoning agents without moving deterministic b
 
 Provider adapters, analytical engines and opportunity ranking remain upstream. Specialist agents may interpret supplied facts but must not fetch data, recalculate metrics, rerank opportunities, mutate state, or execute orders.
 
+Deterministic analyses and specialist outputs have separate state keys. In particular, `market_analysis` and `options_analysis` remain upstream-owned deterministic inputs; LLM outputs are stored as `market_agent_analysis`, `portfolio_agent_analysis` and `options_agent_analysis`. This prevents an agent interpretation from replacing the facts it was asked to interpret.
+
 ## LangGraph
 
-`retrieve -> deterministic_context -> market_analysis -> portfolio_analysis -> options_analysis -> reason -> validate`.
+`retrieve -> deterministic_context -> {market_analysis, portfolio_analysis, options_analysis} -> reason -> validate`.
 
-The current implementation is intentionally sequential. Parallel specialist execution can be introduced later without changing the specialist contracts.
+The three specialist nodes form an independent fan-out from the deterministic context and join at `reason`. This allows parallel execution while keeping synthesis downstream of all specialist results.
 
 ## RAG
 
