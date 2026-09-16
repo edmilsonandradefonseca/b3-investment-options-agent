@@ -12,10 +12,18 @@ from b3_agent.agents.specialist import (
     OptionsAnalysisAgent,
     PortfolioAnalysisAgent,
 )
+from b3_agent.agents.synthesis import SynthesisAgent
 from b3_agent.knowledge.retrieval import ObsidianRetriever
 
 from .contracts import B3State
 from .opportunity_context import opportunity_set_to_context
+
+
+_SPECIALIST_KEYS = (
+    "market_agent_analysis",
+    "portfolio_agent_analysis",
+    "options_agent_analysis",
+)
 
 
 def build_workflow(
@@ -26,6 +34,7 @@ def build_workflow(
     market_agent: MarketAnalysisAgent | None = None,
     portfolio_agent: PortfolioAnalysisAgent | None = None,
     options_agent: OptionsAnalysisAgent | None = None,
+    synthesis_agent: SynthesisAgent | None = None,
 ):
     """Build the LangGraph workflow behind the V3.1 orchestrator contract."""
 
@@ -61,7 +70,7 @@ def build_workflow(
             "portfolio_context", "signals", "threats", "opportunities",
             "action_candidates", "fundamental_analysis", "market_analysis",
             "options_analysis", "risk_analysis", "market_agent_analysis",
-            "portfolio_agent_analysis", "options_agent_analysis",
+            "portfolio_agent_analysis", "options_agent_analysis", "synthesis",
         )
         facts = {key: state[key] for key in keys if key in state}
         legacy = state.get("deterministic_context")
@@ -87,6 +96,11 @@ def build_workflow(
         if options_agent is None:
             return {}
         return {"options_agent_analysis": options_agent.analyze(_agent_context(state)).to_dict()}
+
+    def synthesis(state: B3State) -> dict[str, Any]:
+        if synthesis_agent is None:
+            return {}
+        return {"synthesis": synthesis_agent.synthesize(_agent_context(state))}
 
     def reason(state: B3State) -> dict[str, Any]:
         proposal = reasoning_agent.decide(_agent_context(state))
@@ -127,17 +141,28 @@ def build_workflow(
     graph.add_node("options_analysis", options_analysis)
     graph.add_node("reason", reason)
     graph.add_node("validate", validate)
+    if synthesis_agent is not None:
+        graph.add_node("synthesis", synthesis)
+
     graph.add_edge(START, "retrieve")
     graph.add_edge("retrieve", "deterministic_context")
-    # The three specialists consume the same immutable upstream context and are
-    # independent of one another. LangGraph therefore executes them as a fan-out
-    # and joins all three before synthesis.
+    # Independent specialists consume the same immutable upstream context.
     graph.add_edge("deterministic_context", "market_analysis")
     graph.add_edge("deterministic_context", "portfolio_analysis")
     graph.add_edge("deterministic_context", "options_analysis")
-    graph.add_edge("market_analysis", "reason")
-    graph.add_edge("portfolio_analysis", "reason")
-    graph.add_edge("options_analysis", "reason")
+
+    if synthesis_agent is not None:
+        # LangGraph joins all three specialist branches before synthesis.
+        graph.add_edge("market_analysis", "synthesis")
+        graph.add_edge("portfolio_analysis", "synthesis")
+        graph.add_edge("options_analysis", "synthesis")
+        graph.add_edge("synthesis", "reason")
+    else:
+        # Backward-compatible path for tests/callers that do not inject synthesis.
+        graph.add_edge("market_analysis", "reason")
+        graph.add_edge("portfolio_analysis", "reason")
+        graph.add_edge("options_analysis", "reason")
+
     graph.add_edge("reason", "validate")
     graph.add_edge("validate", END)
     return graph.compile()
