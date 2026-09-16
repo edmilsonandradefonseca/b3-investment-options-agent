@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .schemas.opportunity import Opportunity, OpportunityAssessment, OpportunitySet
+from .schemas.opportunity import (
+    ActionCandidate,
+    Opportunity,
+    OpportunityAssessment,
+    OpportunitySet,
+)
 
 
 @dataclass(frozen=True)
@@ -31,6 +36,20 @@ class OpportunityIntelligenceEngine:
         except ValueError:
             return len(mapping)
 
+    @staticmethod
+    def _action_candidate(opportunity: Opportunity) -> ActionCandidate:
+        return ActionCandidate(
+            action_candidate_id=f"ACTION:{opportunity.opportunity_id}",
+            action_type=opportunity.action,
+            subject_id=opportunity.opportunity_id,
+            as_of=opportunity.as_of,
+            priority="NORMAL",
+            opportunity_refs=(opportunity.opportunity_id,),
+            evidence_refs=opportunity.evidence_refs,
+            rationale=opportunity.rationale,
+            quality_status=opportunity.quality_status,
+        )
+
     def assess(
         self,
         opportunities: tuple[Opportunity, ...],
@@ -50,6 +69,7 @@ class OpportunityIntelligenceEngine:
         relative_assessment = relative_assessment or {}
 
         assessments: list[OpportunityAssessment] = []
+        action_candidates: list[ActionCandidate] = []
         for opportunity in opportunities:
             reasons: list[str] = []
             if opportunity.quality_status == "REJECTED":
@@ -83,6 +103,7 @@ class OpportunityIntelligenceEngine:
                 self._rank(self.policy.relative_order, relative_value),
                 opportunity.opportunity_id,
             )
+            candidate_ref = f"ACTION:{opportunity.opportunity_id}"
             assessments.append(
                 OpportunityAssessment(
                     opportunity_id=opportunity.opportunity_id,
@@ -90,6 +111,7 @@ class OpportunityIntelligenceEngine:
                     rejection_reasons=tuple(reasons),
                     attractiveness=valuation_value,
                     portfolio_fit=fit,
+                    action_candidate_refs=(candidate_ref,) if eligible else (),
                     ranking_evidence_refs=opportunity.evidence_refs,
                     evidence_refs=opportunity.evidence_refs,
                     ranking_key=ranking_key,
@@ -107,6 +129,8 @@ class OpportunityIntelligenceEngine:
                     source_refs=opportunity.source_refs,
                 )
             )
+            if eligible:
+                action_candidates.append(self._action_candidate(opportunity))
 
         ranked = sorted((a for a in assessments if a.eligible), key=lambda a: a.ranking_key)
         rejected = tuple(a for a in assessments if not a.eligible)
@@ -119,6 +143,7 @@ class OpportunityIntelligenceEngine:
             as_of=as_of,
             ranked_opportunities=tuple(ranked),
             rejected_opportunities=rejected,
+            action_candidates=tuple(action_candidates),
             ranking_policy_version=self.policy.version,
             source_refs=tuple(sorted({ref for o in opportunities for ref in o.source_refs})),
             quality_status=quality,
