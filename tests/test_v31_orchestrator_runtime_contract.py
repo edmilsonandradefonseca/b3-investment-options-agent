@@ -14,6 +14,15 @@ from b3_agent.schemas.opportunity import Opportunity
 def _fake_llm():
     class FakeLLM:
         def complete_json(self, *, instructions, input_text, schema_name, schema):
+            if schema_name == "investment_synthesis":
+                return {
+                    "summary": "Specialists reconciled for runtime test.",
+                    "agreements": ["Facts supplied upstream."],
+                    "conflicts": [],
+                    "uncertainties": ["Conditions may change."],
+                    "evidence_gaps": [],
+                    "evidence_refs": ["obsidian:PETR4.md"],
+                }
             if schema_name.endswith("_analysis"):
                 return {
                     "summary": "Specialist test analysis.",
@@ -63,6 +72,7 @@ def test_default_runtime_composes_orchestrator_with_langgraph(monkeypatch, tmp_p
     assert response.result["market_agent_analysis"]["agent"] == "market_analysis"
     assert response.result["portfolio_agent_analysis"]["agent"] == "portfolio_analysis"
     assert response.result["options_agent_analysis"]["agent"] == "options_analysis"
+    assert response.result["synthesis"]["summary"] == "Specialists reconciled for runtime test."
 
 
 def test_default_runtime_injects_deterministic_context(monkeypatch, tmp_path: Path):
@@ -88,3 +98,4 @@ def test_default_runtime_injects_deterministic_context(monkeypatch, tmp_path: Pa
     assert response.result["portfolio_context"] == portfolio_context
     assert response.result["opportunities"][0]["opportunity_id"] == "OPP:PETR4:1"
     assert response.result["market_agent_analysis"]["agent"] == "market_analysis"
+    assert response.result["synthesis"]["summary"] == "Specialists reconciled for runtime test."
