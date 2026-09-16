@@ -139,12 +139,17 @@ class OpportunityIntelligenceEngine:
             from datetime import date
             as_of = date.today()
         quality = "WARNING" if rejected else "VALIDATED"
+        source_refs: list[str] = []
+        for opportunity in opportunities:
+            for source_ref in opportunity.source_refs:
+                if source_ref not in source_refs:
+                    source_refs.append(source_ref)
         return OpportunitySet(
             as_of=as_of,
             ranked_opportunities=tuple(ranked),
             rejected_opportunities=rejected,
             action_candidates=tuple(action_candidates),
             ranking_policy_version=self.policy.version,
-            source_refs=tuple(sorted({ref for o in opportunities for ref in o.source_refs})),
+            source_refs=tuple(source_refs),
             quality_status=quality,
         )
