@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, datetime
 
 from b3_agent.providers.brapi.adapter import BrapiAdapter
@@ -26,9 +27,15 @@ def load_brapi_stock_input(
     Acquisition stays behind the BRAPI adapter. This function does not rank,
     reason, call an LLM, or make a portfolio decision.
     """
-    records = (adapter or BrapiAdapter()).get_market_data(ticker, start, end)
+    normalized_ticker = ticker.upper().strip()
+    if not normalized_ticker:
+        raise ValueError("ticker must not be empty")
+
+    records = (adapter or BrapiAdapter()).get_market_data(
+        normalized_ticker, start, end
+    )
     if not records:
-        raise ValueError(f"no BRAPI observations returned for {ticker.upper()}")
+        raise ValueError(f"no BRAPI observations returned for {normalized_ticker}")
 
     service = StockOpportunityService()
     effective_records = [
@@ -39,12 +46,15 @@ def load_brapi_stock_input(
     ]
     if not effective_records:
         raise ValueError(
-            f"no BRAPI observations for {ticker.upper()} are valid at decision timestamp"
+            f"no BRAPI observations for {normalized_ticker} are valid at decision timestamp"
         )
 
+    normalized_records = tuple(
+        replace(record, ticker=normalized_ticker) for record in effective_records
+    )
     refs = tuple(dict.fromkeys(("brapi", *source_refs)))
     return StockOpportunityInput(
-        records=tuple(effective_records),
+        records=normalized_records,
         valuation=valuation,
         benchmark_records=tuple(benchmark_records),
         source_refs=refs,
