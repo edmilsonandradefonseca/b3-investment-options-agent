@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import date
 from pathlib import Path
 
 from b3_agent.config import settings
@@ -8,7 +9,6 @@ from b3_agent.opportunity_pipeline import OpportunityPipeline
 from b3_agent.orchestration.orchestrator import b3_orchestrator
 from b3_agent.orchestration.runtime import configure_default_workflow
 from b3_agent.schemas.opportunity import Opportunity
-from datetime import date
 
 
 def test_default_runtime_composes_orchestrator_with_langgraph(monkeypatch, tmp_path: Path):
@@ -65,6 +65,10 @@ def test_default_runtime_composes_orchestrator_with_langgraph(monkeypatch, tmp_p
 def test_default_runtime_injects_deterministic_context(monkeypatch, tmp_path: Path):
     vault = tmp_path / "vault"
     vault.mkdir()
+    (vault / "PETR4.md").write_text(
+        "# PETR4\n\nDeterministic context injection evidence.",
+        encoding="utf-8",
+    )
 
     class FakeLLM:
         def complete_json(self, *, instructions, input_text, schema_name, schema):
@@ -73,7 +77,7 @@ def test_default_runtime_injects_deterministic_context(monkeypatch, tmp_path: Pa
                 "subject_id": "PETR4",
                 "thesis": "Context injection contract.",
                 "rationale": "Deterministic context reached reasoning.",
-                "evidence_refs": [],
+                "evidence_refs": ["obsidian:PETR4.md"],
                 "risks": [],
                 "opportunity_cost": "None.",
                 "capital_impact": "None.",
