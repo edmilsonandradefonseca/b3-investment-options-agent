@@ -42,13 +42,13 @@ def test_mvp_workflow_retrieves_obsidian_and_validates(tmp_path: Path):
 
     result = workflow.invoke(
         {
-            "request": "PETR4 investment thesis valuation",
-            "deterministic_context": {"quality_status": "VALIDATED"},
+            "user_question": "PETR4 investment thesis valuation",
+            "portfolio_context": {"quality_status": "VALIDATED"},
         }
     )
 
     assert result["evidence"]
     assert result["evidence"][0]["source_ref"] == "obsidian:04_Stocks/PETR4.md"
-    assert result["proposal"]["action"] == "NO_CHANGE"
+    assert result["decision_proposal"]["action"] == "NO_CHANGE"
     assert result["risk_validation"]["status"] == "PASS"
     assert result["status"] == "PASS"
