@@ -58,6 +58,10 @@ class B3State(TypedDict, total=False):
     market_analysis: Any
     options_analysis: Any
     risk_analysis: Any
+    # LLM specialist outputs are deliberately separate from deterministic analyses.
+    market_agent_analysis: dict[str, Any]
+    portfolio_agent_analysis: dict[str, Any]
+    options_agent_analysis: dict[str, Any]
     insights: list[dict[str, Any]]
     decision_proposal: dict[str, Any] | None
     proposal: dict[str, Any]
