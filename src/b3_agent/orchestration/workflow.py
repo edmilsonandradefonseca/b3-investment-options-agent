@@ -10,6 +10,7 @@ from b3_agent.agents.risk_validator import RiskValidator
 from b3_agent.knowledge.retrieval import ObsidianRetriever
 
 from .contracts import B3State
+from .opportunity_context import opportunity_set_to_context
 
 
 def build_workflow(
@@ -51,6 +52,11 @@ def build_workflow(
         deterministic_context = {
             key: state[key] for key in deterministic_keys if key in state
         }
+        opportunity_set = state.get("opportunity_set")
+        if opportunity_set is not None:
+            deterministic_context["opportunity_set"] = opportunity_set_to_context(
+                opportunity_set
+            )
         legacy_context = state.get("deterministic_context")
         if isinstance(legacy_context, dict):
             deterministic_context = {**legacy_context, **deterministic_context}
