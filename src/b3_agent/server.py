@@ -4,6 +4,7 @@ from functools import lru_cache
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
 
 from b3_agent.config import settings
@@ -34,6 +35,21 @@ app = FastAPI(
     title="B3 Orchestrator Server",
     version="0.1.0",
     description="API gateway/runtime boundary for the B3 Investment Intelligence workflow.",
+)
+
+# The desktop shell is a local Tauri webview. Keep CORS narrowly scoped to
+# local development and the Tauri production origins; investment logic stays
+# entirely behind the orchestrator.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://tauri.localhost",
+        "tauri://localhost",
+    ],
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
 
 
