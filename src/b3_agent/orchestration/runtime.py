@@ -40,10 +40,11 @@ def configure_default_workflow(*, vault_path: Path | None = None,
     graph = InMemoryKnowledgeGraphStore()
     KnowledgeIndexer(store, graph).index_all()
     knowledge_context_builder = KnowledgeContextBuilder(retriever, graph)
+    memory_manager = ObsidianMemoryManager(store, retriever, graph)
     workflow = build_workflow(
         retriever=retriever,
         knowledge_context_builder=knowledge_context_builder,
-        memory_manager=ObsidianMemoryManager(store, retriever),
+        memory_manager=memory_manager,
         market_agent=MarketAnalysisAgent(llm),
         portfolio_agent=PortfolioAnalysisAgent(llm),
         options_agent=OptionsAnalysisAgent(llm),
