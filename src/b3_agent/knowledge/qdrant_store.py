@@ -16,13 +16,7 @@ _NAMESPACE = UUID("4f9f0d3c-3e31-4d9f-a3d8-4f8f2a8b7e11")
 class QdrantVectorStore:
     """Small Qdrant adapter implementing the provider-neutral VectorStore contract."""
 
-    def __init__(
-        self,
-        *,
-        client: QdrantClient,
-        collection_name: str = "b3_evidence",
-        vector_size: int = 8,
-    ) -> None:
+    def __init__(self, *, client: QdrantClient, collection_name: str = "b3_evidence", vector_size: int = 8) -> None:
         if not collection_name.strip():
             raise ValueError("collection_name must not be empty")
         if vector_size < 1:
@@ -36,17 +30,10 @@ class QdrantVectorStore:
         if not self.client.collection_exists(self.collection_name):
             self.client.create_collection(
                 collection_name=self.collection_name,
-                vectors_config=models.VectorParams(
-                    size=self.vector_size,
-                    distance=models.Distance.COSINE,
-                ),
+                vectors_config=models.VectorParams(size=self.vector_size, distance=models.Distance.COSINE),
             )
 
-    def upsert(
-        self,
-        chunks: Sequence[EvidenceChunk],
-        embeddings: Sequence[Embedding],
-    ) -> None:
+    def upsert(self, chunks: Sequence[EvidenceChunk], embeddings: Sequence[Embedding]) -> None:
         if len(chunks) != len(embeddings):
             raise ValueError("chunks and embeddings must have the same length")
         if not chunks:
@@ -55,57 +42,37 @@ class QdrantVectorStore:
         for chunk, embedding in zip(chunks, embeddings, strict=True):
             if len(embedding.values) != self.vector_size:
                 raise ValueError("embedding dimension does not match collection")
-            points.append(
-                models.PointStruct(
-                    id=_point_id(chunk.chunk_id),
-                    vector=list(embedding.values),
-                    payload=_payload(chunk),
-                )
-            )
+            points.append(models.PointStruct(id=_point_id(chunk.chunk_id), vector=list(embedding.values), payload=_payload(chunk)))
         self.client.upsert(collection_name=self.collection_name, points=points)
 
-    def search(
-        self,
-        embedding: Embedding,
-        *,
-        top_k: int = 5,
-        metadata_filter: MetadataFilter | None = None,
-    ) -> tuple[VectorSearchResult, ...]:
+    def search(self, embedding: Embedding, *, top_k: int = 5, metadata_filter: MetadataFilter | None = None) -> tuple[VectorSearchResult, ...]:
         if top_k < 1:
             raise ValueError("top_k must be positive")
         if len(embedding.values) != self.vector_size:
             raise ValueError("embedding dimension does not match collection")
-        query_filter = _build_filter(metadata_filter)
         response = self.client.query_points(
             collection_name=self.collection_name,
             query=list(embedding.values),
-            query_filter=query_filter,
+            query_filter=_build_filter(metadata_filter),
             limit=top_k,
             with_payload=True,
         )
         results: list[VectorSearchResult] = []
         for point in response.points:
             payload = dict(point.payload or {})
-            results.append(
-                VectorSearchResult(
-                    chunk_id=str(payload["chunk_id"]),
-                    evidence_id=str(payload["evidence_id"]),
-                    score=float(point.score),
-                    content=str(payload["content"]),
-                    metadata=payload,
-                )
-            )
+            results.append(VectorSearchResult(
+                chunk_id=str(payload["chunk_id"]),
+                evidence_id=str(payload["evidence_id"]),
+                score=float(point.score),
+                content=str(payload["content"]),
+                metadata=payload,
+            ))
         return tuple(results)
 
     def delete(self, chunk_ids: Sequence[str]) -> None:
         if not chunk_ids:
             return
-        self.client.delete(
-            collection_name=self.collection_name,
-            points_selector=models.PointIdsList(
-                points=[_point_id(chunk_id) for chunk_id in chunk_ids]
-            ),
-        )
+        self.client.delete(collection_name=self.collection_name, points_selector=models.PointIdsList(points=[_point_id(chunk_id) for chunk_id in chunk_ids]))
 
     def count(self) -> int:
         return int(self.client.count(collection_name=self.collection_name, exact=True).count)
@@ -148,48 +115,21 @@ def _build_filter(metadata_filter: MetadataFilter | None) -> models.Filter | Non
         return None
     must: list[models.FieldCondition] = []
     if metadata_filter.normalized_ticker:
-        must.append(
-            models.FieldCondition(
-                key="ticker_refs",
-                match=models.MatchValue(value=metadata_filter.normalized_ticker),
-            )
-        )
+        must.append(models.FieldCondition(key="ticker_refs", match=models.MatchValue(value=metadata_filter.normalized_ticker)))
     if metadata_filter.topic:
-        must.append(
-            models.FieldCondition(
-                key="topic",
-                match=models.MatchValue(value=metadata_filter.topic),
-            )
-        )
+        must.append(models.FieldCondition(key="topic", match=models.MatchValue(value=metadata_filter.topic)))
     if metadata_filter.source:
-        must.append(
-            models.FieldCondition(
-                key="source",
-                match=models.MatchValue(value=metadata_filter.source),
-            )
-        )
+        must.append(models.FieldCondition(key="source", match=models.MatchValue(value=metadata_filter.source)))
     if metadata_filter.published_before or metadata_filter.published_after:
-        must.append(
-            models.FieldCondition(
-                key="published_at",
-                range=models.Range(
-                    lte=_timestamp(metadata_filter.published_before),
-                    gte=_timestamp(metadata_filter.published_after),
-                ),
-            )
-        )
+        must.append(models.FieldCondition(
+            key="published_at",
+            range=models.Range(lte=_timestamp(metadata_filter.published_before), gte=_timestamp(metadata_filter.published_after)),
+        ))
     if metadata_filter.valid_at:
         timestamp = _timestamp(metadata_filter.valid_at)
-        must.extend(
-            [
-                models.FieldCondition(
-                    key="valid_from",
-                    range=models.Range(lte=timestamp),
-                ),
-                models.FieldCondition(
-                    key="valid_to",
-                    range=models.Range(gte=timestamp),
-                ),
-            ]
-        )
+        # Open-ended validity is represented by valid_to=None. Do not add a
+        # Qdrant range condition for it; the temporal facade handles the
+        # open-ended interval after retrieval. This keeps the storage filter
+        # compatible with nullable validity fields.
+        must.append(models.FieldCondition(key="valid_from", range=models.Range(lte=timestamp)))
     return models.Filter(must=must) if must else None
