@@ -18,6 +18,8 @@ function App() {
   const [answer, setAnswer] = useState("");
   const [serverOnline, setServerOnline] = useState(false);
   const [asking, setAsking] = useState(false);
+  const [showTransaction, setShowTransaction] = useState(false);
+  const [transactionStatus, setTransactionStatus] = useState("");
 
   useEffect(() => {
     fetch(`${API_BASE}/health`)
@@ -46,6 +48,34 @@ function App() {
     }
   }
 
+
+  async function addTransaction(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setTransactionStatus("");
+    try {
+      const response = await fetch(`${API_BASE}/transactions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: form.get("action"),
+          instrument_type: form.get("instrument_type"),
+          ticker: String(form.get("ticker") ?? "").toUpperCase(),
+          quantity: Number(form.get("quantity")),
+          price: Number(form.get("price")),
+          executed_at: new Date(String(form.get("executed_at"))).toISOString(),
+          broker: form.get("broker"),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail ?? "Falha ao registrar operação");
+      setTransactionStatus(`✓ ${data.action} ${data.quantity} ${data.ticker} registrada`);
+      event.currentTarget.reset();
+    } catch (error) {
+      setTransactionStatus(`Erro: ${error instanceof Error ? error.message : "falha desconhecida"}`);
+    }
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -68,7 +98,7 @@ function App() {
             <label>DADOS &amp; CONEXÕES</label>
             <div className="connection"><b>BTG Portfolio</b><span className="status">● Aguardando</span></div>
             <div className="connection"><b>Options Transactions</b><span className="status">● Aguardando</span></div>
-            <button className="load">↥ &nbsp; Carregar Arquivos Excel</button>
+            <button className="load" onClick={() => setShowTransaction(true)}>＋ &nbsp; Registrar operação</button><button className="load secondary">↥ &nbsp; Carregar Arquivos Excel</button>
           </section>
           <section className="knowledge-status">
             <label>BASE DE CONHECIMENTO</label>
