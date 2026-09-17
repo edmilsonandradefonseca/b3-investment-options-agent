@@ -12,6 +12,7 @@ from b3_agent.agents.specialist import (
 )
 from b3_agent.agents.synthesis import SynthesisAgent
 from b3_agent.config import settings
+from b3_agent.knowledge.memory import ObsidianMemoryManager
 from b3_agent.knowledge.obsidian import ObsidianKnowledgeStore
 from b3_agent.knowledge.retrieval import ObsidianRetriever
 from b3_agent.llm.client import OpenAIResponsesClient
@@ -38,8 +39,11 @@ def configure_default_workflow(
         raise RuntimeError("B3_AGENT_LLM_ENABLED is false; cannot compose the reasoning workflow")
 
     llm = OpenAIResponsesClient(model=settings.llm_model)
+    store = ObsidianKnowledgeStore(resolved_vault)
+    retriever = ObsidianRetriever(store)
     workflow = build_workflow(
-        retriever=ObsidianRetriever(ObsidianKnowledgeStore(resolved_vault)),
+        retriever=retriever,
+        memory_manager=ObsidianMemoryManager(store, retriever),
         market_agent=MarketAnalysisAgent(llm),
         portfolio_agent=PortfolioAnalysisAgent(llm),
         options_agent=OptionsAnalysisAgent(llm),
