@@ -3,6 +3,8 @@
 from .chunking import EvidenceChunk, EvidenceChunker
 from .embeddings import DeterministicEmbeddingProvider, Embedding, EmbeddingProvider
 from .evidence import Evidence, EvidenceKind, EvidenceMetadata
+from .semantic_retrieval import FreshnessScorer, RetrievalStrategy, VectorRetriever
+from .vector_store import MetadataFilter, VectorSearchResult, VectorStore
 
 __all__ = [
     "Evidence",
@@ -13,4 +15,10 @@ __all__ = [
     "Embedding",
     "EmbeddingProvider",
     "DeterministicEmbeddingProvider",
+    "MetadataFilter",
+    "VectorSearchResult",
+    "VectorStore",
+    "RetrievalStrategy",
+    "VectorRetriever",
+    "FreshnessScorer",
 ]
