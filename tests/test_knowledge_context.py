@@ -24,6 +24,7 @@ def _graph():
         GraphRelation(company.entity_id, RelationType.TICKER, stock.entity_id, source_ref="obsidian:company.md"),
         GraphRelation(option.entity_id, RelationType.UNDERLYING, stock.entity_id, source_ref="obsidian:petri32.md"),
         GraphRelation(stock.entity_id, RelationType.BELONGS_TO, sector.entity_id, source_ref="obsidian:petr4.md"),
+        GraphRelation(event.entity_id, RelationType.IMPACTS, stock.entity_id, source_ref="news:event.md", valid_from=AS_OF),
     ]
     return [company, stock, option, sector, event, future_stock], relations
 
@@ -40,10 +41,10 @@ def test_build_merges_rag_and_graph_without_unbounded_context(tmp_path: Path):
     assert context.query == "PETR4"
     assert len(context.rag) == 1
     assert {item.entity_id for item in context.entities} == {"STK-PETR4", "COMP-PETROBRAS", "OPT-PETRI32", "SEC-OIL", "EV-OIL", "STK-FUTURE"}
-    assert len(context.relations) == 3
+    assert len(context.relations) == 4
     assert context.metadata["rag_count"] == 1
     assert context.metadata["entity_count"] == 6
-    assert context.metadata["relation_count"] == 3
+    assert context.metadata["relation_count"] == 4
     assert context.sources[0].startswith("obsidian:")
 
 
@@ -61,7 +62,7 @@ def test_context_serialization_is_agent_safe(tmp_path: Path):
     payload = context.as_dict()
     assert set(payload) == {"query", "as_of", "rag", "entities", "relations", "events", "sources", "freshness", "confidence", "deterministic_context", "metadata"}
     assert payload["as_of"] == AS_OF.isoformat()
-    assert payload["entities"][0]["entity_type"] in {"company", "stock", "option", "sector"}
+    assert payload["entities"][0]["entity_type"] in {"company", "stock", "option", "sector", "market_event"}
     assert isinstance(payload["relations"][0]["relation"], str)
     assert payload["deterministic_context"]["price_ref"].startswith("BRAPI:")
     assert [event["entity_id"] for event in payload["events"]] == ["EV-OIL"]
