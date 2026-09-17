@@ -8,7 +8,6 @@ from typing import Any
 
 class EntityType(StrEnum):
     """Canonical entity types for the B3 investment knowledge graph."""
-
     INSTRUMENT = "instrument"
     COMPANY = "company"
     STOCK = "stock"
@@ -29,7 +28,6 @@ class EntityType(StrEnum):
 
 class RelationType(StrEnum):
     """Canonical relationship types between graph entities."""
-
     TICKER = "ticker"
     ISSUED_BY = "issued_by"
     UNDERLYING = "underlying"
@@ -51,7 +49,6 @@ class RelationType(StrEnum):
 @dataclass(frozen=True)
 class GraphEntity:
     """A canonical graph node shared with Obsidian/RAG identity."""
-
     entity_id: str
     entity_type: EntityType
     name: str
@@ -75,7 +72,6 @@ class GraphEntity:
 @dataclass(frozen=True)
 class GraphRelation:
     """A directed, provenance-aware relationship between two graph nodes."""
-
     source_id: str
     relation: RelationType
     target_id: str
@@ -98,13 +94,12 @@ class GraphRelation:
 @dataclass(frozen=True)
 class KnowledgeGraph:
     """Portable schema container independent of any graph database."""
-
     entities: tuple[GraphEntity, ...] = ()
     relations: tuple[GraphRelation, ...] = ()
 
 
 ENTITY_RELATION_RULES: dict[RelationType, tuple[set[EntityType], set[EntityType]]] = {
-    RelationType.TICKER: ({EntityType.COMPANY, EntityType.STOCK}, {EntityType.INSTRUMENT}),
+    RelationType.TICKER: ({EntityType.COMPANY, EntityType.STOCK}, {EntityType.INSTRUMENT, EntityType.STOCK}),
     RelationType.ISSUED_BY: ({EntityType.STOCK, EntityType.OPTION, EntityType.ETF}, {EntityType.COMPANY}),
     RelationType.UNDERLYING: ({EntityType.OPTION}, {EntityType.STOCK, EntityType.ETF, EntityType.INDEX}),
     RelationType.BELONGS_TO: ({EntityType.STOCK, EntityType.COMPANY, EntityType.ETF}, {EntityType.SECTOR}),
