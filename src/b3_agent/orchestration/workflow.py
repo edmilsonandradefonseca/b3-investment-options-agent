@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from langgraph.graph import END, START, StateGraph
@@ -156,7 +157,8 @@ def build_workflow(
         synthesis_result = state.get("synthesis")
         if isinstance(synthesis_result, dict) and synthesis_result.get("summary"):
             entity = ticker or "PORTFOLIO"
-            insight_id = f"INS-{entity}-{state.get('decision_proposal', {}).get('as_of') or 'CURRENT'}"
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
+            insight_id = f"INS-{entity}-{timestamp}"
             path = memory_manager.persist_insight(
                 {
                     "insight_id": insight_id,
@@ -167,7 +169,6 @@ def build_workflow(
                     "evidence_refs": synthesis_result.get("evidence_refs", []),
                     "source": "Investment Synthesis Agent",
                     "confidence": state.get("decision_proposal", {}).get("confidence"),
-                    "as_of": None,
                 }
             )
             persisted.append(path.as_posix())
