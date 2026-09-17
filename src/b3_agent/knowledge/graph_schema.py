@@ -110,7 +110,7 @@ ENTITY_RELATION_RULES: dict[RelationType, tuple[set[EntityType], set[EntityType]
     RelationType.SUPPORTED_BY: ({EntityType.INSIGHT, EntityType.DECISION}, {EntityType.EVIDENCE, EntityType.INSIGHT}),
     RelationType.BASED_ON: ({EntityType.DECISION}, {EntityType.INSIGHT, EntityType.SIGNAL, EntityType.EVIDENCE}),
     RelationType.AFFECTS: ({EntityType.RISK}, {EntityType.POSITION, EntityType.INSTRUMENT, EntityType.PORTFOLIO}),
-    RelationType.IMPACTS: ({EntityType.MARKET_EVENT}, {EntityType.INSTRUMENT, EntityType.COMPANY, EntityType.SECTOR}),
+    RelationType.IMPACTS: ({EntityType.MARKET_EVENT}, {EntityType.INSTRUMENT, EntityType.STOCK, EntityType.COMPANY, EntityType.SECTOR}),
     RelationType.DERIVED_FROM: ({EntityType.INSIGHT, EntityType.SIGNAL}, {EntityType.EVIDENCE, EntityType.INSIGHT}),
     RelationType.RELATED_TO: (set(EntityType), set(EntityType)),
     RelationType.PRECEDES: ({EntityType.INSIGHT, EntityType.DECISION, EntityType.MARKET_EVENT}, {EntityType.INSIGHT, EntityType.DECISION, EntityType.MARKET_EVENT}),
