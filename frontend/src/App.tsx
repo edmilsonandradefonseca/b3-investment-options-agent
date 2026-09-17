@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useState } from "react";
 
 type Page = "Portfolio" | "Options" | "Opportunities" | "Portfolio Intelligence" | "Knowledge";
 
@@ -18,8 +18,7 @@ function App() {
   const [answer, setAnswer] = useState("");
   const [serverOnline, setServerOnline] = useState(false);
   const [asking, setAsking] = useState(false);
-  const [showTransaction, setShowTransaction] = useState(false);
-  const [transactionStatus, setTransactionStatus] = useState("");
+  const [importStatus, setImportStatus] = useState("");
 
   useEffect(() => {
     fetch(`${API_BASE}/health`)
@@ -49,30 +48,24 @@ function App() {
   }
 
 
-  async function addTransaction(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    setTransactionStatus("");
+  async function importExcel(event: ChangeEvent<HTMLInputElement>, kind: "portfolio" | "options") {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setImportStatus(`Validando e carregando ${kind === "portfolio" ? "portfolio de ações" : "transações de opções"}…`);
     try {
-      const response = await fetch(`${API_BASE}/transactions`, {
+      const form = new FormData();
+      form.append("file", file);
+      const response = await fetch(`${API_BASE}/imports/${kind}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: form.get("action"),
-          instrument_type: form.get("instrument_type"),
-          ticker: String(form.get("ticker") ?? "").toUpperCase(),
-          quantity: Number(form.get("quantity")),
-          price: Number(form.get("price")),
-          executed_at: new Date(String(form.get("executed_at"))).toISOString(),
-          broker: form.get("broker"),
-        }),
+        body: form,
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.detail ?? "Falha ao registrar operação");
-      setTransactionStatus(`✓ ${data.action} ${data.quantity} ${data.ticker} registrada`);
-      event.currentTarget.reset();
+      if (!response.ok) throw new Error(data.detail ?? "Falha ao importar Excel");
+      setImportStatus(`✓ ${data.file} carregado. O snapshot anterior foi substituído.`);
     } catch (error) {
-      setTransactionStatus(`Erro: ${error instanceof Error ? error.message : "falha desconhecida"}`);
+      setImportStatus(`Erro: ${error instanceof Error ? error.message : "falha desconhecida"}`);
     }
   }
 
@@ -96,9 +89,17 @@ function App() {
           </nav>
           <section className="connections">
             <label>DADOS &amp; CONEXÕES</label>
-            <div className="connection"><b>BTG Portfolio</b><span className="status">● Aguardando</span></div>
-            <div className="connection"><b>Options Transactions</b><span className="status">● Aguardando</span></div>
-            <button className="load" onClick={() => setShowTransaction(true)}>＋ &nbsp; Registrar operação</button><button className="load secondary">↥ &nbsp; Carregar Arquivos Excel</button>
+            <div className="connection"><b>Portfolio de Ações</b><span className="status">● Snapshot</span></div>
+            <label className="load">
+              ↥ &nbsp; Carregar Excel de Ações
+              <input type="file" accept=".xlsx,.xlsm" hidden onChange={(event) => importExcel(event, "portfolio")} />
+            </label>
+            <div className="connection"><b>Opções</b><span className="status">● Snapshot</span></div>
+            <label className="load secondary">
+              ↥ &nbsp; Carregar Excel de Opções
+              <input type="file" accept=".xlsx,.xlsm" hidden onChange={(event) => importExcel(event, "options")} />
+            </label>
+            {importStatus && <small className="import-status">{importStatus}</small>}
           </section>
           <section className="knowledge-status">
             <label>BASE DE CONHECIMENTO</label>
@@ -144,52 +145,6 @@ function App() {
           <form onSubmit={ask} className="chat-form"><select defaultValue="general"><option value="general">Investment Copilot (Geral)</option><option value="options">Options Agent</option><option value="market">Market Agent</option><option value="risk">Risk Agent</option></select><textarea value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Digite sua pergunta aqui..." rows={4} /><button disabled={asking}>{asking ? "Enviando..." : "➤"}</button></form>
           <small className="disclaimer">Sem execução de ordens. O orquestrador permanece responsável pela inteligência.</small>
         </aside>
-      </div>
-      {showTransaction && (
-        <TransactionModal
-          status={transactionStatus}
-          onClose={() => setShowTransaction(false)}
-          onSubmit={addTransaction}
-        />
-      )}
-    </div>
-  );
-}
-
-function TransactionModal({
-  status,
-  onClose,
-  onSubmit,
-}: {
-  status: string;
-  onClose: () => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-}) {
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="transaction-modal" onClick={(event) => event.stopPropagation()}>
-        <div className="panel-title">
-          <h2>Registrar operação</h2>
-          <button type="button" onClick={onClose}>×</button>
-        </div>
-        <p>Registro permanente no ledger local. O Excel BTG continua sendo usado para reconciliação.</p>
-        <form onSubmit={onSubmit} className="transaction-form">
-          <select name="action" defaultValue="BUY">
-            <option value="BUY">Compra</option>
-            <option value="SELL">Venda</option>
-          </select>
-          <select name="instrument_type" defaultValue="STOCK">
-            <option value="STOCK">Ação</option>
-            <option value="OPTION">Opção</option>
-          </select>
-          <input name="ticker" placeholder="Ticker (ex. PETR4)" required />
-          <input name="quantity" type="number" min="0.0001" step="any" placeholder="Quantidade" required />
-          <input name="price" type="number" min="0" step="0.0001" placeholder="Preço" required />
-          <input name="executed_at" type="datetime-local" defaultValue={new Date().toISOString().slice(0, 16)} required />
-          <input name="broker" placeholder="Corretora (opcional)" />
-          <button type="submit">Registrar operação</button>
-          {status && <small>{status}</small>}
-        </form>
       </div>
     </div>
   );
