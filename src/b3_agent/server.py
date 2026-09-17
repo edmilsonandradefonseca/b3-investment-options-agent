@@ -2,14 +2,18 @@ from __future__ import annotations
 
 from functools import lru_cache
 from datetime import datetime, timezone
+from pathlib import Path
+from tempfile import NamedTemporaryFile
 from uuid import uuid4
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
 
 from b3_agent.config import settings
+from b3_agent.options.transactions import OptionsTransactionLoader
+from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
 from b3_agent.repositories.transaction import TransactionRepository
 from b3_agent.schemas.transaction import Transaction
 from b3_agent.storage.sqlite import SQLiteStore
@@ -134,6 +138,66 @@ def list_transactions(limit: int = 100) -> list[TransactionResponse]:
     if not 1 <= limit <= 500:
         raise HTTPException(status_code=400, detail="limit must be between 1 and 500")
     return [_transaction_response(item) for item in _transaction_repository().list(limit)]
+
+
+
+def _import_dir() -> Path:
+    path = settings.data_dir / "imports"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _replace_validated_upload(upload: UploadFile, filename: str, validator) -> dict[str, Any]:
+    """Validate a workbook completely, then atomically replace the active snapshot."""
+    if not upload.filename or not upload.filename.lower().endswith((".xlsx", ".xlsm")):
+        raise HTTPException(status_code=400, detail="arquivo deve ser Excel (.xlsx ou .xlsm)")
+
+    target = _import_dir() / filename
+    temp_path: Path | None = None
+    try:
+        with NamedTemporaryFile(prefix=f".{filename}.", suffix=".tmp", dir=_import_dir(), delete=False) as handle:
+            temp_path = Path(handle.name)
+            while True:
+                chunk = upload.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                handle.write(chunk)
+
+        validator(temp_path)
+        temp_path.replace(target)
+        return {
+            "status": "replaced",
+            "file": upload.filename,
+            "active_file": str(target),
+            "message": "snapshot anterior substituído; dados não são acumulativos",
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Excel inválido: {exc}") from exc
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink(missing_ok=True)
+    
+
+@app.post("/imports/portfolio")
+def import_portfolio(file: UploadFile = File(...)) -> dict[str, Any]:
+    """Replace the authoritative BTG portfolio snapshot after validation."""
+    return _replace_validated_upload(
+        file,
+        "portfolio.xlsx",
+        lambda path: BtgRendaVariavelLoader().load(path),
+    )
+
+
+@app.post("/imports/options")
+def import_options(file: UploadFile = File(...)) -> dict[str, Any]:
+    """Replace the options transactions snapshot after validation."""
+    return _replace_validated_upload(
+        file,
+        "options_transactions.xlsx",
+        lambda path: OptionsTransactionLoader().load(path),
+    )
 
 
 def _response_to_model(response: OrchestratorResponse) -> OrchestrateResponse:
