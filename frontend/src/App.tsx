@@ -146,6 +146,34 @@ function App() {
         </aside>
       </div>
     </div>
+      {showTransaction && (
+        <div className="modal-backdrop" onClick={() => setShowTransaction(false)}>
+          <div className="transaction-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="panel-title">
+              <h2>Registrar operação</h2>
+              <button type="button" onClick={() => setShowTransaction(false)}>×</button>
+            </div>
+            <p>Registro permanente no ledger local. O Excel BTG continua sendo usado para reconciliação.</p>
+            <form onSubmit={addTransaction} className="transaction-form">
+              <select name="action" defaultValue="BUY">
+                <option value="BUY">Compra</option>
+                <option value="SELL">Venda</option>
+              </select>
+              <select name="instrument_type" defaultValue="STOCK">
+                <option value="STOCK">Ação</option>
+                <option value="OPTION">Opção</option>
+              </select>
+              <input name="ticker" placeholder="Ticker (ex. PETR4)" required />
+              <input name="quantity" type="number" min="0.0001" step="any" placeholder="Quantidade" required />
+              <input name="price" type="number" min="0" step="0.0001" placeholder="Preço" required />
+              <input name="executed_at" type="datetime-local" defaultValue={new Date().toISOString().slice(0, 16)} required />
+              <input name="broker" placeholder="Corretora (opcional)" />
+              <button type="submit">Registrar operação</button>
+              {transactionStatus && <small>{transactionStatus}</small>}
+            </form>
+          </div>
+        </div>
+      )}
   );
 }
 
