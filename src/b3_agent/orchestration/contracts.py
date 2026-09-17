@@ -31,6 +31,7 @@ class B3State(TypedDict, total=False):
     user_question: str
     ticker: str | None
     request: str
+    as_of: AS_OF
     deterministic_context: dict[str, Any]
     portfolio_context: Any
     opportunity_set: Any
