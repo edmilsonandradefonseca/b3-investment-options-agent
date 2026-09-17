@@ -38,11 +38,7 @@ def _serialize_portfolio(context: PortfolioContext) -> dict[str, Any]:
                 "quantity": position.quantity,
                 "average_cost": position.average_cost,
                 "strike": position.strike,
-                "expiration_date": (
-                    position.expiration_date.isoformat()
-                    if position.expiration_date
-                    else None
-                ),
+                "expiration_date": position.expiration_date.isoformat() if position.expiration_date else None,
                 "option_type": position.option_type,
                 "underlying_ticker": position.underlying_ticker,
                 "contract_multiplier": position.contract_multiplier,
@@ -61,29 +57,8 @@ def _serialize_opportunities(opportunity_set: OpportunitySet) -> dict[str, Any]:
         "quality_status": opportunity_set.quality_status,
         "ranking_policy_version": opportunity_set.ranking_policy_version,
         "source_refs": list(opportunity_set.source_refs),
-        "ranked_opportunities": [
-            {
-                "opportunity_id": assessment.opportunity_id,
-                "eligible": assessment.eligible,
-                "rejection_reasons": list(assessment.rejection_reasons),
-                "attractiveness": assessment.attractiveness,
-                "portfolio_fit": assessment.portfolio_fit,
-                "ranking_key": list(assessment.ranking_key),
-                "rationale": assessment.rationale,
-            }
-            for assessment in opportunity_set.ranked_opportunities
-        ],
-        "rejected_opportunities": [
-            {
-                "opportunity_id": assessment.opportunity_id,
-                "eligible": assessment.eligible,
-                "rejection_reasons": list(assessment.rejection_reasons),
-                "attractiveness": assessment.attractiveness,
-                "portfolio_fit": assessment.portfolio_fit,
-                "rationale": assessment.rationale,
-            }
-            for assessment in opportunity_set.rejected_opportunities
-        ],
+        "ranked_opportunities": [_serialize_assessment(a) for a in opportunity_set.ranked_opportunities],
+        "rejected_opportunities": [_serialize_assessment(a) for a in opportunity_set.rejected_opportunities],
         "action_candidates": [
             {
                 "action_candidate_id": candidate.action_candidate_id,
@@ -96,6 +71,31 @@ def _serialize_opportunities(opportunity_set: OpportunitySet) -> dict[str, Any]:
             }
             for candidate in opportunity_set.action_candidates
         ],
+    }
+
+
+def _serialize_assessment(assessment: Any) -> dict[str, Any]:
+    return {
+        "opportunity_id": assessment.opportunity_id,
+        "ticker": assessment.ticker,
+        "instrument_type": assessment.instrument_type,
+        "action": assessment.action,
+        "as_of": _isoformat(assessment.as_of) if assessment.as_of else None,
+        "expected_return": assessment.expected_return,
+        "capital_requirement": assessment.capital_requirement,
+        "liquidity_value": assessment.liquidity_value,
+        "valuation_range_ref": assessment.valuation_range_ref,
+        "options_analysis_ref": assessment.options_analysis_ref,
+        "quant_features_ref": assessment.quant_features_ref,
+        "eligible": assessment.eligible,
+        "rejection_reasons": list(assessment.rejection_reasons),
+        "attractiveness": assessment.attractiveness,
+        "portfolio_fit": assessment.portfolio_fit,
+        "ranking_key": list(assessment.ranking_key),
+        "ranking_evidence_refs": list(assessment.ranking_evidence_refs),
+        "evidence_refs": list(assessment.evidence_refs),
+        "source_refs": list(assessment.source_refs),
+        "rationale": assessment.rationale,
     }
 
 

@@ -1,0 +1,112 @@
+from datetime import date, datetime
+
+from b3_agent.opportunity_pipeline import OpportunityPipeline, StockOpportunityInput
+from b3_agent.options.analysis import OptionsAnalysis
+from b3_agent.options.put import PutAnalysisEngine
+from b3_agent.orchestration.context import build_deterministic_context
+from b3_agent.schemas.market import StockMarketData
+from b3_agent.schemas.position import PortfolioContext
+from b3_agent.schemas.valuation import ValuationRange
+
+
+def _stock_record(ticker: str, close: float, observed: datetime) -> StockMarketData:
+    return StockMarketData(
+        instrument_id=ticker,
+        ticker=ticker,
+        observation_timestamp=observed,
+        available_timestamp=observed,
+        source="BRAPI",
+        ingested_at=observed,
+        open=close,
+        high=close,
+        low=close,
+        close=close,
+        volume=1_000_000,
+    )
+
+
+def test_stock_and_options_converge_into_deterministic_opportunity_set_and_context():
+    as_of = date(2026, 9, 11)
+    observed = datetime(2026, 9, 11, 17)
+    valuation = ValuationRange(
+        instrument_id="ITUB4",
+        ticker="ITUB4",
+        as_of=as_of,
+        method="PB_ROE",
+        bear_value=15.0,
+        base_value=20.0,
+        bull_value=25.0,
+        accumulation_price=16.0,
+        reduce_price=20.0,
+        sell_price=25.0,
+        source_refs=("valuation-engine",),
+    )
+    put = PutAnalysisEngine().analyze(
+        option_id="ITUBV200",
+        underlying_ticker="ITUB4",
+        strike=20.0,
+        expiration_date=date(2026, 10, 16),
+        premium=0.60,
+        contract_multiplier=1.0,
+        as_of=as_of,
+    )
+    options_analysis = OptionsAnalysis(puts=(put,), source_refs=("OPLAB",))
+
+    result = OpportunityPipeline().build_from_inputs(
+        as_of=as_of,
+        stock_inputs=(
+            StockOpportunityInput(
+                records=(_stock_record("ITUB4", 15.50, observed),),
+                valuation=valuation,
+                source_refs=("BRAPI",),
+            ),
+        ),
+        options_analyses=(options_analysis,),
+        source_refs=("BTG",),
+    )
+
+    assert result.as_of == as_of
+    assert result.quality_status == "VALIDATED"
+    assert result.ranking_policy_version == "1.0"
+    assert {item.opportunity_id for item in result.ranked_opportunities} == {
+        "ITUB4:ACCUMULATE:PB_ROE",
+        "SELL_PUT:ITUBV200",
+    }
+    assert result.rejected_opportunities == ()
+    assert result.source_refs == ("valuation-engine", "BRAPI", "OPLAB", "BTG")
+
+    stock_assessment = next(
+        item for item in result.ranked_opportunities
+        if item.opportunity_id == "ITUB4:ACCUMULATE:PB_ROE"
+    )
+    option_assessment = next(
+        item for item in result.ranked_opportunities
+        if item.opportunity_id == "SELL_PUT:ITUBV200"
+    )
+    assert stock_assessment.ticker == "ITUB4"
+    assert stock_assessment.action == "ACCUMULATE"
+    assert stock_assessment.expected_return == (20.0 / 15.5) - 1.0
+    assert stock_assessment.quant_features_ref == "quant:ITUB4:2026-09-11"
+    assert stock_assessment.valuation_range_ref == "valuation:ITUB4:PB_ROE"
+    assert option_assessment.ticker == "ITUB4"
+    assert option_assessment.action == "SELL_PUT"
+    assert option_assessment.options_analysis_ref == "ITUBV200"
+
+    portfolio = PortfolioContext(
+        as_of=as_of,
+        positions=(),
+        cash=1000.0,
+        source_refs=("BTG:Renda Variavel",),
+        quality_status="VALIDATED",
+    )
+    context = build_deterministic_context(
+        portfolio_context=portfolio,
+        opportunity_set=result,
+    )
+    context_items = context["opportunities"]["ranked_opportunities"]
+    assert {item["opportunity_id"] for item in context_items} == {
+        "ITUB4:ACCUMULATE:PB_ROE",
+        "SELL_PUT:ITUBV200",
+    }
+    assert all(item["eligible"] is True for item in context_items)
+    assert all(item["source_refs"] for item in context_items)
