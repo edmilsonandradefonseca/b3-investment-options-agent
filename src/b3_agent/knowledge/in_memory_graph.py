@@ -105,21 +105,30 @@ class InMemoryKnowledgeGraphStore(KnowledgeGraphStore):
         if direction not in {"in", "out", "both"}:
             raise ValueError("direction must be one of: in, out, both")
 
-        neighbor_ids: list[str] = []
-        seen: set[str] = set()
-        for edge in self._relations.values():
-            if relation is not None and edge.relation != relation:
-                continue
-            candidate: str | None = None
-            if direction in {"out", "both"} and edge.source_id == entity_id:
-                candidate = edge.target_id
-            elif direction in {"in", "both"} and edge.target_id == entity_id:
-                candidate = edge.source_id
-            if candidate is not None and candidate not in seen:
-                seen.add(candidate)
-                neighbor_ids.append(candidate)
-            if len(neighbor_ids) >= limit:
-                break
+        def collect(direction_filter: str) -> list[str]:
+            ids: list[str] = []
+            seen: set[str] = set()
+            for edge in self._relations.values():
+                if relation is not None and edge.relation != relation:
+                    continue
+                candidate: str | None = None
+                if direction_filter == "out" and edge.source_id == entity_id:
+                    candidate = edge.target_id
+                elif direction_filter == "in" and edge.target_id == entity_id:
+                    candidate = edge.source_id
+                if candidate is not None and candidate not in seen:
+                    seen.add(candidate)
+                    ids.append(candidate)
+            return ids
+
+        if direction == "out":
+            neighbor_ids = collect("out")[:limit]
+        elif direction == "in":
+            neighbor_ids = collect("in")[:limit]
+        else:
+            outbound = collect("out")
+            inbound = [item for item in collect("in") if item not in set(outbound)]
+            neighbor_ids = (outbound + inbound)[:limit]
         return [self._entities[item] for item in neighbor_ids]
 
     def delete_entity(self, entity_id: str) -> None:
