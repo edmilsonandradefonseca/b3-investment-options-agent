@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from datetime import datetime, timezone
+from uuid import uuid4
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -8,6 +10,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
 
 from b3_agent.config import settings
+from b3_agent.repositories.transaction import TransactionRepository
+from b3_agent.schemas.transaction import Transaction
+from b3_agent.storage.sqlite import SQLiteStore
 from b3_agent.orchestration import OrchestratorRequest, OrchestratorResponse, b3_orchestrator, configure_default_workflow
 
 
@@ -19,6 +24,30 @@ class OrchestrateRequest(BaseModel):
     task: str = Field(min_length=1)
     ticker: str | None = None
     context: dict[str, Any] = Field(default_factory=dict)
+
+
+class TransactionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: str
+    instrument_type: str
+    ticker: str = Field(min_length=1)
+    quantity: float = Field(gt=0)
+    price: float = Field(ge=0)
+    executed_at: datetime | None = None
+    broker: str = ""
+
+
+class TransactionResponse(BaseModel):
+    transaction_id: str
+    executed_at: datetime
+    action: str
+    instrument_type: str
+    ticker: str
+    quantity: float
+    price: float
+    broker: str
+    source_ref: str
 
 
 class OrchestrateResponse(BaseModel):
@@ -57,6 +86,54 @@ app.add_middleware(
 def _configure_runtime() -> None:
     """Compose the production workflow once, on first orchestration request."""
     configure_default_workflow()
+
+
+def _transaction_repository() -> TransactionRepository:
+    database = settings.data_dir / "b3_agent.db"
+    SQLiteStore(database).initialize()
+    return TransactionRepository(str(database))
+
+
+def _transaction_response(item: Transaction) -> TransactionResponse:
+    return TransactionResponse(
+        transaction_id=item.transaction_id,
+        executed_at=item.executed_at,
+        action=item.action,
+        instrument_type=item.instrument_type,
+        ticker=item.ticker,
+        quantity=item.quantity,
+        price=item.price,
+        broker=item.broker,
+        source_ref=item.source_ref,
+    )
+
+
+@app.post("/transactions", response_model=TransactionResponse, status_code=201)
+def add_transaction(request: TransactionRequest) -> TransactionResponse:
+    executed_at = request.executed_at or datetime.now(timezone.utc)
+    if executed_at.tzinfo is None:
+        raise HTTPException(status_code=400, detail="executed_at must be timezone-aware")
+    try:
+        transaction = Transaction(
+            transaction_id=f"tx:{uuid4()}",
+            executed_at=executed_at,
+            action=request.action.upper().strip(),
+            instrument_type=request.instrument_type.upper().strip(),
+            ticker=request.ticker.upper().strip(),
+            quantity=request.quantity,
+            price=request.price,
+            broker=request.broker,
+        )
+        return _transaction_response(_transaction_repository().add(transaction))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/transactions", response_model=list[TransactionResponse])
+def list_transactions(limit: int = 100) -> list[TransactionResponse]:
+    if not 1 <= limit <= 500:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 500")
+    return [_transaction_response(item) for item in _transaction_repository().list(limit)]
 
 
 def _response_to_model(response: OrchestratorResponse) -> OrchestrateResponse:
