@@ -33,6 +33,14 @@ def build_workflow(*, retriever: ObsidianRetriever, reasoning_agent: InvestmentR
             raise ValueError("workflow requires user_question or request")
         return {"user_question": request}
 
+    def deterministic_context(state: B3State) -> dict[str, Any]:
+        opportunity_set = state.get("opportunity_set")
+        if opportunity_set is None:
+            return {"deterministic_context": dict(state.get("deterministic_context", {}))}
+        context = opportunity_set_to_context(opportunity_set)
+        deterministic = {**state.get("deterministic_context", {}), "opportunity_set": context}
+        return {"opportunities": context["ranked_opportunities"], "action_candidates": context["action_candidates"], "deterministic_context": deterministic}
+
     def knowledge_context(state: B3State) -> dict[str, Any]:
         """Retrieve one bounded KnowledgeContext containing RAG, KG and deterministic context."""
         request = state["user_question"]
@@ -63,12 +71,6 @@ def build_workflow(*, retriever: ObsidianRetriever, reasoning_agent: InvestmentR
         records = retriever.retrieve(request, top_k=5)
         evidence = [{"source_ref": item.source_ref, "relative_path": item.relative_path, "snippet": item.snippet, "score": item.score} for item in records]
         return {"evidence": evidence}
-
-    def deterministic_context(state: B3State) -> dict[str, Any]:
-        opportunity_set = state.get("opportunity_set")
-        if opportunity_set is None: return {}
-        context = opportunity_set_to_context(opportunity_set)
-        return {"opportunities": context["ranked_opportunities"], "action_candidates": context["action_candidates"], "deterministic_context": {"opportunity_set": context}}
 
     def _agent_context(state: B3State) -> AgentContext:
         keys = ("portfolio_context", "signals", "threats", "opportunities", "action_candidates", "fundamental_analysis", "market_analysis", "options_analysis", "risk_analysis", "market_agent_analysis", "portfolio_agent_analysis", "options_agent_analysis", "synthesis", "knowledge_context", "memory_context", "rag_context", "graph_context")
@@ -123,8 +125,8 @@ def build_workflow(*, retriever: ObsidianRetriever, reasoning_agent: InvestmentR
 
     graph = StateGraph(B3State)
     graph.add_node("retrieve", retrieve)
-    graph.add_node("knowledge_context", knowledge_context)
     graph.add_node("deterministic_context", deterministic_context)
+    graph.add_node("knowledge_context", knowledge_context)
     graph.add_node("market_analysis", market_analysis)
     graph.add_node("portfolio_analysis", portfolio_analysis)
     graph.add_node("options_analysis", options_analysis)
@@ -134,11 +136,11 @@ def build_workflow(*, retriever: ObsidianRetriever, reasoning_agent: InvestmentR
     if synthesis_agent is not None: graph.add_node("synthesis", synthesis)
 
     graph.add_edge(START, "retrieve")
-    graph.add_edge("retrieve", "knowledge_context")
-    graph.add_edge("knowledge_context", "deterministic_context")
-    graph.add_edge("deterministic_context", "market_analysis")
-    graph.add_edge("deterministic_context", "portfolio_analysis")
-    graph.add_edge("deterministic_context", "options_analysis")
+    graph.add_edge("retrieve", "deterministic_context")
+    graph.add_edge("deterministic_context", "knowledge_context")
+    graph.add_edge("knowledge_context", "market_analysis")
+    graph.add_edge("knowledge_context", "portfolio_analysis")
+    graph.add_edge("knowledge_context", "options_analysis")
     if synthesis_agent is not None:
         graph.add_edge("market_analysis", "synthesis")
         graph.add_edge("portfolio_analysis", "synthesis")
