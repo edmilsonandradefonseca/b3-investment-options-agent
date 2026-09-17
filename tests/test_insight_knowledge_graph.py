@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from b3_agent.knowledge.graph_schema import EntityType, RelationType
+from b3_agent.knowledge.graph_schema import EntityType, GraphEntity, RelationType
 from b3_agent.knowledge.in_memory_graph import InMemoryKnowledgeGraphStore
 from b3_agent.knowledge.memory import InsightRecord, ObsidianMemoryManager
 from b3_agent.knowledge.obsidian import ObsidianKnowledgeStore
@@ -11,8 +11,6 @@ def test_persist_insight_mirrors_identity_and_relationships_in_kg(tmp_path: Path
     vault.mkdir()
     store = ObsidianKnowledgeStore(vault)
     graph = InMemoryKnowledgeGraphStore()
-
-    from b3_agent.knowledge.graph_schema import GraphEntity
 
     stock = GraphEntity(
         entity_id="STK-ITUB4",
@@ -38,7 +36,8 @@ def test_persist_insight_mirrors_identity_and_relationships_in_kg(tmp_path: Path
         )
     )
 
-    assert path.exists()
+    assert path == Path("00_System/Knowledge/Insights/INS-20260917-001/v1.md")
+    assert (vault / path).exists()
     insight = graph.get_entity("INS-20260917-001")
     assert insight is not None
     assert insight.entity_type == EntityType.INSIGHT
@@ -61,7 +60,7 @@ def test_persist_insight_creates_supersedes_relationship(tmp_path: Path):
     vault.mkdir()
     graph = InMemoryKnowledgeGraphStore()
     graph.upsert_entity(
-        __import__("b3_agent.knowledge.graph_schema", fromlist=["GraphEntity"]).GraphEntity(
+        GraphEntity(
             entity_id="INS-OLD",
             entity_type=EntityType.INSIGHT,
             name="Old insight",
