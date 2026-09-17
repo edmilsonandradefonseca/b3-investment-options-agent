@@ -27,13 +27,10 @@ class EvidenceChunker:
     the source evidence id, position, and normalized chunk content.
     """
 
-    def __init__(self, *, max_chars: int = 1200, overlap_chars: int = 150):
+    def __init__(self, *, max_chars: int = 1200):
         if max_chars < 1:
             raise ValueError("max_chars must be positive")
-        if overlap_chars < 0 or overlap_chars >= max_chars:
-            raise ValueError("overlap_chars must be >= 0 and smaller than max_chars")
         self.max_chars = max_chars
-        self.overlap_chars = overlap_chars
 
     def chunk(self, evidence: Evidence) -> tuple[EvidenceChunk, ...]:
         paragraphs = [p.strip() for p in re.split(r"\n\s*\n", evidence.content) if p.strip()]
@@ -60,9 +57,6 @@ class EvidenceChunker:
 
         if current:
             pieces.append(current)
-
-        if self.overlap_chars:
-            pieces = _apply_overlap(pieces, self.overlap_chars)
 
         count = len(pieces)
         chunks: list[EvidenceChunk] = []
@@ -111,13 +105,3 @@ def _split_long_text(text: str, max_chars: int) -> list[str]:
     if current:
         pieces.append(current)
     return pieces
-
-
-def _apply_overlap(pieces: list[str], overlap_chars: int) -> list[str]:
-    if len(pieces) < 2:
-        return pieces
-    result = [pieces[0]]
-    for piece in pieces[1:]:
-        prefix = result[-1][-overlap_chars:].strip()
-        result.append(f"{prefix} {piece}".strip() if prefix else piece)
-    return result
