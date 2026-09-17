@@ -13,6 +13,7 @@ from b3_agent.agents.specialist import (
     PortfolioAnalysisAgent,
 )
 from b3_agent.agents.synthesis import SynthesisAgent
+from b3_agent.knowledge.memory import ObsidianMemoryManager
 from b3_agent.knowledge.retrieval import ObsidianRetriever
 
 from .contracts import B3State
@@ -31,6 +32,7 @@ def build_workflow(
     retriever: ObsidianRetriever,
     reasoning_agent: InvestmentReasoningAgent,
     risk_validator: RiskValidator,
+    memory_manager: ObsidianMemoryManager | None = None,
     market_agent: MarketAnalysisAgent | None = None,
     portfolio_agent: PortfolioAnalysisAgent | None = None,
     options_agent: OptionsAnalysisAgent | None = None,
@@ -42,6 +44,17 @@ def build_workflow(
         request = state.get("user_question") or state.get("request")
         if not request:
             raise ValueError("workflow requires user_question or request")
+
+        if memory_manager is not None:
+            memory = memory_manager.retrieve_context(request, top_k=5)
+            evidence = list(memory["rag_context"])
+            return {
+                "user_question": request,
+                "memory_context": memory["memory_context"],
+                "rag_context": memory["rag_context"],
+                "evidence": evidence,
+            }
+
         records = retriever.retrieve(request, top_k=5)
         evidence = [
             {
@@ -71,6 +84,7 @@ def build_workflow(
             "action_candidates", "fundamental_analysis", "market_analysis",
             "options_analysis", "risk_analysis", "market_agent_analysis",
             "portfolio_agent_analysis", "options_agent_analysis", "synthesis",
+            "memory_context", "rag_context", "graph_context",
         )
         facts = {key: state[key] for key in keys if key in state}
         legacy = state.get("deterministic_context")
@@ -133,6 +147,42 @@ def build_workflow(
         result = risk_validator.validate(decision)
         return {"risk_validation": {"status": result.status, "reasons": list(result.reasons)}, "status": result.status}
 
+    def persist_memory(state: B3State) -> dict[str, Any]:
+        if memory_manager is None:
+            return {}
+
+        persisted: list[str] = []
+        ticker = state.get("ticker")
+        synthesis_result = state.get("synthesis")
+        if isinstance(synthesis_result, dict) and synthesis_result.get("summary"):
+            entity = ticker or "PORTFOLIO"
+            insight_id = f"INS-{entity}-{state.get('decision_proposal', {}).get('as_of') or 'CURRENT'}"
+            path = memory_manager.persist_insight(
+                {
+                    "insight_id": insight_id,
+                    "entity": entity,
+                    "type": "assessment",
+                    "title": f"Investment assessment — {entity}",
+                    "statement": synthesis_result["summary"],
+                    "evidence_refs": synthesis_result.get("evidence_refs", []),
+                    "source": "Investment Synthesis Agent",
+                    "confidence": state.get("decision_proposal", {}).get("confidence"),
+                    "as_of": None,
+                }
+            )
+            persisted.append(path.as_posix())
+
+        proposal = state.get("decision_proposal")
+        if isinstance(proposal, dict):
+            path = memory_manager.persist_decision(
+                proposal,
+                request=state["user_question"],
+                ticker=ticker,
+            )
+            persisted.append(path.as_posix())
+
+        return {"audit": [{"event": "memory_persisted", "paths": persisted}]}
+
     graph = StateGraph(B3State)
     graph.add_node("retrieve", retrieve)
     graph.add_node("deterministic_context", deterministic_context)
@@ -141,28 +191,31 @@ def build_workflow(
     graph.add_node("options_analysis", options_analysis)
     graph.add_node("reason", reason)
     graph.add_node("validate", validate)
+    if memory_manager is not None:
+        graph.add_node("persist_memory", persist_memory)
     if synthesis_agent is not None:
         graph.add_node("synthesis", synthesis)
 
     graph.add_edge(START, "retrieve")
     graph.add_edge("retrieve", "deterministic_context")
-    # Independent specialists consume the same immutable upstream context.
     graph.add_edge("deterministic_context", "market_analysis")
     graph.add_edge("deterministic_context", "portfolio_analysis")
     graph.add_edge("deterministic_context", "options_analysis")
 
     if synthesis_agent is not None:
-        # LangGraph joins all three specialist branches before synthesis.
         graph.add_edge("market_analysis", "synthesis")
         graph.add_edge("portfolio_analysis", "synthesis")
         graph.add_edge("options_analysis", "synthesis")
         graph.add_edge("synthesis", "reason")
     else:
-        # Backward-compatible path for tests/callers that do not inject synthesis.
         graph.add_edge("market_analysis", "reason")
         graph.add_edge("portfolio_analysis", "reason")
         graph.add_edge("options_analysis", "reason")
 
     graph.add_edge("reason", "validate")
-    graph.add_edge("validate", END)
+    if memory_manager is not None:
+        graph.add_edge("validate", "persist_memory")
+        graph.add_edge("persist_memory", END)
+    else:
+        graph.add_edge("validate", END)
     return graph.compile()
