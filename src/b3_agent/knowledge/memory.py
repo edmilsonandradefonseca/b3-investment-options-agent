@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,7 +12,6 @@ from .retrieval import ObsidianRetriever, RetrievedEvidence
 @dataclass(frozen=True)
 class InsightRecord:
     """First-class persistent investment insight."""
-
     insight_id: str
     entity: str | None
     insight_type: str
@@ -39,46 +37,21 @@ class InsightRecord:
 
 
 class ObsidianMemoryManager:
-    """Application-level memory boundary over Obsidian and its RAG index.
-
-    Obsidian remains the persistent, human-readable source of truth. The
-    retriever is used only to assemble bounded context for LangGraph.
-    """
-
-    def __init__(
-        self,
-        store: ObsidianKnowledgeStore,
-        retriever: ObsidianRetriever | None = None,
-    ) -> None:
+    """Application-level memory boundary over Obsidian and its RAG index."""
+    def __init__(self, store: ObsidianKnowledgeStore, retriever: ObsidianRetriever | None = None) -> None:
         self.store = store
         self.retriever = retriever or ObsidianRetriever(store)
 
-    def retrieve_context(
-        self,
-        query: str,
-        *,
-        top_k: int = 5,
-    ) -> dict[str, list[dict[str, Any]]]:
-        """Read relevant persistent memory and expose bounded RAG context."""
+    def retrieve_context(self, query: str, *, top_k: int = 5) -> dict[str, list[dict[str, Any]]]:
         records = self.retriever.retrieve(query, top_k=top_k)
         rag_context = [self._evidence_to_dict(item) for item in records]
-        return {
-            "memory_context": list(rag_context),
-            "rag_context": list(rag_context),
-        }
+        return {"memory_context": list(rag_context), "rag_context": list(rag_context)}
 
     def persist_insight(self, insight: InsightRecord | dict[str, Any]) -> Path:
-        """Persist an insight as a versioned Markdown note in Obsidian."""
         record = self._coerce_insight(insight)
         created_at = record.created_at or datetime.now(timezone.utc)
         as_of = record.as_of or created_at
-        relative_path = (
-            Path("00_System")
-            / "Knowledge"
-            / "Insights"
-            / record.insight_id
-            / "v1.md"
-        )
+        relative_path = Path("00_System") / "Knowledge" / "Insights" / record.insight_id / "v1.md"
         evidence = "\n".join(f"- {item}" for item in record.evidence) or "- none"
         confidence = "" if record.confidence is None else str(record.confidence)
         content = f"""# {record.title}
@@ -106,14 +79,7 @@ class ObsidianMemoryManager:
         self.store.write_note(relative_path, content)
         return relative_path
 
-    def persist_decision(
-        self,
-        decision: dict[str, Any],
-        *,
-        request: str,
-        ticker: str | None = None,
-    ) -> Path:
-        """Persist a decision proposal separately from semantic insights."""
+    def persist_decision(self, decision: dict[str, Any], *, request: str, ticker: str | None = None) -> Path:
         decision_id = str(decision.get("id") or _stable_id("DEC"))
         subject = str(decision.get("subject_id") or ticker or "PORTFOLIO")
         action = str(decision.get("action") or "UNSPECIFIED")
@@ -171,12 +137,7 @@ class ObsidianMemoryManager:
 
     @staticmethod
     def _evidence_to_dict(item: RetrievedEvidence) -> dict[str, Any]:
-        return {
-            "source_ref": item.source_ref,
-            "relative_path": item.relative_path,
-            "snippet": item.snippet,
-            "score": item.score,
-        }
+        return {"source_ref": item.source_ref, "relative_path": item.relative_path, "snippet": item.snippet, "score": item.score}
 
     @staticmethod
     def _coerce_insight(value: InsightRecord | dict[str, Any]) -> InsightRecord:
@@ -184,6 +145,7 @@ class ObsidianMemoryManager:
             return value
         data = dict(value)
         evidence = data.get("evidence") or data.get("evidence_refs") or ()
+        confidence = _normalize_confidence(data.get("confidence"))
         return InsightRecord(
             insight_id=str(data.get("insight_id") or data.get("id") or _stable_id("INS")),
             entity=data.get("entity"),
@@ -192,12 +154,26 @@ class ObsidianMemoryManager:
             statement=str(data.get("statement") or data.get("content") or ""),
             evidence=tuple(str(item) for item in evidence),
             source=str(data.get("source") or "B3 Investment Intelligence"),
-            confidence=data.get("confidence"),
+            confidence=confidence,
             created_at=data.get("created_at"),
             as_of=data.get("as_of"),
             status=str(data.get("status") or "active"),
             previous_insight_id=data.get("previous_insight_id"),
         )
+
+
+def _normalize_confidence(value: Any) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return float(value)
+    if isinstance(value, (int, float)):
+        return float(value)
+    mapping = {"LOW": 0.25, "MEDIUM": 0.50, "HIGH": 0.75}
+    text = str(value).strip().upper()
+    if text in mapping:
+        return mapping[text]
+    raise ValueError(f"unsupported confidence value: {value}")
 
 
 def _stable_id(prefix: str) -> str:
