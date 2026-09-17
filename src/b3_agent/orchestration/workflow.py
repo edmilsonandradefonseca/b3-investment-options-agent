@@ -34,13 +34,28 @@ def build_workflow(*, retriever: ObsidianRetriever, reasoning_agent: InvestmentR
         return {"user_question": request}
 
     def knowledge_context(state: B3State) -> dict[str, Any]:
-        """Retrieve one bounded KnowledgeContext containing RAG and KG context."""
+        """Retrieve one bounded KnowledgeContext containing RAG, KG and deterministic context."""
         request = state["user_question"]
         if knowledge_context_builder is not None:
-            context = knowledge_context_builder.build(request, rag_top_k=5, graph_top_k=20, neighbor_depth=1)
-            return {"knowledge_context": context.as_dict(), "memory_context": context.evidence,
-                    "rag_context": context.evidence, "graph_context": context.graph_context,
-                    "evidence": context.evidence, "sources": list(context.sources)}
+            as_of = state.get("as_of")
+            if isinstance(as_of, datetime) and as_of.tzinfo is None:
+                raise ValueError("as_of must be timezone-aware")
+            context = knowledge_context_builder.build(
+                request,
+                rag_top_k=5,
+                graph_top_k=20,
+                neighbor_depth=1,
+                as_of=as_of if isinstance(as_of, datetime) else None,
+                deterministic_context=state.get("deterministic_context", {}),
+            )
+            return {
+                "knowledge_context": context.as_dict(),
+                "memory_context": context.evidence,
+                "rag_context": context.evidence,
+                "graph_context": context.graph_context,
+                "evidence": context.evidence,
+                "sources": list(context.sources),
+            }
         if memory_manager is not None:
             memory = memory_manager.retrieve_context(request, top_k=5)
             evidence = list(memory["rag_context"])
