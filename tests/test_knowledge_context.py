@@ -37,13 +37,13 @@ def test_build_merges_rag_and_graph_without_unbounded_context(tmp_path: Path):
     graph = InMemoryKnowledgeGraphStore()
     entities, relations = _graph()
     graph.upsert(entities, relations)
-    context = KnowledgeContextBuilder(ObsidianRetriever(ObsidianKnowledgeStore(vault)), graph).build("PETR4", rag_top_k=1, graph_top_k=10, neighbor_depth=1)
+    context = KnowledgeContextBuilder(ObsidianRetriever(ObsidianKnowledgeStore(vault)), graph).build("PETR4", rag_top_k=1, graph_top_k=10, neighbor_depth=1, as_of=AS_OF)
     assert context.query == "PETR4"
     assert len(context.rag) == 1
-    assert {item.entity_id for item in context.entities} == {"STK-PETR4", "COMP-PETROBRAS", "OPT-PETRI32", "SEC-OIL", "EV-OIL", "STK-FUTURE"}
+    assert {item.entity_id for item in context.entities} == {"STK-PETR4", "COMP-PETROBRAS", "OPT-PETRI32", "SEC-OIL", "EV-OIL"}
     assert len(context.relations) == 4
     assert context.metadata["rag_count"] == 1
-    assert context.metadata["entity_count"] == 6
+    assert context.metadata["entity_count"] == 5
     assert context.metadata["relation_count"] == 4
     assert context.sources[0].startswith("obsidian:")
 
