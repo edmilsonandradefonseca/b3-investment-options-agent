@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from io import BytesIO
+from pathlib import Path
+
+from fastapi import UploadFile
 from fastapi.testclient import TestClient
 
 from b3_agent import server
@@ -78,3 +82,20 @@ def test_orchestrate_reports_runtime_configuration_failure(monkeypatch) -> None:
 
     assert response.status_code == 503
     assert "OBSIDIAN_VAULT" in response.json()["detail"]
+
+
+
+def test_replace_validated_upload_preserves_excel_extension(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(server, "_import_dir", lambda: tmp_path)
+    seen: dict[str, str] = {}
+
+    def validator(path: Path) -> None:
+        seen["suffix"] = path.suffix
+        seen["content"] = path.read_bytes().decode("utf-8")
+
+    upload = UploadFile(filename="portfolio.xlsx", file=BytesIO(b"excel-bytes"))
+    result = server._replace_validated_upload(upload, "portfolio.xlsx", validator)
+
+    assert seen == {"suffix": ".xlsx", "content": "excel-bytes"}
+    assert result["status"] == "replaced"
+    assert (tmp_path / "portfolio.xlsx").read_bytes() == b"excel-bytes"
