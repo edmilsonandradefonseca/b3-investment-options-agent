@@ -5,13 +5,12 @@ from typing import Any
 
 from b3_agent.agents.reasoning import InvestmentReasoningAgent
 from b3_agent.agents.risk_validator import RiskValidator
-from b3_agent.agents.specialist import (
-    MarketAnalysisAgent,
-    OptionsAnalysisAgent,
-    PortfolioAnalysisAgent,
-)
+from b3_agent.agents.specialist import MarketAnalysisAgent, OptionsAnalysisAgent, PortfolioAnalysisAgent
 from b3_agent.agents.synthesis import SynthesisAgent
 from b3_agent.config import settings
+from b3_agent.knowledge.context import KnowledgeContextBuilder
+from b3_agent.knowledge.in_memory_graph import InMemoryKnowledgeGraphStore
+from b3_agent.knowledge.indexer import KnowledgeIndexer
 from b3_agent.knowledge.memory import ObsidianMemoryManager
 from b3_agent.knowledge.obsidian import ObsidianKnowledgeStore
 from b3_agent.knowledge.retrieval import ObsidianRetriever
@@ -23,12 +22,9 @@ from .orchestrator import configure_workflow
 from .workflow import build_workflow
 
 
-def configure_default_workflow(
-    *,
-    vault_path: Path | None = None,
-    portfolio_context: PortfolioContext | dict[str, Any] | None = None,
-    opportunity_set: OpportunitySet | None = None,
-) -> None:
+def configure_default_workflow(*, vault_path: Path | None = None,
+                                portfolio_context: PortfolioContext | dict[str, Any] | None = None,
+                                opportunity_set: OpportunitySet | None = None) -> None:
     """Compose and register the production V3.1 workflow."""
     resolved_vault = Path(vault_path).expanduser().resolve() if vault_path is not None else settings.obsidian_vault
     if resolved_vault is None:
@@ -41,8 +37,12 @@ def configure_default_workflow(
     llm = OpenAIResponsesClient(model=settings.llm_model)
     store = ObsidianKnowledgeStore(resolved_vault)
     retriever = ObsidianRetriever(store)
+    graph = InMemoryKnowledgeGraphStore()
+    KnowledgeIndexer(store, graph).index_all()
+    knowledge_context_builder = KnowledgeContextBuilder(retriever, graph)
     workflow = build_workflow(
         retriever=retriever,
+        knowledge_context_builder=knowledge_context_builder,
         memory_manager=ObsidianMemoryManager(store, retriever),
         market_agent=MarketAnalysisAgent(llm),
         portfolio_agent=PortfolioAnalysisAgent(llm),
