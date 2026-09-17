@@ -155,7 +155,12 @@ def _replace_validated_upload(upload: UploadFile, filename: str, validator) -> d
     target = _import_dir() / filename
     temp_path: Path | None = None
     try:
-        with NamedTemporaryFile(prefix=f".{filename}.", suffix=".tmp", dir=_import_dir(), delete=False) as handle:
+        with NamedTemporaryFile(
+            prefix=f".{filename}.",
+            suffix=Path(upload.filename).suffix.lower(),
+            dir=_import_dir(),
+            delete=False,
+        ) as handle:
             temp_path = Path(handle.name)
             while True:
                 chunk = upload.file.read(1024 * 1024)
