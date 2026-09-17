@@ -1,3 +1,11 @@
+from .market_intelligence import (
+    MARKET_INTELLIGENCE_SCOPE,
+    MarketEvidence,
+    MarketInsight,
+    MarketIntelligenceAgent,
+    OpenAIWebResearchClient,
+    WebResearchClient,
+)
 from .reasoning import InvestmentReasoningAgent
 from .risk_validator import RiskValidator
 from .specialist import MarketAnalysisAgent, OptionsAnalysisAgent, PortfolioAnalysisAgent
@@ -13,4 +21,10 @@ __all__ = [
     "SpecialistAnalysis",
     "SpecialistContext",
     "SynthesisAgent",
+    "MarketIntelligenceAgent",
+    "OpenAIWebResearchClient",
+    "WebResearchClient",
+    "MarketEvidence",
+    "MarketInsight",
+    "MARKET_INTELLIGENCE_SCOPE",
 ]
