@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from math import exp
+from math import exp, log
 from typing import Protocol
 
-from .embeddings import Embedding, EmbeddingProvider
+from .embeddings import EmbeddingProvider
 from .vector_store import MetadataFilter, VectorSearchResult, VectorStore
 
 
@@ -22,7 +22,7 @@ class RetrievalStrategy(Protocol):
 
 
 class FreshnessScorer:
-    """Small, provider-neutral freshness contract using a configurable half-life."""
+    """Provider-neutral freshness score with an explicit half-life."""
 
     def __init__(self, *, half_life_days: float = 30.0) -> None:
         if half_life_days <= 0:
@@ -37,17 +37,13 @@ class FreshnessScorer:
         if published_at.tzinfo is None:
             raise ValueError("published_at must be timezone-aware")
         age_days = max(0.0, (as_of - published_at).total_seconds() / 86400.0)
-        return exp(-age_days / self.half_life_days)
+        return exp(-log(2.0) * age_days / self.half_life_days)
 
 
 class VectorRetriever:
     """Minimal semantic retriever; ranking policy intentionally remains simple."""
 
-    def __init__(
-        self,
-        store: VectorStore,
-        embeddings: EmbeddingProvider,
-    ) -> None:
+    def __init__(self, store: VectorStore, embeddings: EmbeddingProvider) -> None:
         self.store = store
         self.embeddings = embeddings
 
@@ -67,12 +63,8 @@ class VectorRetriever:
             raise ValueError("as_of must be timezone-aware")
 
         query_embedding = self.embeddings.embed((query.strip(),))[0]
-        results = self.store.search(
+        return self.store.search(
             query_embedding,
             top_k=top_k,
             metadata_filter=metadata_filter,
         )
-
-        # Point-in-time remains a retrieval concern, but the store owns provider-specific filtering.
-        # Until metadata filtering is proven against real use cases, do not add a second ranking layer.
-        return results
