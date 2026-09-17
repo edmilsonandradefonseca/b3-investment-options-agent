@@ -145,7 +145,6 @@ function App() {
           <small className="disclaimer">Sem execução de ordens. O orquestrador permanece responsável pela inteligência.</small>
         </aside>
       </div>
-    </div>
       {showTransaction && (
         <div className="modal-backdrop" onClick={() => setShowTransaction(false)}>
           <div className="transaction-modal" onClick={(event) => event.stopPropagation()}>
@@ -174,6 +173,7 @@ function App() {
           </div>
         </div>
       )}
+    </div>
   );
 }
 
