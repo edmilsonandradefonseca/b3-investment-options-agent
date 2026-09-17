@@ -4,18 +4,14 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any, TypedDict
 
-
 AS_OF = date | datetime
-
 
 @dataclass(frozen=True)
 class OrchestratorRequest:
     """Stable input boundary for the B3 investment intelligence workflow."""
-
     task: str
     ticker: str | None = None
     context: dict[str, Any] = field(default_factory=dict)
-
     def __post_init__(self) -> None:
         task = self.task.strip()
         if not task:
@@ -26,26 +22,19 @@ class OrchestratorRequest:
         object.__setattr__(self, "task", task)
         object.__setattr__(self, "ticker", ticker)
         object.__setattr__(self, "context", dict(self.context))
-
     @classmethod
-    def from_inputs(
-        cls,
-        task: str,
-        ticker: str | None = None,
-        context: dict[str, Any] | None = None,
-    ) -> "OrchestratorRequest":
+    def from_inputs(cls, task: str, ticker: str | None = None, context: dict[str, Any] | None = None) -> "OrchestratorRequest":
         return cls(task=task, ticker=ticker, context=context or {})
-
 
 class B3State(TypedDict, total=False):
     """Typed LangGraph state boundary defined by Architecture V3.1."""
-
     user_question: str
     ticker: str | None
     request: str
     deterministic_context: dict[str, Any]
     portfolio_context: Any
     opportunity_set: Any
+    knowledge_context: dict[str, Any]
     memory_context: list[dict[str, Any]]
     rag_context: list[dict[str, Any]]
     graph_context: list[dict[str, Any]]
@@ -58,11 +47,9 @@ class B3State(TypedDict, total=False):
     market_analysis: Any
     options_analysis: Any
     risk_analysis: Any
-    # LLM specialist outputs are deliberately separate from deterministic analyses.
     market_agent_analysis: dict[str, Any]
     portfolio_agent_analysis: dict[str, Any]
     options_agent_analysis: dict[str, Any]
-    # Synthesis is an LLM interpretation layer, never a replacement for deterministic facts.
     synthesis: dict[str, Any]
     insights: list[dict[str, Any]]
     decision_proposal: dict[str, Any] | None
@@ -72,17 +59,14 @@ class B3State(TypedDict, total=False):
     sources: list[str]
     audit: list[dict[str, Any]]
 
-
 @dataclass(frozen=True)
 class OrchestratorResponse:
     """Stable output boundary returned by the B3 investment workflow."""
-
     status: str
     result: dict[str, Any] = field(default_factory=dict)
     sources: tuple[str, ...] = ()
     audit: tuple[dict[str, Any], ...] = ()
     error: str | None = None
-
     def __post_init__(self) -> None:
         status = self.status.strip().upper()
         if not status:
