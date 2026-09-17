@@ -1,0 +1,16 @@
+[package]
+name = "b3_investment_copilot"
+version = "0.1.0"
+description = "B3 Investment Copilot desktop shell"
+authors = ["Edmilson Fonseca"]
+edition = "2021"
+
+[lib]
+name = "b3_investment_copilot_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
