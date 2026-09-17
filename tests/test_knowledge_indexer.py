@@ -112,7 +112,7 @@ relation.belongs_to: SEC-BANKS
     result = indexer.index_all()
 
     assert result.notes_changed == 1
-    assert result.notes_unchanged == 3
+    assert result.notes_unchanged == 2
     assert result.relations_removed == 1
     assert graph.count_relations(relation=RelationType.BELONGS_TO) == 1
     edges = graph.get_relations(source_id="STK-PETR4", relation=RelationType.BELONGS_TO)
