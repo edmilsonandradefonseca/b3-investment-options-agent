@@ -73,7 +73,7 @@ def build_workflow(*, retriever: ObsidianRetriever, reasoning_agent: InvestmentR
         return {"evidence": evidence}
 
     def _agent_context(state: B3State) -> AgentContext:
-        keys = ("portfolio_context", "signals", "threats", "opportunities", "action_candidates", "fundamental_analysis", "market_analysis", "options_analysis", "risk_analysis", "market_agent_analysis", "portfolio_agent_analysis", "options_agent_analysis", "synthesis", "knowledge_context", "memory_context", "rag_context", "graph_context")
+        keys = ("portfolio_context", "options_transactions", "signals", "threats", "opportunities", "action_candidates", "fundamental_analysis", "market_analysis", "options_analysis", "risk_analysis", "market_agent_analysis", "portfolio_agent_analysis", "options_agent_analysis", "synthesis", "knowledge_context", "memory_context", "rag_context", "graph_context")
         facts = {key: state[key] for key in keys if key in state}
         legacy = state.get("deterministic_context")
         if isinstance(legacy, dict): facts = {**legacy, **facts}
