@@ -18,6 +18,8 @@ from mcp.server.fastmcp import FastMCP
 
 from b3_agent.config import settings
 from b3_agent.mcp.orchestrator_server import analyze_b3
+from b3_agent.knowledge.memory import ObsidianMemoryManager
+from b3_agent.knowledge.obsidian import ObsidianKnowledgeStore
 from b3_agent.portfolio import PortfolioIntelligenceEngine
 from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
 from b3_agent.portfolio.position_intelligence import PositionIntelligenceEngine
@@ -34,6 +36,7 @@ ValuationLoader = Callable[[str], ValuationRange | None]
 _portfolio_loader: PortfolioLoader | None = None
 _opportunity_loader: OpportunityLoader | None = None
 _valuation_loader: ValuationLoader | None = None
+_memory_manager: ObsidianMemoryManager | None = None
 
 
 mcp = FastMCP(
@@ -56,13 +59,15 @@ def get_system_capabilities() -> dict[str, object]:
         "get_valuation",
         "get_opportunities",
         "compare_position_opportunity",
+        "persist_insight",
+        "persist_decision",
     ]
     return {
         "server": "B3 Investment Intelligence",
-        "version": "0.4.0",
-        "mode": "read_only",
+        "version": "0.5.0",
+        "mode": "controlled_write",
         "tools": tools,
-        "capabilities": [*tools, "orchestrated_analysis"],
+        "capabilities": [*tools, "orchestrated_analysis", "memory_write"],
         "governance": {
             "deterministic_first": True,
             "llm_executes_trades": False,
@@ -142,6 +147,38 @@ def get_opportunities() -> dict[str, Any]:
 
 
 @mcp.tool()
+def persist_insight(insight: dict[str, Any]) -> dict[str, Any]:
+    """Persist a structured investment insight through the Memory Manager."""
+    manager = _load_memory_manager()
+    path = manager.persist_insight(insight)
+    return {
+        "status": "persisted",
+        "type": "insight",
+        "insight_id": str(insight.get("insight_id") or insight.get("id") or ""),
+        "path": str(path),
+    }
+
+
+@mcp.tool()
+def persist_decision(
+    decision: dict[str, Any],
+    request: str,
+    ticker: str | None = None,
+) -> dict[str, Any]:
+    """Persist a structured decision proposal through the Memory Manager."""
+    if not request.strip():
+        raise ValueError("request must not be empty")
+    manager = _load_memory_manager()
+    path = manager.persist_decision(decision, request=request, ticker=ticker)
+    return {
+        "status": "persisted",
+        "type": "decision",
+        "decision_id": str(decision.get("id") or ""),
+        "path": str(path),
+    }
+
+
+@mcp.tool()
 def compare_position_opportunity(
     position_id: str,
     opportunity_id: str,
@@ -182,12 +219,27 @@ def configure_mcp_sources(
     portfolio_loader: PortfolioLoader | None = None,
     opportunity_loader: OpportunityLoader | None = None,
     valuation_loader: ValuationLoader | None = None,
+    memory_manager: ObsidianMemoryManager | None = None,
 ) -> None:
     """Inject deterministic domain sources at the MCP composition boundary."""
-    global _portfolio_loader, _opportunity_loader, _valuation_loader
+    global _portfolio_loader, _opportunity_loader, _valuation_loader, _memory_manager
     _portfolio_loader = portfolio_loader
     _opportunity_loader = opportunity_loader
     _valuation_loader = valuation_loader
+    _memory_manager = memory_manager
+
+
+def _load_memory_manager() -> ObsidianMemoryManager:
+    if _memory_manager is not None:
+        return _memory_manager
+    vault = settings.obsidian_vault
+    if vault is None:
+        configured = os.getenv("B3_AGENT_OBSIDIAN_VAULT")
+        if configured:
+            vault = Path(configured).expanduser().resolve()
+    if vault is None:
+        raise RuntimeError("Obsidian vault is not configured")
+    return ObsidianMemoryManager(ObsidianKnowledgeStore(vault))
 
 
 def _load_portfolio_context() -> PortfolioContext:
