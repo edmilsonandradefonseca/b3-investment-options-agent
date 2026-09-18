@@ -4,6 +4,7 @@ from .instrument import InstrumentRepository
 from .market_data import MarketDataRepository
 from .option_contract import OptionContractRepository
 from .option_quote import OptionQuoteRepository
+from .transaction import TransactionRepository
 
 __all__ = [
     "DataSourceRepository",
@@ -12,4 +13,5 @@ __all__ = [
     "MarketDataRepository",
     "OptionContractRepository",
     "OptionQuoteRepository",
+    "TransactionRepository",
 ]

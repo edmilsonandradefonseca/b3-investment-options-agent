@@ -44,6 +44,24 @@ CREATE TABLE IF NOT EXISTS ingestion_runs (
     FOREIGN KEY (source_id) REFERENCES data_sources(source_id)
 );
 
+CREATE TABLE IF NOT EXISTS transactions (
+    transaction_id TEXT PRIMARY KEY,
+    executed_at TEXT NOT NULL,
+    action TEXT NOT NULL,
+    instrument_type TEXT NOT NULL,
+    ticker TEXT NOT NULL,
+    quantity REAL NOT NULL,
+    price REAL NOT NULL,
+    broker TEXT,
+    source_ref TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_transactions_executed_at
+    ON transactions(executed_at);
+
+CREATE INDEX IF NOT EXISTS idx_transactions_ticker
+    ON transactions(ticker);
+
 CREATE TABLE IF NOT EXISTS dataset_references (
     dataset_id TEXT PRIMARY KEY,
     dataset_name TEXT NOT NULL UNIQUE,
