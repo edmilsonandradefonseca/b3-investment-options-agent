@@ -89,10 +89,10 @@ def _valuation() -> ValuationRange:
     )
 
 
-def test_capability_contract_exposes_six_v31_tools():
+def test_capability_contract_exposes_v31_tools_and_memory_write():
     result = server.get_system_capabilities()
 
-    assert result["version"] == "0.4.0"
+    assert result["version"] == "0.5.0"
     assert result["tools"] == [
         "get_portfolio_context",
         "get_portfolio_intelligence",
@@ -100,6 +100,8 @@ def test_capability_contract_exposes_six_v31_tools():
         "get_valuation",
         "get_opportunities",
         "compare_position_opportunity",
+        "persist_insight",
+        "persist_decision",
     ]
     assert result["governance"]["orders_supported"] is False
 
