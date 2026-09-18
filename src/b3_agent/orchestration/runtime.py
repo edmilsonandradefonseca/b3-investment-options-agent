@@ -17,6 +17,7 @@ from b3_agent.knowledge.retrieval import ObsidianRetriever
 from b3_agent.llm.client import OpenAIResponsesClient
 from b3_agent.schemas.position import PortfolioContext
 from b3_agent.schemas.opportunity import OpportunitySet
+from b3_agent.portfolio.snapshot import load_active_snapshots
 
 from .orchestrator import configure_workflow
 from .workflow import build_workflow
@@ -53,7 +54,7 @@ def configure_default_workflow(*, vault_path: Path | None = None,
         risk_validator=RiskValidator(),
     )
 
-    deterministic_defaults: dict[str, Any] = {}
+    deterministic_defaults: dict[str, Any] = load_active_snapshots(settings.data_dir)
     if portfolio_context is not None:
         deterministic_defaults["portfolio_context"] = portfolio_context
     if opportunity_set is not None:
