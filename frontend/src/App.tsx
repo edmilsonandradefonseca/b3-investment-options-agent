@@ -32,7 +32,7 @@ function App() {
     setAsking(true);
     setAnswer("");
     try {
-      const response = await fetch(`${API_BASE}/orchestrate`, {
+      const response = await fetch(`${API_BASE}/v1/orchestrate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ task: question.trim(), context: { client: "desktop" } }),
