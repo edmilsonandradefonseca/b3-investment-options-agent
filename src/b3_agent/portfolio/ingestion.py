@@ -56,28 +56,29 @@ class BtgRendaVariavelLoader:
 
     def load(self, path: str | Path) -> PortfolioContext:
         workbook = load_workbook(Path(path), data_only=True, read_only=True)
-        if "Renda Variavel" not in workbook.sheetnames:
-            raise PortfolioIngestionError("Renda Variavel sheet not found")
-        rows = list(workbook["Renda Variavel"].iter_rows(values_only=True))
-        as_of = _statement_date(workbook)
-        positions: list[Position] = []
+        try:
+            if "Renda Variavel" not in workbook.sheetnames:
+                raise PortfolioIngestionError("Renda Variavel sheet not found")
+            rows = list(workbook["Renda Variavel"].iter_rows(values_only=True))
+            as_of = _statement_date(workbook)
+            positions: list[Position] = []
 
-        actions_start = _find_section(rows, "Posição > Ações")
-        for row in rows[actions_start + 2 :]:
-            ticker = _text(row[1])
-            if ticker.startswith("Total em Ações"):
-                break
-            if not ticker or ticker in {"Código", "Posição"} or _number(row[3]) in (None, 0):
-                continue
-            positions.append(Position(
-                position_id=f"btg:renda-variavel:{ticker}", ticker=ticker,
-                instrument_type="STOCK", quantity=_number(row[3]),
-                average_cost=_number(row[5]), market_price=_number(row[4]),
-                market_value=_number(row[6]), source_ref="BTG:Renda Variavel:Acoes",
-            ))
+            actions_start = _find_section(rows, "Posição > Ações")
+            for row in rows[actions_start + 2 :]:
+                    ticker = _text(row[1])
+                if ticker.startswith("Total em Ações"):
+                        break
+                if not ticker or ticker in {"Código", "Posição"} or _number(row[3]) in (None, 0):
+                        continue
+                    positions.append(Position(
+                        position_id=f"btg:renda-variavel:{ticker}", ticker=ticker,
+                        instrument_type="STOCK", quantity=_number(row[3]),
+                        average_cost=_number(row[5]), market_price=_number(row[4]),
+                        market_value=_number(row[6]), source_ref="BTG:Renda Variavel:Acoes",
+                ))
 
-        options_start = _find_section(rows, "Posição > Opções")
-        for row in rows[options_start + 2 :]:
+            options_start = _find_section(rows, "Posição > Opções")
+            for row in rows[options_start + 2 :]:
             ticker = _text(row[1])
             if ticker.startswith("Total em Opções"):
                 break
