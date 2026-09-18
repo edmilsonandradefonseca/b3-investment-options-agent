@@ -33,34 +33,37 @@ class OptionsTransactionLoader:
 
     def load(self, path: str | Path) -> tuple[OptionTransaction, ...]:
         workbook = load_workbook(Path(path), data_only=True, read_only=True)
-        sheet = workbook.active
-        rows = list(sheet.iter_rows(values_only=True))
-        if not rows:
-            raise OptionTransactionIngestionError("transaction workbook is empty")
+        try:
+            sheet = workbook.active
+            rows = list(sheet.iter_rows(values_only=True))
+            if not rows:
+                raise OptionTransactionIngestionError("transaction workbook is empty")
 
-        header = {str(value).strip(): index for index, value in enumerate(rows[0]) if value is not None}
-        required = {"Ativo", "Corretora", "Qtd.", "Custo Médio", "Custo Total"}
-        missing = required - header.keys()
-        if missing:
-            raise OptionTransactionIngestionError(f"missing columns: {sorted(missing)}")
+            header = {str(value).strip(): index for index, value in enumerate(rows[0]) if value is not None}
+            required = {"Ativo", "Corretora", "Qtd.", "Custo Médio", "Custo Total"}
+            missing = required - header.keys()
+            if missing:
+                raise OptionTransactionIngestionError(f"missing columns: {sorted(missing)}")
 
-        transactions: list[OptionTransaction] = []
-        for index, row in enumerate(rows[1:], start=2):
-            ticker = _text(row[header["Ativo"]])
-            if not ticker:
-                continue
-            quantity = _number(row[header["Qtd."]])
-            if quantity in (None, 0):
-                continue
-            transactions.append(
-                OptionTransaction(
-                    transaction_id=f"options-xlsx:{index}:{ticker}",
-                    option_ticker=ticker,
-                    broker=_text(row[header["Corretora"]]),
-                    quantity=quantity,
-                    average_cost=_number(row[header["Custo Médio"]]),
-                    total_cost=_number(row[header["Custo Total"]]),
-                    source_ref="Options Transactions XLSX",
+            transactions: list[OptionTransaction] = []
+            for index, row in enumerate(rows[1:], start=2):
+                ticker = _text(row[header["Ativo"]])
+                if not ticker:
+                    continue
+                quantity = _number(row[header["Qtd."]])
+                if quantity in (None, 0):
+                    continue
+                transactions.append(
+                    OptionTransaction(
+                        transaction_id=f"options-xlsx:{index}:{ticker}",
+                        option_ticker=ticker,
+                        broker=_text(row[header["Corretora"]]),
+                        quantity=quantity,
+                        average_cost=_number(row[header["Custo Médio"]]),
+                        total_cost=_number(row[header["Custo Total"]]),
+                        source_ref="Options Transactions XLSX",
+                    )
                 )
-            )
-        return tuple(transactions)
+            return tuple(transactions)
+        finally:
+            workbook.close()
