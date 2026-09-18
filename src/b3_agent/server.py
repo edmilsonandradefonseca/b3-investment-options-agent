@@ -188,21 +188,25 @@ def _replace_validated_upload(upload: UploadFile, filename: str, validator) -> d
 @app.post("/imports/portfolio")
 def import_portfolio(file: UploadFile = File(...)) -> dict[str, Any]:
     """Replace the authoritative BTG portfolio snapshot after validation."""
-    return _replace_validated_upload(
+    result = _replace_validated_upload(
         file,
         "portfolio.xlsx",
         lambda path: BtgRendaVariavelLoader().load(path),
     )
+    _configure_runtime.cache_clear()
+    return result
 
 
 @app.post("/imports/options")
 def import_options(file: UploadFile = File(...)) -> dict[str, Any]:
     """Replace the options transactions snapshot after validation."""
-    return _replace_validated_upload(
+    result = _replace_validated_upload(
         file,
         "options_transactions.xlsx",
         lambda path: OptionsTransactionLoader().load(path),
     )
+    _configure_runtime.cache_clear()
+    return result
 
 
 def _response_to_model(response: OrchestratorResponse) -> OrchestrateResponse:
