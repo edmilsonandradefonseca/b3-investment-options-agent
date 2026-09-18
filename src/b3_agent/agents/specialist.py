@@ -74,4 +74,4 @@ class PortfolioAnalysisAgent(SpecialistAgent):
 
 class OptionsAnalysisAgent(SpecialistAgent):
     agent_name = "options_analysis"
-    focus_keys = ("options_analysis", "opportunities", "action_candidates")
+    focus_keys = ("options_analysis", "options_transactions", "opportunities", "action_candidates")
