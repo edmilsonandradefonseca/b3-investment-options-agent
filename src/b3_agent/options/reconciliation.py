@@ -90,8 +90,8 @@ class OptionsReconciliationEngine:
         # Excel exports and brokerage notes can describe the same economic
         # trade with different transaction IDs. Do not merge either record
         # because Excel may omit date/note identity. Expose candidates for audit.
-        excel = [tx for tx in transactions if "OPTIONS TRANSACTIONS XLSX" in tx.source_ref.upper()]
-        notes = [tx for tx in transactions if "NOTACORRETAGEM" in tx.source_ref.upper()]
+        excel = [tx for tx in transactions if tx.source_type == "OPTIONS_XLSX"]
+        notes = [tx for tx in transactions if tx.source_type == "BROKERAGE_NOTE"]
         potential_cross_source_duplicates: list[tuple[str, str]] = []
         for left in excel:
             for right in notes:
