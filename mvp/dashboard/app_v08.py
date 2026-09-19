@@ -1,4 +1,4 @@
-"""B3 Investment Copilot Dashboard V0.7 — real-data analytical dashboard.
+"""B3 Investment Copilot Dashboard V0.8 — real-data analytical dashboard.
 
 The UI exposes deterministic information extracted from the loaded portfolio,
 option transaction ledger, contract registry and source manifest. It does not
@@ -15,7 +15,6 @@ from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 import streamlit as st
 
 from b3_agent.options.brokerage_notes import BrokerageNoteParser
@@ -405,12 +404,6 @@ with tabs[1]:
 
     # Build the performance dataset from deterministic lifecycle results.
     contract_records = registry.list_all()
-    contract_by_canonical = {}
-    for r in contract_records:
-        contract_by_canonical.setdefault(
-            r.option_ticker.split(" ")[0].upper(), r
-        )
-
     lifecycle_rows = []
     for x in build_option_lifecycles(
         transactions,
@@ -467,7 +460,6 @@ with tabs[1]:
             performance_df.loc[performance_df["Type"] == "CALL", "P&L"].sum()
         )
         wins = int((performance_df["P&L"] > 0).sum())
-        closed = int((performance_df["Closed qty"] > 0).sum())
         capital = assignment_capital
 
         m1, m2, m3, m4, m5 = st.columns(5)
@@ -497,9 +489,6 @@ with tabs[1]:
         st.plotly_chart(chart, use_container_width=True)
 
         st.markdown("#### Cumulative realized P&L")
-        tx_pnl = []
-        for x in performance_df.itertuples():
-            tx_pnl.append({"Ticker": x.Ticker, "P&L": x._4 if False else x[4]})
         cumulative = performance_df.copy()
         cumulative["Sequence"] = range(1, len(cumulative) + 1)
         cumulative["Cumulative P&L"] = cumulative["P&L"].cumsum()
