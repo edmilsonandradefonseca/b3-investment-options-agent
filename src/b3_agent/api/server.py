@@ -77,6 +77,85 @@ def _row(item) -> dict[str, Any]:
     }
 
 
+def _portfolio_snapshot_path() -> Path:
+    return Path(
+        os.getenv(
+            "B3_AGENT_PORTFOLIO_PATH",
+            str(ROOT / "data" / "imports" / "portfolio.xlsx"),
+        )
+    ).expanduser().resolve()
+
+
+def _portfolio_row(position) -> dict[str, Any]:
+    cost_basis = None
+    pnl = None
+    pnl_pct = None
+    if position.average_cost is not None:
+        cost_basis = position.quantity * position.average_cost
+        if position.market_value is not None:
+            pnl = position.market_value - cost_basis
+            if cost_basis:
+                pnl_pct = pnl / abs(cost_basis) * 100
+    return {
+        "ticker": position.ticker,
+        "instrument_type": position.instrument_type,
+        "quantity": position.quantity,
+        "average_cost": position.average_cost,
+        "market_price": position.market_price,
+        "market_value": position.market_value,
+        "pnl": pnl,
+        "pnl_pct": pnl_pct,
+        "option_type": position.option_type,
+        "underlying_ticker": position.underlying_ticker,
+        "strike": position.strike,
+        "expiration_date": _iso(position.expiration_date),
+    }
+
+
+@app.get("/api/portfolio")
+def portfolio_snapshot() -> dict[str, Any]:
+    path = _portfolio_snapshot_path()
+    if not path.exists():
+        return {
+            "status": "NO_SNAPSHOT",
+            "message": f"Portfolio snapshot not found: {path}",
+            "positions": [],
+        }
+
+    try:
+        portfolio = BtgRendaVariavelLoader().load(path)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Portfolio snapshot inválido: {exc}") from exc
+
+    rows = [_portfolio_row(position) for position in portfolio.positions]
+    stock_value = sum(
+        row["market_value"] or 0
+        for row in rows
+        if row["instrument_type"] == "STOCK"
+    )
+    option_value = sum(
+        row["market_value"] or 0
+        for row in rows
+        if row["instrument_type"] == "OPTION"
+    )
+    total_value = stock_value + option_value + portfolio.cash
+
+    return {
+        "status": "OK",
+        "as_of": _iso(portfolio.as_of),
+        "quality_status": portfolio.quality_status,
+        "cash": portfolio.cash,
+        "summary": {
+            "total_value": total_value,
+            "stock_value": stock_value,
+            "option_value": option_value,
+            "position_count": len(rows),
+        },
+        "positions": rows,
+        "source": str(path),
+    }
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
