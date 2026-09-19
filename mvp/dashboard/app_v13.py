@@ -894,8 +894,8 @@ with tabs[1]:
         )
 
     st.markdown("### Performance acumulada por papel")
-        if not confirmed.empty:
-            ranking = (
+    if not confirmed.empty:
+        ranking = (
                 confirmed.groupby("Underlying", as_index=False)
                 .agg(
                     PnL=("P&L", "sum"),
@@ -904,17 +904,17 @@ with tabs[1]:
                 )
                 .sort_values("PnL", ascending=False)
             )
-            st.dataframe(
-                ranking,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "PnL": st.column_config.NumberColumn("P&L", format="R$ %.2f"),
-                    "Premium": st.column_config.NumberColumn("Prêmio", format="R$ %.2f"),
-                },
-            )
+        st.dataframe(
+            ranking,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "PnL": st.column_config.NumberColumn("P&L", format="R$ %.2f"),
+                "Premium": st.column_config.NumberColumn("Prêmio", format="R$ %.2f"),
+            },
+        )
 
-        # Drill-down: selected underlying -> cumulative curve -> contracts -> trades.
+    # Drill-down: selected underlying -> cumulative curve -> contracts -> trades.
         st.markdown("### Drill-down")
         available = sorted(filtered["Underlying"].unique())
         if available:
