@@ -93,8 +93,53 @@ function Portfolio() {
   </main>;
 }
 
+
+function Options() {
+  const [underlying,setUnderlying]=useState("PETR4");
+  const [type,setType]=useState("Todas");
+  const [period,setPeriod]=useState("Desde maio/2026");
+  const [view,setView]=useState("Acumulado");
+  const [status,setStatus]=useState("Aguardando API de analytics");
+  async function refresh(){
+    setStatus("Consultando dados reais…");
+    try {
+      const r=await fetch(API_BASE+"/api/options/analytics?underlying="+encodeURIComponent(underlying)+"&type="+encodeURIComponent(type)+"&period="+encodeURIComponent(period));
+      if(!r.ok) throw new Error("endpoint de analytics ainda não conectado");
+      setStatus("Dados atualizados");
+    } catch { setStatus("API de analytics ainda não conectada — nenhum número foi inventado."); }
+  }
+  return <main className="workspace options-page">
+    <div className="workspace-head"><div><h1>Options Intelligence</h1><p>Resultado acumulado, rolagens e drill-down por papel.</p></div><span className="updated">{status}</span></div>
+    <section className="filters">
+      <label>Ativo<select value={underlying} onChange={e=>setUnderlying(e.target.value)}><option>PETR4</option><option>VALE3</option><option>ITUB4</option><option>Todos</option></select></label>
+      <label>Tipo<select value={type} onChange={e=>setType(e.target.value)}><option>Todas</option><option>CALL</option><option>PUT</option></select></label>
+      <label>Período<select value={period} onChange={e=>setPeriod(e.target.value)}><option>Desde maio/2026</option><option>Últimos 90 dias</option><option>2026</option><option>Todo o histórico</option></select></label>
+      <button className="primary-btn" onClick={refresh}>Atualizar análise</button>
+    </section>
+    <section className="cards">
+      <Metric title="P&L realizado acumulado" value="—" detail="Somente operações confirmadas" icon="Σ"/>
+      <Metric title="Prêmios recebidos" value="—" detail="Fluxo bruto de venda" icon="↓"/>
+      <Metric title="Rolagens" value="—" detail="Abertura → fechamento → nova abertura" icon="↻"/>
+      <Metric title="Resultado %" value="—" detail="Base de capital configurável" icon="%"/>
+    </section>
+    <section className="grid-two">
+      <Card title="P&L acumulado" action={<div className="range">{["Acumulado","Mensal","Por operação"].map(x=><button className={view===x?"on":""} onClick={()=>setView(x)} key={x}>{x}</button>)}</div>}>
+        <div className="analytics-empty"><strong>Gráfico aguardando dados reais</strong><span>Quando o endpoint de analytics estiver conectado, este painel mostrará a curva acumulada de {underlying} no período selecionado.</span></div>
+      </Card>
+      <Card title="Resultado por tipo"><div className="analytics-empty compact"><strong>PUT × CALL</strong><span>Comparação de P&L, prêmio, quantidade e retorno.</span></div></Card>
+    </section>
+    <Card title={underlying+" — Option Journey"}>
+      <div className="journey"><div className="journey-step"><b>1</b><span>Abertura</span></div><div className="journey-line"/><div className="journey-step"><b>2</b><span>Fechamento</span></div><div className="journey-line"/><div className="journey-step"><b>3</b><span>Rolagem</span></div><div className="journey-line"/><div className="journey-step"><b>4</b><span>Nova abertura</span></div></div>
+      <div className="table-empty">Selecione o ativo e período e conecte o endpoint de analytics para listar todas as transações, contratos e rolagens. <strong>Nenhuma operação é fabricada no frontend.</strong></div>
+    </Card>
+    <Card title="Drill-down das transações">
+      <table><thead><tr><th>Data</th><th>Contrato</th><th>Tipo</th><th>Lado</th><th>Qtd</th><th>Preço</th><th>Prêmio / Fluxo</th><th>Relação</th></tr></thead><tbody><tr><td colSpan={8} className="table-empty">Dados reais serão exibidos aqui a partir do ledger persistido.</td></tr></tbody></table>
+    </Card>
+  </main>
+}
+
 function Card({title,action,children}:{title:string;action?:ReactNode;children:ReactNode}){return <div className="panel"><div className="panel-title"><h2>{title}</h2>{action}</div>{children}</div>}
 
-function App(){const [page,setPage]=useState<Page>("Portfolio"); return <div className="app-shell"><header className="topbar"><div className="brand"><span className="brand-mark">▮▮▮</span><div><strong>B3 Investment Copilot</strong><small>Seu copiloto de investimentos com IA</small></div></div><div className="search">⌕ <span>Buscar ativos, estratégias ou fazer uma pergunta...</span><kbd>Ctrl K</kbd></div><div className="market"><span>IBOV <b>134.521</b> <i>+1,2%</i></span><span>DÓLAR <b>4,92</b> <em>-0,3%</em></span><span>PETR4 <b>37,20</b> <i>+2,1%</i></span><span className="bell">♧</span><span className="avatar">EF</span><b>Edmilson⌄</b></div></header><div className="body"><Sidebar page={page} setPage={setPage}/><div>{page==="Portfolio"?<Portfolio/>:<main className="workspace"><div className="workspace-head"><div><h1>{page}</h1><p>Workspace React preparado para o próximo módulo.</p></div></div><div className="panel placeholder"><h2>{page}</h2><p>O shell React já está pronto. Este módulo será conectado aos engines Python existentes sem duplicar a lógica de negócio.</p></div></main>}</div><Copilot setPage={setPage}/></div></div>}
+function App(){const [page,setPage]=useState<Page>("Portfolio"); return <div className="app-shell"><header className="topbar"><div className="brand"><span className="brand-mark">▮▮▮</span><div><strong>B3 Investment Copilot</strong><small>Seu copiloto de investimentos com IA</small></div></div><div className="search">⌕ <span>Buscar ativos, estratégias ou fazer uma pergunta...</span><kbd>Ctrl K</kbd></div><div className="market"><span>IBOV <b>134.521</b> <i>+1,2%</i></span><span>DÓLAR <b>4,92</b> <em>-0,3%</em></span><span>PETR4 <b>37,20</b> <i>+2,1%</i></span><span className="bell">♧</span><span className="avatar">EF</span><b>Edmilson⌄</b></div></header><div className="body"><Sidebar page={page} setPage={setPage}/><div>{page==="Portfolio"?<Portfolio/>:page==="Options"?<Options/>:<main className="workspace"><div className="workspace-head"><div><h1>{page}</h1><p>Workspace React preparado para o próximo módulo.</p></div></div><div className="panel placeholder"><h2>{page}</h2><p>O shell React já está pronto. Este módulo será conectado aos engines Python existentes sem duplicar a lógica de negócio.</p></div></main>}</div><Copilot setPage={setPage}/></div></div>}
 
 export default App;
