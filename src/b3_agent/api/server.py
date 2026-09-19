@@ -78,13 +78,18 @@ def _row(item) -> dict[str, Any]:
     }
 
 
-def _portfolio_snapshot_path() -> Path:
-    return Path(
-        os.getenv(
-            "B3_AGENT_PORTFOLIO_PATH",
-            str(ROOT / "data" / "imports" / "portfolio.xlsx"),
-        )
-    ).expanduser().resolve()
+def _portfolio_snapshot_path() -> Path | None:
+    # Keep the API on the same authoritative configuration used by Streamlit.
+    configured = os.getenv("B3_AGENT_PORTFOLIO_FILE", "").strip()
+    if configured:
+        return Path(configured).expanduser().resolve()
+
+    # Backward-compatible explicit API override; no guessed local file is used.
+    override = os.getenv("B3_AGENT_PORTFOLIO_PATH", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+
+    return None
 
 
 def _portfolio_row(position) -> dict[str, Any]:
@@ -116,10 +121,16 @@ def _portfolio_row(position) -> dict[str, Any]:
 @app.get("/api/portfolio")
 def portfolio_snapshot() -> dict[str, Any]:
     path = _portfolio_snapshot_path()
+    if path is None:
+        return {
+            "status": "NO_SNAPSHOT",
+            "message": "No BTG portfolio configured. Set B3_AGENT_PORTFOLIO_FILE to the same XLSX used by the Streamlit dashboard.",
+            "positions": [],
+        }
     if not path.exists():
         return {
             "status": "NO_SNAPSHOT",
-            "message": f"Portfolio snapshot not found: {path}",
+            "message": f"Portfolio file not found: {path}",
             "positions": [],
         }
 
