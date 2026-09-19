@@ -109,6 +109,8 @@ class BrokerageNoteParser:
                     as_of=trade_date,
                     source_ref=source_ref,
                     note_number=note_number,
+                    source_type="BROKERAGE_NOTE",
+                    source_id=note_number,
                 )
             )
 
