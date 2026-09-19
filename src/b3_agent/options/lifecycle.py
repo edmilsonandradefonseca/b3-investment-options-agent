@@ -13,15 +13,16 @@ class OptionContract:
     """Contract metadata required to classify an option at expiration."""
 
     option_ticker: str
-    expiration_date: date
+    expiration_date: date | None = None
     option_type: str | None = None
     strike: float | None = None
     underlying_ticker: str | None = None
+    contract_multiplier: float | None = None
 
 
 @dataclass(frozen=True)
 class OptionLifecycle:
-    """Deterministic lifecycle and realized P&L derived from transaction history."""
+    """Deterministic lifecycle and realized gross P&L derived from history."""
 
     option_ticker: str
     status: str
@@ -34,6 +35,9 @@ class OptionLifecycle:
     last_trade_date: date | datetime | None
     expiration_date: date | None = None
     expiry_state: str = "NOT_PROVIDED"
+    history_completeness: str = "UNKNOWN"
+    contract_metadata_quality: str = "MISSING"
+    pnl_basis: str = "GROSS_UNIT_PRICE"
 
 
 @dataclass
@@ -44,33 +48,30 @@ class _Lot:
 
 
 def _trade_date(transaction: OptionTransaction) -> date | datetime:
-    if transaction.as_of is None:
-        return date.min
-    return transaction.as_of
+    return transaction.as_of if transaction.as_of is not None else date.min
 
 
-def _pair_pnl(open_lot: _Lot, close_side: str, quantity: float, close_price: float | None) -> float | None:
+def _pair_pnl(
+    open_lot: _Lot,
+    close_side: str,
+    quantity: float,
+    close_price: float | None,
+) -> float | None:
     if open_lot.price is None or close_price is None:
         return None
-
     if open_lot.side == "BUY" and close_side == "SELL":
         return (close_price - open_lot.price) * quantity
-
     if open_lot.side == "SELL" and close_side == "BUY":
         return (open_lot.price - close_price) * quantity
-
     raise ValueError("opening and closing sides must be opposite")
 
 
 class OptionLifecycleEngine:
     """Reconstruct option lifecycle using FIFO matching of opposite-side trades.
 
-    Transaction quantity follows the project convention:
-    BUY is positive and SELL is negative.
-
-    This engine deliberately does not infer exercise/assignment from expiration
-    alone. When an expiration date has passed but no explicit exercise/expiry
-    outcome is available, the lifecycle is marked EXPIRED_UNRESOLVED.
+    The engine intentionally does not infer exercise/assignment from expiration
+    alone. It also does not apply a contract multiplier until that multiplier
+    has been explicitly sourced and the accounting convention is defined.
     """
 
     def build(
@@ -132,7 +133,7 @@ class OptionLifecycleEngine:
                 "ASSIGNED": "ASSIGNED",
             }[normalized_outcome]
             expiry_state = normalized_outcome
-        elif contract is not None:
+        elif contract is not None and contract.expiration_date is not None:
             check_date = evaluation_date or _trade_date(ordered[-1])
             if check_date >= contract.expiration_date and abs(net_quantity) > 0:
                 status = "EXPIRED_UNRESOLVED"
@@ -150,6 +151,26 @@ class OptionLifecycleEngine:
             status = "OPEN"
             expiry_state = "NOT_PROVIDED"
 
+        history_completeness = (
+            "COMPLETE"
+            if abs(net_quantity) == 0
+            else "PARTIAL_OR_OPEN"
+        )
+
+        metadata_values = (
+            contract.expiration_date if contract else None,
+            contract.option_type if contract else None,
+            contract.strike if contract else None,
+            contract.underlying_ticker if contract else None,
+        )
+        contract_metadata_quality = (
+            "COMPLETE"
+            if all(value is not None for value in metadata_values)
+            else "PARTIAL"
+            if any(value is not None for value in metadata_values)
+            else "MISSING"
+        )
+
         return OptionLifecycle(
             option_ticker=ticker,
             status=status,
@@ -162,6 +183,8 @@ class OptionLifecycleEngine:
             last_trade_date=ordered[-1].as_of,
             expiration_date=contract.expiration_date if contract else None,
             expiry_state=expiry_state,
+            history_completeness=history_completeness,
+            contract_metadata_quality=contract_metadata_quality,
         )
 
 
