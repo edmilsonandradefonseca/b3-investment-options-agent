@@ -15,10 +15,12 @@ import pandas as pd
 import streamlit as st
 
 from b3_agent.opportunity import OpportunityIntelligenceEngine
+from b3_agent.options.brokerage_notes import BrokerageNoteParser
 from b3_agent.options.reconciliation import OptionsReconciliationEngine
 from b3_agent.options.transactions import OptionsTransactionLoader
 from b3_agent.portfolio import PortfolioIntelligenceEngine
 from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
+from b3_agent.repositories.option_ledger import OptionTransactionLedger
 from b3_agent.repositories.portfolio import PortfolioRepository
 
 st.set_page_config(page_title="B3 Investment Copilot", page_icon="📊", layout="wide")
@@ -58,6 +60,14 @@ def _load_btg(uploaded_file):
         path.unlink(missing_ok=True)
 
 
+def _load_brokerage_note(uploaded_file):
+    path = _temp_path(uploaded_file)
+    try:
+        return BrokerageNoteParser().parse(path)
+    finally:
+        path.unlink(missing_ok=True)
+
+
 def _load_transactions(uploaded_file):
     path = _temp_path(uploaded_file)
     try:
@@ -83,6 +93,7 @@ for key, default in {
     "transactions": (),
     "btg_status": "Not loaded",
     "options_status": "Not loaded",
+    "ledger_status": "Not loaded",
     "load_error": None,
 }.items():
     st.session_state.setdefault(key, default)
@@ -98,6 +109,12 @@ with st.sidebar:
         type=["xlsx", "xlsm"],
         key="v06_options",
     )
+    note_files = st.file_uploader(
+        "Brokerage Notes (PDF)",
+        type=["pdf"],
+        accept_multiple_files=True,
+        key="v06_notes",
+    )
 
     if st.button("📥 LOAD DATA", type="primary", use_container_width=True):
         st.session_state.load_error = None
@@ -112,24 +129,33 @@ with st.sidebar:
             except Exception as exc:
                 st.session_state.btg_status = "✗ Load failed"
                 st.session_state.load_error = f"BTG: {exc}"
-        if options_file:
-            try:
-                st.session_state.transactions = _load_transactions(options_file)
-                st.session_state.options_status = (
-                    f"✓ Loaded — {len(st.session_state.transactions)} transactions"
-                )
+        try:
+            ledger = OptionTransactionLedger("data/option_transactions.sqlite3")
+            inserted = 0
+            if options_file:
+                inserted += ledger.append(_load_transactions(options_file))
                 loaded = True
-            except Exception as exc:
-                st.session_state.options_status = "✗ Load failed"
-                suffix = f" | Options: {exc}"
-                st.session_state.load_error = (st.session_state.load_error or "") + suffix
-        if not loaded:
+            for note_file in note_files or []:
+                inserted += ledger.append(_load_brokerage_note(note_file))
+                loaded = True
+            st.session_state.transactions = ledger.list_all()
+            st.session_state.options_status = (
+                f"✓ Ledger — {len(st.session_state.transactions)} transactions"
+            )
+            st.session_state.ledger_status = f"✓ Persisted — {inserted} new transactions"
+        except Exception as exc:
+            st.session_state.options_status = "✗ Ledger load failed"
+            st.session_state.load_error = (
+                (st.session_state.load_error or "") + f" | Ledger: {exc}"
+            )
+        if not loaded and not st.session_state.transactions:
             st.session_state.load_error = "Selecione pelo menos um arquivo Excel."
 
     st.divider()
     st.markdown("#### Data status")
     st.write(f"**BTG:** {st.session_state.btg_status}")
     st.write(f"**Options:** {st.session_state.options_status}")
+    st.write(f"**Ledger:** {st.session_state.ledger_status}")
     if st.session_state.load_error:
         st.error(st.session_state.load_error)
 
@@ -227,6 +253,8 @@ with tab_options:
 
         transaction_rows = [
             {
+                "Trade date": tx.as_of,
+                "Note": tx.note_number or "",
                 "Transaction ID": tx.transaction_id,
                 "Ticker": tx.option_ticker,
                 "Side": tx.side,
