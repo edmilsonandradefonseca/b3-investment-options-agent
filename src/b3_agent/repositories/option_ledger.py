@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import sqlite3
 from datetime import date, datetime
 from pathlib import Path
@@ -19,6 +20,21 @@ class OptionTransactionLedger:
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.path)
 
+    @staticmethod
+    def fingerprint(transaction: OptionTransaction) -> str:
+        """Stable economic fingerprint used to make repeated ingestion idempotent."""
+        values = (
+            transaction.option_ticker.strip().upper(),
+            transaction.broker.strip().upper(),
+            transaction.quantity,
+            transaction.average_cost,
+            transaction.total_cost,
+            transaction.as_of.isoformat() if transaction.as_of is not None else None,
+            transaction.note_number,
+        )
+        payload = "|".join("" if value is None else str(value) for value in values)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
     def _initialize(self) -> None:
         with self._connect() as connection:
             connection.execute(
@@ -32,10 +48,19 @@ class OptionTransactionLedger:
                     total_cost REAL,
                     as_of TEXT,
                     source_ref TEXT NOT NULL DEFAULT '',
-                    note_number TEXT
+                    note_number TEXT,
+                    fingerprint TEXT
                 )
                 """
             )
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(option_transactions)").fetchall()}
+            if "fingerprint" not in columns:
+                connection.execute("ALTER TABLE option_transactions ADD COLUMN fingerprint TEXT")
+            connection.execute("UPDATE option_transactions SET fingerprint = transaction_id WHERE fingerprint IS NULL")
+            connection.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_option_transactions_fingerprint
+                ON option_transactions(fingerprint)
+                """)
             connection.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_option_transactions_ticker
@@ -62,8 +87,8 @@ class OptionTransactionLedger:
                     """
                     INSERT OR IGNORE INTO option_transactions (
                         transaction_id, option_ticker, broker, quantity,
-                        average_cost, total_cost, as_of, source_ref, note_number
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        average_cost, total_cost, as_of, source_ref, note_number, fingerprint
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         transaction.transaction_id,
@@ -75,6 +100,7 @@ class OptionTransactionLedger:
                         self._as_text(transaction.as_of),
                         transaction.source_ref,
                         transaction.note_number,
+                        self.fingerprint(transaction),
                     ),
                 )
                 inserted += cursor.rowcount
