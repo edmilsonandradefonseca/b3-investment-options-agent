@@ -138,3 +138,40 @@ def test_partial_source_evidence_marks_history_partial() -> None:
         ),
     )
     assert result.history_coverage[0].completeness == "PARTIAL"
+
+
+def test_cross_source_duplicate_detection_uses_typed_provenance() -> None:
+    transactions = (
+        OptionTransaction(
+            "xlsx-1",
+            "EQTLV369",
+            "BTG",
+            -1000,
+            0.63,
+            -634.89,
+            as_of=date(2026, 9, 17),
+            source_ref="Options Transactions XLSX",
+            source_type="OPTIONS_XLSX",
+            source_id="options.xlsx",
+        ),
+        OptionTransaction(
+            "note-1",
+            "EQTLV369",
+            "BTG Pactual",
+            -1000,
+            0.63,
+            -634.89,
+            as_of=date(2026, 9, 17),
+            source_ref="BTG:NotaCorretagem:34515456",
+            note_number="34515456",
+            source_type="BROKERAGE_NOTE",
+            source_id="34515456",
+        ),
+    )
+
+    result = OptionsReconciliationEngine().reconcile(
+        transactions,
+        _portfolio("EQTLV369"),
+    )
+
+    assert result.potential_cross_source_duplicates == (("xlsx-1", "note-1"),)
