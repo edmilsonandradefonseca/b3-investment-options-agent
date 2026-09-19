@@ -308,10 +308,31 @@ with tab_options:
         reconciliation = OptionsReconciliationEngine().reconcile(transactions, context)
 
         st.markdown("#### Transaction history")
-        tc1, tc2, tc3 = st.columns(3)
+        tc1, tc2, tc3, tc4 = st.columns(4)
         tc1.metric("Transactions loaded", len(transactions))
         tc2.metric("Linked to current positions", len(reconciliation.current))
         tc3.metric("Historical only", len(reconciliation.historical_only))
+        tc4.metric("Potential duplicates", len(reconciliation.potential_cross_source_duplicates))
+
+        if reconciliation.potential_cross_source_duplicates:
+            st.markdown("#### Cross-source duplicate candidates")
+            duplicate_rows = [
+                {
+                    "Excel transaction": excel_id,
+                    "BTG note transaction": note_id,
+                    "Status": "REVIEW — not merged",
+                }
+                for excel_id, note_id in reconciliation.potential_cross_source_duplicates
+            ]
+            st.dataframe(
+                pd.DataFrame(duplicate_rows),
+                use_container_width=True,
+                hide_index=True,
+            )
+            st.caption(
+                "Candidatos são identificados por ticker, quantidade, preço e valor total. "
+                "O sistema não remove nem mescla registros automaticamente."
+            )
 
         transaction_rows = [
             {
