@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Iterable
 
+from b3_agent.options.identity import canonical_option_ticker
 from b3_agent.schemas.option_transaction import OptionTransaction
 
 
@@ -83,13 +84,20 @@ class OptionLifecycleEngine:
         if not ordered:
             raise ValueError("at least one transaction is required")
 
-        ticker = ordered[0].option_ticker
-        if any(tx.option_ticker != ticker for tx in ordered):
-            raise ValueError("all transactions must belong to the same option ticker")
+        ticker = canonical_option_ticker(ordered[0].option_ticker)
+        if any(canonical_option_ticker(tx.option_ticker) != ticker for tx in ordered):
+            raise ValueError("all transactions must belong to the same canonical option ticker")
+
+        # Contract metadata may come from the current BTG portfolio, whose
+        # source notation can include a market suffix (e.g. "ON"/"PN").
+        # Lifecycle identity is canonical, so accept either representation.
+        effective_contract = contract
+        if contract is not None and canonical_option_ticker(contract.option_ticker) != ticker:
+            raise ValueError("contract does not belong to the same canonical option ticker")
 
         lots: deque[_Lot] = deque()
         realized_pnl = 0.0
-        multiplier = contract.contract_multiplier if contract and contract.contract_multiplier is not None else 1.0
+        multiplier = effective_contract.contract_multiplier if effective_contract and effective_contract.contract_multiplier is not None else 1.0
         realized_has_unpriced = False
         opened_quantity = 0.0
         closed_quantity = 0.0
@@ -155,9 +163,9 @@ class OptionLifecycleEngine:
                 "ASSIGNED": "ASSIGNED",
             }[normalized_outcome]
             expiry_state = normalized_outcome
-        elif contract is not None and contract.expiration_date is not None:
+        elif effective_contract is not None and effective_contract.expiration_date is not None:
             check_date = evaluation_date or _trade_date(ordered[-1])
-            if check_date >= contract.expiration_date and abs(net_quantity) > 0:
+            if check_date >= effective_contract.expiration_date and abs(net_quantity) > 0:
                 status = "EXPIRED_UNRESOLVED"
                 expiry_state = "EXPIRED_UNRESOLVED"
             elif abs(net_quantity) == 0:
@@ -185,10 +193,10 @@ class OptionLifecycleEngine:
             history_completeness = "PARTIAL_OR_OPEN"
 
         metadata_values = (
-            contract.expiration_date if contract else None,
-            contract.option_type if contract else None,
-            contract.strike if contract else None,
-            contract.underlying_ticker if contract else None,
+            effective_contract.expiration_date if effective_contract else None,
+            effective_contract.option_type if effective_contract else None,
+            effective_contract.strike if effective_contract else None,
+            effective_contract.underlying_ticker if effective_contract else None,
         )
         contract_metadata_quality = (
             "COMPLETE"
@@ -208,12 +216,12 @@ class OptionLifecycleEngine:
             realized_pnl=None if realized_has_unpriced else round(realized_pnl, 2),
             first_trade_date=ordered[0].as_of,
             last_trade_date=ordered[-1].as_of,
-            expiration_date=contract.expiration_date if contract else None,
+            expiration_date=effective_contract.expiration_date if effective_contract else None,
             expiry_state=expiry_state,
             history_completeness=history_completeness,
             contract_metadata_quality=contract_metadata_quality,
             pnl_basis="GROSS_CONTRACT_VALUE" if multiplier != 1.0 else "GROSS_UNIT_PRICE",
-            contract_multiplier=contract.contract_multiplier if contract else None,
+            contract_multiplier=effective_contract.contract_multiplier if effective_contract else None,
         )
 
 
@@ -227,13 +235,22 @@ def build_option_lifecycles(
 
     grouped: dict[str, list[OptionTransaction]] = {}
     for transaction in transactions:
-        grouped.setdefault(transaction.option_ticker, []).append(transaction)
+        canonical_ticker = canonical_option_ticker(transaction.option_ticker)
+        grouped.setdefault(canonical_ticker, []).append(transaction)
 
     engine = OptionLifecycleEngine()
     return tuple(
         engine.build(
             rows,
-            contract=(contracts or {}).get(ticker),
+            contract=(contracts or {}).get(ticker)
+            or next(
+                (
+                    value
+                    for key, value in (contracts or {}).items()
+                    if canonical_option_ticker(key) == ticker
+                ),
+                None,
+            ),
             evaluation_date=evaluation_date,
         )
         for ticker, rows in sorted(grouped.items())
