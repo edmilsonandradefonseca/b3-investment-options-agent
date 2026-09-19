@@ -6,6 +6,7 @@ from typing import Iterable
 
 from b3_agent.options.identity import canonical_option_ticker
 from b3_agent.options.lifecycle import OptionContract, OptionLifecycleEngine
+from b3_agent.options.market_conventions import infer_b3_option_type
 from b3_agent.schemas.option_transaction import OptionTransaction
 
 
@@ -139,7 +140,7 @@ class OptionPerformanceEngine:
                     capital_basis = round(
                         short_qty * contract.strike * multiplier, 2
                     )
-                    if (contract.option_type or "").upper() == "PUT":
+                    if (option_type or "").upper() == "PUT":
                         return_basis = "CASH_SECURED_PUT_STRIKE_NOTIONAL"
 
             realized_pnl = lifecycle.realized_pnl
@@ -153,11 +154,13 @@ class OptionPerformanceEngine:
             last = _trade_date(lifecycle.last_trade_date)
             days = (last - first).days + 1 if first is not None and last is not None else None
 
+            option_type = (contract.option_type if contract else None) or infer_b3_option_type(ticker)
+
             result.append(
                 OptionTradePerformance(
                     option_ticker=lifecycle.option_ticker,
                     underlying_ticker=contract.underlying_ticker if contract else None,
-                    option_type=contract.option_type if contract else None,
+                    option_type=option_type,
                     first_trade_date=lifecycle.first_trade_date,
                     last_trade_date=lifecycle.last_trade_date,
                     status=lifecycle.status,
