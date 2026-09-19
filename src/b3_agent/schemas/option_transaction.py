@@ -17,6 +17,8 @@ class OptionTransaction:
     as_of: date | datetime | None = None
     source_ref: str = ""
     note_number: str | None = None
+    source_type: str = "UNKNOWN"
+    source_id: str | None = None
 
     @property
     def side(self) -> str:
