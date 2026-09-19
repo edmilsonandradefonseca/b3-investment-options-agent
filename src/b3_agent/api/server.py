@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from b3_agent.options.identity import canonical_option_ticker
 from b3_agent.options.lifecycle import OptionContract
+from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
 from b3_agent.options.performance import OptionPerformanceEngine
 from b3_agent.repositories.option_contract_registry import OptionContractRegistry
 from b3_agent.repositories.option_ledger import OptionTransactionLedger
