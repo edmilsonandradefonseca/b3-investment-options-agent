@@ -187,12 +187,38 @@ with st.sidebar:
         try:
             ledger = OptionTransactionLedger(LEDGER_PATH)
             inserted = 0
+            manifest = SourceManifestRepository(MANIFEST_PATH)
             if options_file:
-                inserted += ledger.append(_load_transactions(options_file))
+                option_transactions = _load_transactions(options_file)
+                inserted += ledger.append(option_transactions)
+                manifest.upsert(SourceManifestRecord(
+                    source_fingerprint=hashlib.sha256(options_file.getvalue()).hexdigest(),
+                    source_type="OPTIONS_XLSX",
+                    source_id=options_file.name,
+                    source_ref="Options Transactions XLSX",
+                    file_name=options_file.name,
+                    imported_at=datetime.now(),
+                    record_count=len(option_transactions),
+                ))
                 loaded = True
             for note_file in note_files or []:
-                inserted += ledger.append(_load_brokerage_note(note_file))
+                note_transactions = _load_brokerage_note(note_file)
+                inserted += ledger.append(note_transactions)
+                note_number = note_transactions[0].note_number if note_transactions else note_file.name
+                trade_dates = [tx.as_of for tx in note_transactions if tx.as_of is not None]
+                manifest.upsert(SourceManifestRecord(
+                    source_fingerprint=hashlib.sha256(note_file.getvalue()).hexdigest(),
+                    source_type="BROKERAGE_NOTE",
+                    source_id=note_number or note_file.name,
+                    source_ref=f"BTG:NotaCorretagem:{note_number}" if note_number else note_file.name,
+                    file_name=note_file.name,
+                    imported_at=datetime.now(),
+                    record_count=len(note_transactions),
+                    coverage_start=min(trade_dates) if trade_dates else None,
+                    coverage_end=max(trade_dates) if trade_dates else None,
+                ))
                 loaded = True
+            st.session_state.source_manifest = manifest.list_all()
             if st.session_state.context is not None:
                 registry = OptionContractRegistry(CONTRACT_REGISTRY_PATH)
                 records = []
