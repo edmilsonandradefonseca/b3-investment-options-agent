@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState, type ReactNode } from "react";
 
 type Page = "Portfolio" | "Options" | "Opportunities" | "Portfolio Intelligence" | "Knowledge";
 type Position = { ticker:string; qty:string; avg:number; price:number; value:number; pnl:number; pct:number };
@@ -67,7 +67,7 @@ function Portfolio() {
   const [range,setRange]=useState("1M");
   const points=useMemo(()=>history.map((v,i)=>({v,i})),[]);
   const min=Math.min(...history),max=Math.max(...history);
-  const poly=points.map(p=>((p.i/(points.length-1))*100).toFixed(1)+","+((max-p.v)/(max-min)*80+10).toFixed(1)).join(" ");
+  const poly=points.map(p=>((p.i/(points.length-1))*600).toFixed(1)+","+((max-p.v)/(max-min)*180+20).toFixed(1)).join(" L ");
   return <main className="workspace"><div className="workspace-head"><div><h1>Olá, Edmilson! 👋</h1><p>Aqui está a visão geral da sua carteira.</p></div><span className="updated">◷ Atualizado em 18/09/2026 10:24 &nbsp; ↻</span></div>
     <section className="cards">
       <Metric title="Valor Total" value={money(352480)} detail="▲ +2,34% (+R$ 8.054)" icon="↗"/>
@@ -93,7 +93,7 @@ function Portfolio() {
   </main>;
 }
 
-function Card({title,action,children}:{title:string;action?:React.ReactNode;children:React.ReactNode}){return <div className="panel"><div className="panel-title"><h2>{title}</h2>{action}</div>{children}</div>}
+function Card({title,action,children}:{title:string;action?:ReactNode;children:ReactNode}){return <div className="panel"><div className="panel-title"><h2>{title}</h2>{action}</div>{children}</div>}
 
 function App(){const [page,setPage]=useState<Page>("Portfolio"); return <div className="app-shell"><header className="topbar"><div className="brand"><span className="brand-mark">▮▮▮</span><div><strong>B3 Investment Copilot</strong><small>Seu copiloto de investimentos com IA</small></div></div><div className="search">⌕ <span>Buscar ativos, estratégias ou fazer uma pergunta...</span><kbd>Ctrl K</kbd></div><div className="market"><span>IBOV <b>134.521</b> <i>+1,2%</i></span><span>DÓLAR <b>4,92</b> <em>-0,3%</em></span><span>PETR4 <b>37,20</b> <i>+2,1%</i></span><span className="bell">♧</span><span className="avatar">EF</span><b>Edmilson⌄</b></div></header><div className="body"><Sidebar page={page} setPage={setPage}/><div>{page==="Portfolio"?<Portfolio/>:<main className="workspace"><div className="workspace-head"><div><h1>{page}</h1><p>Workspace React preparado para o próximo módulo.</p></div></div><div className="panel placeholder"><h2>{page}</h2><p>O shell React já está pronto. Este módulo será conectado aos engines Python existentes sem duplicar a lógica de negócio.</p></div></main>}</div><Copilot setPage={setPage}/></div></div>}
 
