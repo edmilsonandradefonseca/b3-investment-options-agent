@@ -1,10 +1,25 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date, datetime
 
 from b3_agent.options.identity import canonical_option_ticker
 from b3_agent.schemas.option_transaction import OptionTransaction
 from b3_agent.schemas.position import PortfolioContext
+
+
+@dataclass(frozen=True)
+class OptionHistoryCoverage:
+    """Evidence about how much transaction history is available for one option."""
+
+    option_ticker: str
+    first_trade_date: date | datetime | None
+    last_trade_date: date | datetime | None
+    transaction_count: int
+    net_historical_quantity: float
+    current_position_quantity: float | None
+    position_alignment: str
+    completeness: str = "UNKNOWN"
 
 
 @dataclass(frozen=True)
@@ -17,6 +32,7 @@ class OptionReconciliation:
     potential_cross_source_duplicates: tuple[tuple[str, str], ...] = ()
     btg_position_ids: tuple[str, ...] = ()
     quality_status: str = "VALIDATED"
+    history_coverage: tuple[OptionHistoryCoverage, ...] = ()
 
 
 class OptionsReconciliationEngine:
@@ -91,6 +107,37 @@ class OptionsReconciliationEngine:
             # future reconciliation contract; do not downgrade quality here.
             _ = net_quantity
 
+        coverage_rows: list[OptionHistoryCoverage] = []
+        grouped: dict[str, list[OptionTransaction]] = {}
+        for transaction in transactions:
+            grouped.setdefault(canonical_option_ticker(transaction.option_ticker), []).append(transaction)
+
+        for ticker, rows in sorted(grouped.items()):
+            position = btg_options.get(ticker)
+            dates = [tx.as_of for tx in rows if tx.as_of is not None]
+            net_quantity = sum(tx.quantity for tx in rows)
+            current_quantity = position.quantity if position is not None else None
+            if position is None:
+                alignment = "NO_CURRENT_POSITION"
+            elif net_quantity == current_quantity:
+                alignment = "ALIGNED"
+            else:
+                alignment = "DIFFERENT"
+
+            # Quantity alignment is evidence, not proof, of complete history.
+            coverage_rows.append(
+                OptionHistoryCoverage(
+                    option_ticker=ticker,
+                    first_trade_date=min(dates) if dates else None,
+                    last_trade_date=max(dates) if dates else None,
+                    transaction_count=len(rows),
+                    net_historical_quantity=net_quantity,
+                    current_position_quantity=current_quantity,
+                    position_alignment=alignment,
+                    completeness="UNKNOWN",
+                )
+            )
+
         return OptionReconciliation(
             current=tuple(current),
             historical_only=tuple(historical_only),
@@ -98,4 +145,5 @@ class OptionsReconciliationEngine:
             potential_cross_source_duplicates=tuple(potential_cross_source_duplicates),
             btg_position_ids=tuple(dict.fromkeys(btg_position_ids)),
             quality_status="VALIDATED",
+            history_coverage=tuple(coverage_rows),
         )
