@@ -90,6 +90,17 @@ function Portfolio() {
   const summary=data?.summary;
   const total=summary?.total_value??0;
   const stockPct=total?((summary?.stock_value??0)/total*100):0;
+  const longOptionValue=positions.filter(p=>p.instrument_type==="OPTION" && p.quantity>0).reduce((s,p)=>s+Math.abs(p.market_value??0),0);
+  const shortOptionValue=positions.filter(p=>p.instrument_type==="OPTION" && p.quantity<0).reduce((s,p)=>s+Math.abs(p.market_value??0),0);
+  const allocationItems=[
+    {label:"Ações",value:summary?.stock_value??0,css:"#1684ff"},
+    {label:"Opções (Long)",value:longOptionValue,css:"#19d59a"},
+    {label:"Opções (Short)",value:shortOptionValue,css:"#ff9d4d"},
+    {label:"Cash",value:Math.max(data?.cash??0,0),css:"#8a9bad"},
+  ].filter(x=>x.value>0);
+  const allocationTotal=allocationItems.reduce((s,x)=>s+x.value,0);
+  let cursor=0;
+  const donutStops=allocationItems.map(x=>{const startPct=allocationTotal?cursor/allocationTotal*100:0; cursor+=x.value; const endPct=allocationTotal?cursor/allocationTotal*100:0; return x.css+" "+startPct+"% "+endPct+"%";}).join(",");
   const optionPct=total?((summary?.option_value??0)/total*100):0;
 
   return <main className="workspace">
@@ -104,10 +115,9 @@ function Portfolio() {
     <section className="grid-two">
       <Card title="Composição da Carteira">
         <div className="allocation">
-          <div className="donut"><div className="donut-hole"><b>{money(total)}</b><span>carteira</span></div></div>
+          <div className="donut" style={{background:allocationTotal?("conic-gradient("+donutStops+")"):"#163951"}}><div className="donut-hole"><b>{money(allocationTotal)}</b><span>exposição bruta</span></div></div>
           <div className="legend">
-            <div><i style={{background:"#1684ff"}}/><span>Ações</span><b>{stockPct.toFixed(1).replace(".",",")}%</b></div>
-            <div><i style={{background:"#19d59a"}}/><span>Opções</span><b>{optionPct.toFixed(1).replace(".",",")}%</b></div>
+            {allocationItems.map(item=><div key={item.label}><i style={{background:item.css}}/><span>{item.label}</span><b>{(allocationTotal?item.value/allocationTotal*100:0).toFixed(1).replace(".",",")}%</b></div>)}
           </div>
         </div>
       </Card>
