@@ -123,6 +123,15 @@ class OptionLifecycleEngine:
             if normalized_outcome not in {"WORTHLESS", "EXERCISED", "ASSIGNED"}:
                 raise ValueError("expiry_outcome must be WORTHLESS, EXERCISED or ASSIGNED")
 
+            # Exercise/assignment terminates the option leg, but the
+            # underlying economic result belongs to the resulting stock
+            # transaction. Therefore this lifecycle does not invent option P&L
+            # for these outcomes.
+            if normalized_outcome == "EXERCISED" and net_quantity <= 0:
+                raise ValueError("EXERCISED requires a net long option position")
+            if normalized_outcome == "ASSIGNED" and net_quantity >= 0:
+                raise ValueError("ASSIGNED requires a net short option position")
+
             # A worthless expiry closes the remaining economic position without
             # an opposite trade. For gross unit-price P&L, the option premium
             # is realized at expiry: a short position keeps the premium
