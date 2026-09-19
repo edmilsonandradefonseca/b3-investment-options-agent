@@ -38,6 +38,7 @@ class OptionLifecycle:
     history_completeness: str = "UNKNOWN"
     contract_metadata_quality: str = "MISSING"
     pnl_basis: str = "GROSS_UNIT_PRICE"
+    contract_multiplier: float | None = None
 
 
 @dataclass
@@ -87,6 +88,7 @@ class OptionLifecycleEngine:
 
         lots: deque[_Lot] = deque()
         realized_pnl = 0.0
+        multiplier = contract.contract_multiplier if contract and contract.contract_multiplier is not None else 1.0
         realized_has_unpriced = False
         opened_quantity = 0.0
         closed_quantity = 0.0
@@ -102,7 +104,7 @@ class OptionLifecycleEngine:
                 if pnl is None:
                     realized_has_unpriced = True
                 else:
-                    realized_pnl += pnl
+                    realized_pnl += pnl * multiplier
                 lot.quantity -= matched
                 remaining -= matched
                 closed_quantity += matched
@@ -142,9 +144,9 @@ class OptionLifecycleEngine:
                         realized_has_unpriced = True
                         continue
                     if lot.side == "SELL":
-                        realized_pnl += lot.price * lot.quantity
+                        realized_pnl += lot.price * lot.quantity * multiplier
                     else:
-                        realized_pnl -= lot.price * lot.quantity
+                        realized_pnl -= lot.price * lot.quantity * multiplier
 
             status = {
                 "WORTHLESS": "EXPIRED_WORTHLESS",
@@ -202,6 +204,8 @@ class OptionLifecycleEngine:
             expiry_state=expiry_state,
             history_completeness=history_completeness,
             contract_metadata_quality=contract_metadata_quality,
+            pnl_basis="GROSS_CONTRACT_VALUE" if multiplier != 1.0 else "GROSS_UNIT_PRICE",
+            contract_multiplier=contract.contract_multiplier if contract else None,
         )
 
 
