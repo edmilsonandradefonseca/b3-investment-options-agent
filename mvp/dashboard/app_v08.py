@@ -19,6 +19,7 @@ import streamlit as st
 
 from b3_agent.options.brokerage_notes import BrokerageNoteParser
 from b3_agent.options.lifecycle import OptionContract, build_option_lifecycles
+from b3_agent.options.performance import OptionPerformanceEngine
 from b3_agent.options.reconciliation import (
     OptionsReconciliationEngine,
     TransactionSourceCoverage,
@@ -402,120 +403,175 @@ with tabs[1]:
     st.subheader("Options Intelligence")
     st.caption("Visão interativa de resultado, fluxo, capital e risco. Clique nas barras para investigar um papel.")
 
-    # Build the performance dataset from deterministic lifecycle results.
-    contract_records = registry.list_all()
-    lifecycle_rows = []
-    for x in build_option_lifecycles(
+    # Build a BI-ready performance model from deterministic lifecycle results.
+    contracts = {
+        r.option_ticker: OptionContract(
+            option_ticker=r.option_ticker,
+            expiration_date=r.expiration_date,
+            option_type=r.option_type,
+            strike=r.strike,
+            underlying_ticker=r.underlying_ticker,
+            contract_multiplier=r.contract_multiplier,
+        )
+        for r in registry.list_all()
+        if r.expiration_date is not None
+    }
+    performance_engine = OptionPerformanceEngine()
+    performances = performance_engine.build(
         transactions,
-        contracts={
-            r.option_ticker: OptionContract(
-                option_ticker=r.option_ticker,
-                expiration_date=r.expiration_date,
-                option_type=r.option_type,
-                strike=r.strike,
-                underlying_ticker=r.underlying_ticker,
-                contract_multiplier=r.contract_multiplier,
-            )
-            for r in contract_records
-            if r.expiration_date is not None
-        },
+        contracts=contracts,
         evaluation_date=context.as_of,
-    ):
-        matching = next(
-            (
-                r for r in contract_records
-                if r.option_ticker == x.option_ticker
-                or r.option_ticker.split(" ")[0].upper() == x.option_ticker
-            ),
-            None,
-        )
-        lifecycle_rows.append(
-            {
-                "Ticker": x.option_ticker,
-                "Underlying": matching.underlying_ticker if matching else "N/A",
-                "Type": (matching.option_type if matching else "UNKNOWN"),
-                "P&L": x.realized_pnl or 0.0,
-                "Status": x.status,
-                "Closed qty": x.closed_quantity,
-                "History": x.history_completeness,
-            }
-        )
-    performance_df = pd.DataFrame(lifecycle_rows)
+    )
+    aggregates = performance_engine.aggregate_by_underlying(performances)
 
-    if not performance_df.empty:
-        # Only realized lifecycle P&L is presented as realized result.
-        by_underlying = (
-            performance_df.groupby(["Underlying", "Type"], dropna=False)["P&L"]
-            .sum()
-            .reset_index()
+    if performances:
+        performance_df = pd.DataFrame(
+            [
+                {
+                    "Ticker": x.option_ticker,
+                    "Underlying": x.underlying_ticker or "UNKNOWN",
+                    "Type": (x.option_type or "UNKNOWN").upper(),
+                    "P&L": x.realized_pnl,
+                    "Premium received": x.premium_received,
+                    "Premium paid": x.premium_paid,
+                    "Capital basis": x.capital_basis,
+                    "Return %": x.return_pct,
+                    "Status": x.status,
+                    "First trade": x.first_trade_date,
+                    "Last trade": x.last_trade_date,
+                    "Days": x.days_in_trade,
+                    "Transactions": x.transaction_count,
+                    "History": x.history_completeness,
+                    "Strike": x.strike,
+                }
+                for x in performances
+            ]
         )
-        by_underlying["Type"] = by_underlying["Type"].fillna("UNKNOWN").str.upper()
-        by_underlying["Underlying"] = by_underlying["Underlying"].fillna("UNKNOWN")
+        aggregate_df = pd.DataFrame(
+            [
+                {
+                    "Underlying": x.underlying_ticker,
+                    "P&L": x.realized_pnl,
+                    "PUT P&L": x.put_pnl,
+                    "CALL P&L": x.call_pnl,
+                    "Premium": x.premium_received,
+                    "Capital": x.capital_basis,
+                    "Return %": x.return_pct,
+                    "Operations": x.lifecycle_count,
+                    "Wins": x.profitable_lifecycles,
+                    "Losses": x.losing_lifecycles,
+                }
+                for x in aggregates
+            ]
+        )
 
-        realized_total = float(performance_df["P&L"].sum())
-        put_result = float(
-            performance_df.loc[performance_df["Type"] == "PUT", "P&L"].sum()
-        )
-        call_result = float(
-            performance_df.loc[performance_df["Type"] == "CALL", "P&L"].sum()
-        )
-        wins = int((performance_df["P&L"] > 0).sum())
-        capital = assignment_capital
-
+        realized_total = float(performance_df["P&L"].fillna(0).sum())
+        put_result = float(performance_df.loc[performance_df["Type"] == "PUT", "P&L"].fillna(0).sum())
+        call_result = float(performance_df.loc[performance_df["Type"] == "CALL", "P&L"].fillna(0).sum())
+        premium_total = float(performance_df["Premium received"].sum())
+        capital_total = float(performance_df["Capital basis"].fillna(0).sum())
+        returns = performance_df["Return %"].dropna()
         m1, m2, m3, m4, m5 = st.columns(5)
         m1.metric("Realized option P&L", f"R$ {realized_total:,.2f}")
         m2.metric("PUT P&L", f"R$ {put_result:,.2f}")
         m3.metric("CALL P&L", f"R$ {call_result:,.2f}")
-        m4.metric("Profitable lifecycles", f"{wins}/{len(performance_df)}")
-        m5.metric("Assignment capital", f"R$ {capital:,.2f}")
+        m4.metric("Premium received", f"R$ {premium_total:,.2f}")
+        m5.metric("Return basis", f"{returns.mean():.2f}%" if not returns.empty else "N/A")
 
         st.markdown("#### Result by underlying")
         chart = px.bar(
-            by_underlying.sort_values("P&L"),
+            aggregate_df.sort_values("P&L"),
             x="P&L",
             y="Underlying",
-            color="Type",
+            color="Underlying",
             orientation="h",
-            barmode="group",
-            hover_data=["Type", "P&L"],
+            hover_data=["PUT P&L", "CALL P&L", "Premium", "Return %", "Operations"],
         )
         chart.update_layout(
             height=480,
             margin=dict(l=20, r=20, t=20, b=20),
-            legend_title_text="Option type",
+            showlegend=False,
             xaxis_title="Realized P&L (R$)",
             yaxis_title="",
         )
         st.plotly_chart(chart, use_container_width=True)
 
-        st.markdown("#### Cumulative realized P&L")
-        cumulative = performance_df.copy()
-        cumulative["Sequence"] = range(1, len(cumulative) + 1)
-        cumulative["Cumulative P&L"] = cumulative["P&L"].cumsum()
-        line = px.line(
-            cumulative,
-            x="Sequence",
-            y="Cumulative P&L",
-            markers=True,
-            hover_data=["Ticker", "Underlying", "Type", "Status", "P&L"],
+        st.markdown("#### PUT × CALL by underlying")
+        type_long = pd.concat(
+            [
+                aggregate_df[["Underlying", "PUT P&L"]].rename(columns={"PUT P&L": "P&L"}).assign(Type="PUT"),
+                aggregate_df[["Underlying", "CALL P&L"]].rename(columns={"CALL P&L": "P&L"}).assign(Type="CALL"),
+            ],
+            ignore_index=True,
         )
-        line.update_layout(height=360, margin=dict(l=20, r=20, t=20, b=20))
-        st.plotly_chart(line, use_container_width=True)
+        type_chart = px.bar(
+            type_long,
+            x="Underlying",
+            y="P&L",
+            color="Type",
+            barmode="group",
+            hover_data=["P&L"],
+        )
+        type_chart.update_layout(height=420, margin=dict(l=20, r=20, t=20, b=20))
+        st.plotly_chart(type_chart, use_container_width=True)
+
+        st.markdown("#### Monthly realized P&L")
+        monthly_rows = performance_df.dropna(subset=["Last trade", "P&L"]).copy()
+        if not monthly_rows.empty:
+            monthly_rows["Month"] = pd.to_datetime(monthly_rows["Last trade"]).dt.to_period("M").astype(str)
+            monthly = monthly_rows.groupby("Month", as_index=False)["P&L"].sum()
+            monthly_chart = px.line(monthly, x="Month", y="P&L", markers=True)
+            monthly_chart.update_layout(height=360, margin=dict(l=20, r=20, t=20, b=20))
+            st.plotly_chart(monthly_chart, use_container_width=True)
+
+            monthly_pivot = (
+                monthly_rows.groupby(["Month", "Underlying"], as_index=False)["P&L"].sum()
+                .pivot(index="Month", columns="Underlying", values="P&L")
+                .fillna(0)
+            )
+            heat = px.imshow(
+                monthly_pivot,
+                aspect="auto",
+                color_continuous_scale="RdYlGn",
+                labels={"x": "Underlying", "y": "Month", "color": "P&L"},
+            )
+            heat.update_layout(height=420, margin=dict(l=20, r=20, t=20, b=20))
+            st.plotly_chart(heat, use_container_width=True)
+
+        st.markdown("#### Performance table")
+        st.dataframe(
+            aggregate_df.sort_values("P&L", ascending=False),
+            use_container_width=True,
+            hide_index=True,
+        )
 
         st.markdown("#### Drill-down")
         selected = st.selectbox(
             "Selecione o papel",
-            sorted(by_underlying["Underlying"].unique()),
+            sorted(aggregate_df["Underlying"].unique()),
             key="options_underlying_drilldown",
         )
         detail = performance_df[performance_df["Underlying"] == selected].copy()
-        d1, d2, d3, d4 = st.columns(4)
-        d1.metric("P&L", f"R$ {detail['P&L'].sum():,.2f}")
-        d2.metric("PUT", f"R$ {detail.loc[detail['Type']=='PUT','P&L'].sum():,.2f}")
-        d3.metric("CALL", f"R$ {detail.loc[detail['Type']=='CALL','P&L'].sum():,.2f}")
-        d4.metric("Lifecycles", len(detail))
+        d1, d2, d3, d4, d5 = st.columns(5)
+        d1.metric("P&L", f"R$ {detail['P&L'].fillna(0).sum():,.2f}")
+        d2.metric("PUT", f"R$ {detail.loc[detail['Type']=='PUT','P&L'].fillna(0).sum():,.2f}")
+        d3.metric("CALL", f"R$ {detail.loc[detail['Type']=='CALL','P&L'].fillna(0).sum():,.2f}")
+        d4.metric("Operations", len(detail))
+        detail_returns = detail["Return %"].dropna()
+        d5.metric("Return", f"{detail_returns.mean():.2f}%" if not detail_returns.empty else "N/A")
+
+        detail_chart = px.bar(
+            detail.sort_values("P&L"),
+            x="P&L",
+            y="Ticker",
+            color="Type",
+            orientation="h",
+            hover_data=["Status", "Premium received", "Capital basis", "Return %", "Days"],
+        )
+        detail_chart.update_layout(height=max(320, 45 * len(detail)), margin=dict(l=20, r=20, t=20, b=20))
+        st.plotly_chart(detail_chart, use_container_width=True)
         st.dataframe(
-            detail.sort_values("P&L", ascending=False),
+            detail.sort_values("Last trade"),
             use_container_width=True,
             hide_index=True,
         )
