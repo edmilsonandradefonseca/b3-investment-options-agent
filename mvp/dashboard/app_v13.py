@@ -915,7 +915,7 @@ with tabs[1]:
         )
 
     # Drill-down: selected underlying -> cumulative curve -> contracts -> trades.
-        st.markdown("### Drill-down")
+    st.markdown("### Drill-down")
         available = sorted(filtered["Underlying"].unique())
         if available:
             selected = st.selectbox(
