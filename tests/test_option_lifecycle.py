@@ -281,3 +281,46 @@ def test_closed_lifecycle_can_explicitly_mark_history_partial():
 
     assert lifecycle.status == "CLOSED"
     assert lifecycle.history_completeness == "PARTIAL_OR_OPEN"
+
+
+def test_lifecycle_merges_source_ticker_suffix_variants():
+    rows = (
+        tx("1", "EQTLV369", -1000, 0.64, "2026-09-11"),
+        tx("2", "EQTLV369 ON", 400, 0.30, "2026-09-15"),
+        tx("3", "EQTLV369", 600, 0.20, "2026-09-18"),
+    )
+
+    lifecycles = build_option_lifecycles(rows)
+
+    assert len(lifecycles) == 1
+    lifecycle = lifecycles[0]
+    assert lifecycle.option_ticker == "EQTLV369"
+    assert lifecycle.status == "CLOSED"
+    assert lifecycle.net_quantity == 0
+    assert lifecycle.closed_quantity == 1000
+    assert lifecycle.realized_pnl == 400.0
+
+
+def test_lifecycle_resolves_contract_metadata_by_canonical_ticker():
+    rows = (
+        tx("1", "EQTLV369", -1000, 0.64, "2026-09-11"),
+    )
+    contracts = {
+        "EQTLV369 ON": OptionContract(
+            option_ticker="EQTLV369 ON",
+            expiration_date=date(2026, 9, 18),
+            option_type="PUT",
+            strike=36.9,
+            underlying_ticker="EQTL3",
+        )
+    }
+
+    lifecycles = build_option_lifecycles(
+        rows,
+        contracts=contracts,
+        evaluation_date=date(2026, 9, 19),
+    )
+
+    assert len(lifecycles) == 1
+    assert lifecycles[0].status == "EXPIRED_UNRESOLVED"
+    assert lifecycles[0].contract_metadata_quality == "COMPLETE"
