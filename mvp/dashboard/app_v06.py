@@ -15,6 +15,7 @@ import pandas as pd
 import streamlit as st
 
 from b3_agent.opportunity import OpportunityIntelligenceEngine
+from b3_agent.options.reconciliation import OptionsReconciliationEngine
 from b3_agent.options.transactions import OptionsTransactionLoader
 from b3_agent.portfolio import PortfolioIntelligenceEngine
 from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
@@ -206,12 +207,50 @@ with tab_portfolio:
 with tab_options:
     st.subheader("Options Intelligence")
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Options", len(option_df))
+    c1.metric("Current options", len(option_df))
     c2.metric("Puts", int((option_df["Tipo opção"] == "PUT").sum()))
     c3.metric("Calls", int((option_df["Tipo opção"] == "CALL").sum()))
     c4.metric("Assignment capital", f"R$ {intelligence.capital_risk.assignment_capital:,.2f}")
+
+    st.markdown("#### Current option positions")
     st.dataframe(option_df, use_container_width=True, hide_index=True)
-    st.caption("Valores vêm do PortfolioContext; nenhum multiplicador ou contrato é inferido pelo dashboard.")
+
+    transactions = tuple(st.session_state.transactions or ())
+    if transactions:
+        reconciliation = OptionsReconciliationEngine().reconcile(transactions, context)
+
+        st.markdown("#### Transaction history")
+        tc1, tc2, tc3 = st.columns(3)
+        tc1.metric("Transactions loaded", len(transactions))
+        tc2.metric("Linked to current positions", len(reconciliation.current))
+        tc3.metric("Historical only", len(reconciliation.historical_only))
+
+        transaction_rows = [
+            {
+                "Transaction ID": tx.transaction_id,
+                "Ticker": tx.option_ticker,
+                "Side": tx.side,
+                "Quantity": tx.absolute_quantity,
+                "Execution price": tx.execution_price,
+                "Total amount": tx.total_amount,
+                "Broker": tx.broker,
+                "Source": tx.source_ref,
+            }
+            for tx in transactions
+        ]
+        st.dataframe(
+            pd.DataFrame(transaction_rows),
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.caption(
+            "Histórico preserva Custo Médio como preço de execução e Custo Total como valor "
+            "da transação. Uma transação individual não é tratada como a posição atual."
+        )
+    else:
+        st.info("Nenhum histórico de transações de opções carregado.")
+
+    st.caption("Valores da posição atual vêm do PortfolioContext; nenhum multiplicador ou contrato é inferido pelo dashboard.")
 
 with tab_opportunities:
     st.subheader("Opportunities")
