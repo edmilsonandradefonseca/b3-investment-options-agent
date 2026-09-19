@@ -77,6 +77,7 @@ class OptionLifecycleEngine:
         contract: OptionContract | None = None,
         evaluation_date: date | datetime | None = None,
         expiry_outcome: str | None = None,
+        history_complete: bool | None = None,
     ) -> OptionLifecycle:
         ordered = tuple(sorted(transactions, key=lambda tx: (_trade_date(tx), tx.transaction_id)))
         if not ordered:
@@ -172,9 +173,16 @@ class OptionLifecycleEngine:
             status = "OPEN"
             expiry_state = "NOT_PROVIDED"
 
-        history_completeness = (
-            "COMPLETE" if abs(net_quantity) == 0 else "PARTIAL_OR_OPEN"
-        )
+        if history_complete is True:
+            history_completeness = "COMPLETE"
+        elif history_complete is False:
+            history_completeness = "PARTIAL_OR_OPEN"
+        elif abs(net_quantity) == 0:
+            # A zero net position proves closure, not that the imported
+            # transaction history contains the original opening trade.
+            history_completeness = "UNKNOWN"
+        else:
+            history_completeness = "PARTIAL_OR_OPEN"
 
         metadata_values = (
             contract.expiration_date if contract else None,
