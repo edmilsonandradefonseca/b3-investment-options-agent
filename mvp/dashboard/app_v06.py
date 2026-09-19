@@ -19,7 +19,7 @@ import streamlit as st
 from b3_agent.opportunity import OpportunityIntelligenceEngine
 from b3_agent.options.brokerage_notes import BrokerageNoteParser
 from b3_agent.options.lifecycle import OptionContract, build_option_lifecycles
-from b3_agent.options.reconciliation import OptionsReconciliationEngine
+from b3_agent.options.reconciliation import OptionsReconciliationEngine, TransactionSourceCoverage
 from b3_agent.options.transactions import OptionsTransactionLoader
 from b3_agent.portfolio import PortfolioIntelligenceEngine
 from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
@@ -344,7 +344,20 @@ with tab_options:
 
     transactions = tuple(st.session_state.transactions or ())
     if transactions:
-        reconciliation = OptionsReconciliationEngine().reconcile(transactions, context)
+        manifest_records = tuple(st.session_state.source_manifest or ())
+        source_coverage = tuple(
+            TransactionSourceCoverage(
+                source_ref=record.source_ref,
+                coverage_start=record.coverage_start,
+                coverage_end=record.coverage_end,
+                scope=record.scope,
+                completeness=record.completeness,
+            )
+            for record in manifest_records
+        )
+        reconciliation = OptionsReconciliationEngine().reconcile(
+            transactions, context, source_coverage=source_coverage
+        )
 
         st.markdown("#### Transaction history")
         tc1, tc2, tc3, tc4 = st.columns(4)
@@ -417,6 +430,23 @@ with tab_options:
             use_container_width=True,
             hide_index=True,
         )
+        st.markdown("#### Source manifest")
+        manifest_rows = [
+            {
+                "Source type": record.source_type,
+                "Source ID": record.source_id,
+                "File": record.file_name,
+                "Imported": record.imported_at,
+                "Records": record.record_count,
+                "Coverage start": record.coverage_start,
+                "Coverage end": record.coverage_end,
+                "Scope": record.scope,
+                "Completeness": record.completeness,
+            }
+            for record in manifest_records
+        ]
+        st.dataframe(pd.DataFrame(manifest_rows), use_container_width=True, hide_index=True)
+
         st.caption(
             "ALIGNED significa que a quantidade líquida do histórico coincide com a posição BTG. "
             "Isso não prova que o histórico contém a operação de abertura; por isso Completeness "
