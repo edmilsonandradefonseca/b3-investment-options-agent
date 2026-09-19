@@ -16,6 +16,7 @@ class OptionTransaction:
     total_cost: float | None = None
     as_of: date | datetime | None = None
     source_ref: str = ""
+    note_number: str | None = None
 
     @property
     def side(self) -> str:
@@ -24,12 +25,12 @@ class OptionTransaction:
 
     @property
     def execution_price(self) -> float | None:
-        """Unit execution price represented by Custo Médio."""
+        """Unit execution price represented by the source execution-price field."""
         return self.average_cost
 
     @property
     def total_amount(self) -> float | None:
-        """Signed transaction amount represented by Custo Total."""
+        """Signed transaction amount using the transaction-side convention."""
         return self.total_cost
 
     @property
