@@ -122,6 +122,21 @@ class OptionLifecycleEngine:
             normalized_outcome = expiry_outcome.strip().upper()
             if normalized_outcome not in {"WORTHLESS", "EXERCISED", "ASSIGNED"}:
                 raise ValueError("expiry_outcome must be WORTHLESS, EXERCISED or ASSIGNED")
+
+            # A worthless expiry closes the remaining economic position without
+            # an opposite trade. For gross unit-price P&L, the option premium
+            # is realized at expiry: a short position keeps the premium
+            # received, while a long position loses the premium paid.
+            if normalized_outcome == "WORTHLESS":
+                for lot in lots:
+                    if lot.price is None:
+                        realized_has_unpriced = True
+                        continue
+                    if lot.side == "SELL":
+                        realized_pnl += lot.price * lot.quantity
+                    else:
+                        realized_pnl -= lot.price * lot.quantity
+
             status = {
                 "WORTHLESS": "EXPIRED_WORTHLESS",
                 "EXERCISED": "EXERCISED",
