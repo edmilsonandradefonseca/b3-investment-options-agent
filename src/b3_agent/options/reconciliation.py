@@ -14,6 +14,7 @@ class OptionReconciliation:
     current: tuple[OptionTransaction, ...] = ()
     historical_only: tuple[OptionTransaction, ...] = ()
     quantity_mismatches: tuple[tuple[str, float, float], ...] = ()
+    potential_cross_source_duplicates: tuple[tuple[str, str], ...] = ()
     btg_position_ids: tuple[str, ...] = ()
     quality_status: str = "VALIDATED"
 
@@ -56,6 +57,22 @@ class OptionsReconciliationEngine:
         # lifecycle.  With a partial transaction extract, no mismatch is
         # inferred merely from different quantities.
         quantity_mismatches: list[tuple[str, float, float]] = []
+
+        # Excel exports and brokerage notes can describe the same economic
+        # trade with different transaction IDs. Do not merge either record
+        # because Excel may omit date/note identity. Expose candidates for audit.
+        excel = [tx for tx in transactions if "OPTIONS TRANSACTIONS XLSX" in tx.source_ref.upper()]
+        notes = [tx for tx in transactions if "NOTACORRETAGEM" in tx.source_ref.upper()]
+        potential_cross_source_duplicates: list[tuple[str, str]] = []
+        for left in excel:
+            for right in notes:
+                if (
+                    canonical_option_ticker(left.option_ticker) == canonical_option_ticker(right.option_ticker)
+                    and left.quantity == right.quantity
+                    and left.average_cost == right.average_cost
+                    and left.total_cost == right.total_cost
+                ):
+                    potential_cross_source_duplicates.append((left.transaction_id, right.transaction_id))
         for ticker, position in btg_options.items():
             ticker_transactions = [
                 tx for tx in transactions
@@ -78,6 +95,7 @@ class OptionsReconciliationEngine:
             current=tuple(current),
             historical_only=tuple(historical_only),
             quantity_mismatches=tuple(quantity_mismatches),
+            potential_cross_source_duplicates=tuple(potential_cross_source_duplicates),
             btg_position_ids=tuple(dict.fromkeys(btg_position_ids)),
             quality_status="VALIDATED",
         )
