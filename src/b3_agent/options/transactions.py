@@ -62,6 +62,8 @@ class OptionsTransactionLoader:
                         average_cost=_number(row[header["Custo Médio"]]),
                         total_cost=_number(row[header["Custo Total"]]),
                         source_ref="Options Transactions XLSX",
+                        source_type="OPTIONS_XLSX",
+                        source_id=Path(path).name,
                     )
                 )
             return tuple(transactions)
