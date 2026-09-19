@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 
 from b3_agent.options.identity import canonical_option_ticker
 from b3_agent.options.lifecycle import OptionContract
@@ -19,6 +20,7 @@ REGISTRY_PATH = Path(os.getenv("B3_AGENT_OPTION_CONTRACT_REGISTRY_PATH", str(ROO
 
 app = FastAPI(title="B3 Investment Copilot API", version="0.1.0")
 
+app.add_middleware(\n    CORSMiddleware,\n    allow_origins=[\n        "http://localhost:5173",\n        "http://127.0.0.1:5173",\n    ],\n    allow_credentials=False,\n    allow_methods=["GET"],\n    allow_headers=["*"],\n)\n
 
 def _iso(value: Any) -> str | None:
     return value.isoformat() if value is not None else None
