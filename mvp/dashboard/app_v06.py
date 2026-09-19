@@ -167,8 +167,8 @@ rows = [
         "Ticker": p.ticker,
         "Tipo": p.instrument_type,
         "Quantidade": p.quantity,
-        "Preço": p.market_price,
-        "Valor de mercado": p.market_value,
+        "Preço atual": p.market_price,
+        "Valor de mercado atual": p.market_value,
         "Vencimento": p.expiration_date,
         "Tipo opção": p.option_type,
         "Strike": p.strike,
@@ -181,7 +181,7 @@ stock_df = df[df["Tipo"] == "STOCK"]
 option_df = df[df["Tipo"] == "OPTION"].copy()
 option_df["Tipo opção"] = option_df["Tipo opção"].fillna("").astype(str).str.upper()
 
-market_value = float(df["Valor de mercado"].fillna(0).sum())
+market_value = float(df["Valor de mercado atual"].fillna(0).sum())
 stock_value = float(stock_df["Valor de mercado"].fillna(0).sum())
 option_value = float(option_df["Valor de mercado"].fillna(0).sum())
 
