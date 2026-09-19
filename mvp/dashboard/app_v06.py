@@ -348,6 +348,7 @@ with tab_options:
                 option_type=record.option_type,
                 strike=record.strike,
                 underlying_ticker=record.underlying_ticker,
+                contract_multiplier=record.contract_multiplier,
             )
             for record in contract_records
             if record.expiration_date is not None
@@ -372,6 +373,9 @@ with tab_options:
                     "Realized P&L": lifecycle.realized_pnl,
                     "Expiration": lifecycle.expiration_date,
                     "Expiry state": lifecycle.expiry_state,
+                    "History": lifecycle.history_completeness,
+                    "Contract metadata": lifecycle.contract_metadata_quality,
+                    "P&L basis": lifecycle.pnl_basis,
                 }
             )
         st.dataframe(
