@@ -28,7 +28,7 @@ const allocation = [
   {label:"Opções (Short)",value:5.5,color:"#ff9d4d"},
 ];
 
-function money(v:number){ return new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0}).format(v); }
+function infer_b3_option_type(ticker:string){const s=ticker.replace(/\s+/g,"").toUpperCase(); const m=s.match(/[A-Z]$/); if(!m)return null; return "ABCDEFGHIJKL".includes(m[0])?"CALL":"MNOPQRSTUVWX".includes(m[0])?"PUT":null;} function pct(v:number){return (v.toFixed(1).replace(".",",")+"%")} function money(v:number){ return new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0}).format(v); }
 
 function Metric({title,value,detail,icon}:{title:string;value:string;detail:string;icon:string}) {
   return <div className="metric"><div className="metric-top"><span>{title}</span><b className="metric-icon">{icon}</b></div><strong>{value}</strong><small className={detail.startsWith("▲") ? "positive" : ""}>{detail}</small></div>;
@@ -95,48 +95,20 @@ function Portfolio() {
 
 
 function Options() {
-  const [underlying,setUnderlying]=useState("PETR4");
-  const [type,setType]=useState("Todas");
-  const [period,setPeriod]=useState("Desde maio/2026");
-  const [view,setView]=useState("Acumulado");
-  const [status,setStatus]=useState("Aguardando API de analytics");
-  async function refresh(){
-    setStatus("Consultando dados reais…");
-    try {
-      const r=await fetch(API_BASE+"/api/options/analytics?underlying="+encodeURIComponent(underlying)+"&type="+encodeURIComponent(type)+"&period="+encodeURIComponent(period));
-      if(!r.ok) throw new Error("endpoint de analytics ainda não conectado");
-      setStatus("Dados atualizados");
-    } catch { setStatus("API de analytics ainda não conectada — nenhum número foi inventado."); }
-  }
+  type Analytics = { summary?: { realized_pnl:number; premium_received:number; premium_paid:number; return_pct:number|null; lifecycle_count:number; profitable_lifecycles:number; losing_lifecycles:number }; lifecycles?: Array<{option_ticker:string; option_type:string|null; status:string; realized_pnl:number|null; first_trade_date:string|null; last_trade_date:string|null; transaction_count:number; history_completeness:string}>; transactions?: Array<{transaction_id:string; option_ticker:string; date:string|null; side:string; quantity:number; execution_price:number|null; total_amount:number|null; source_type:string; source_id:string|null; note_number:string|null}>; data_quality?: {status:string;transactions_included?:number;warning?:string;note?:string} };
+  const [underlying,setUnderlying]=useState("Todos"), [type,setType]=useState("Todas"), [start,setStart]=useState("2026-05-01"), [end,setEnd]=useState("2026-09-30"), [data,setData]=useState<Analytics|null>(null), [status,setStatus]=useState("Clique em Atualizar análise");
+  async function refresh(){ setStatus("Consultando ledger…"); try { const qs=new URLSearchParams({underlying,option_type:type,start_date:start,end_date:end}); const r=await fetch(API_BASE+"/api/options/analytics?"+qs.toString()); const d=await r.json(); if(!r.ok) throw new Error(d.detail??"Falha no endpoint"); setData(d); setStatus("Dados reais carregados"); } catch(err) { setStatus("Erro: "+(err instanceof Error?err.message:"falha")); setData(null); } }
+  const s=data?.summary;
   return <main className="workspace options-page">
     <div className="workspace-head"><div><h1>Options Intelligence</h1><p>Resultado acumulado, rolagens e drill-down por papel.</p></div><span className="updated">{status}</span></div>
-    <section className="filters">
-      <label>Ativo<select value={underlying} onChange={e=>setUnderlying(e.target.value)}><option>PETR4</option><option>VALE3</option><option>ITUB4</option><option>Todos</option></select></label>
-      <label>Tipo<select value={type} onChange={e=>setType(e.target.value)}><option>Todas</option><option>CALL</option><option>PUT</option></select></label>
-      <label>Período<select value={period} onChange={e=>setPeriod(e.target.value)}><option>Desde maio/2026</option><option>Últimos 90 dias</option><option>2026</option><option>Todo o histórico</option></select></label>
-      <button className="primary-btn" onClick={refresh}>Atualizar análise</button>
-    </section>
-    <section className="cards">
-      <Metric title="P&L realizado acumulado" value="—" detail="Somente operações confirmadas" icon="Σ"/>
-      <Metric title="Prêmios recebidos" value="—" detail="Fluxo bruto de venda" icon="↓"/>
-      <Metric title="Rolagens" value="—" detail="Abertura → fechamento → nova abertura" icon="↻"/>
-      <Metric title="Resultado %" value="—" detail="Base de capital configurável" icon="%"/>
-    </section>
-    <section className="grid-two">
-      <Card title="P&L acumulado" action={<div className="range">{["Acumulado","Mensal","Por operação"].map(x=><button className={view===x?"on":""} onClick={()=>setView(x)} key={x}>{x}</button>)}</div>}>
-        <div className="analytics-empty"><strong>Gráfico aguardando dados reais</strong><span>Quando o endpoint de analytics estiver conectado, este painel mostrará a curva acumulada de {underlying} no período selecionado.</span></div>
-      </Card>
-      <Card title="Resultado por tipo"><div className="analytics-empty compact"><strong>PUT × CALL</strong><span>Comparação de P&L, prêmio, quantidade e retorno.</span></div></Card>
-    </section>
-    <Card title={underlying+" — Option Journey"}>
-      <div className="journey"><div className="journey-step"><b>1</b><span>Abertura</span></div><div className="journey-line"/><div className="journey-step"><b>2</b><span>Fechamento</span></div><div className="journey-line"/><div className="journey-step"><b>3</b><span>Rolagem</span></div><div className="journey-line"/><div className="journey-step"><b>4</b><span>Nova abertura</span></div></div>
-      <div className="table-empty">Selecione o ativo e período e conecte o endpoint de analytics para listar todas as transações, contratos e rolagens. <strong>Nenhuma operação é fabricada no frontend.</strong></div>
-    </Card>
-    <Card title="Drill-down das transações">
-      <table><thead><tr><th>Data</th><th>Contrato</th><th>Tipo</th><th>Lado</th><th>Qtd</th><th>Preço</th><th>Prêmio / Fluxo</th><th>Relação</th></tr></thead><tbody><tr><td colSpan={8} className="table-empty">Dados reais serão exibidos aqui a partir do ledger persistido.</td></tr></tbody></table>
-    </Card>
+    <section className="filters"><label>Ativo<select value={underlying} onChange={e=>setUnderlying(e.target.value)}><option>Todos</option><option>PETR4</option><option>VALE3</option><option>ITUB4</option></select></label><label>Tipo<select value={type} onChange={e=>setType(e.target.value)}><option>Todas</option><option>CALL</option><option>PUT</option></select></label><label>Início<input type="date" value={start} onChange={e=>setStart(e.target.value)}/></label><label>Fim<input type="date" value={end} onChange={e=>setEnd(e.target.value)}/></label><button className="primary-btn" onClick={refresh}>Atualizar análise</button></section>
+    <section className="cards"><Metric title="P&L realizado acumulado" value={s?money(s.realized_pnl):"—"} detail={s?s.lifecycle_count+" lifecycles confirmados":"Sem consulta"} icon="Σ"/><Metric title="Prêmios recebidos" value={s?money(s.premium_received):"—"} detail={s?s.profitable_lifecycles+" positivos · "+s.losing_lifecycles+" negativos":"Sem consulta"} icon="↓"/><Metric title="Lifecycles" value={s?String(s.lifecycle_count):"—"} detail={data?.data_quality?.transactions_included?data.data_quality.transactions_included+" transações":"Sem consulta"} icon="↻"/><Metric title="Resultado %" value={s?.return_pct!=null?pct(s.return_pct):"—"} detail="Sobre a base de capital disponível" icon="%"/></section>
+    <section className="grid-two"><Card title="P&L acumulado"><div className="analytics-summary"><strong>{s?money(s.realized_pnl):"—"}</strong><span>resultado realizado no período selecionado</span><small>{data?.data_quality?.warning??"Os dados são provenientes do ledger persistido."}</small></div></Card><Card title="Qualidade dos dados"><div className="analytics-summary"><strong>{data?.data_quality?.transactions_included??"—"}</strong><span>transações incluídas</span><small>{data?.data_quality?.status??"Ainda não consultado"}</small></div></Card></section>
+    <Card title={(underlying==="Todos"?"Todos os ativos":underlying)+" — Lifecycles"}><div className="table-wrap"><table><thead><tr><th>Contrato</th><th>Tipo</th><th>Início</th><th>Fim</th><th>Status</th><th>Operações</th><th>P&L</th><th>Histórico</th></tr></thead><tbody>{(data?.lifecycles??[]).map(x=><tr key={x.option_ticker}><td><strong>{x.option_ticker}</strong></td><td>{x.option_type??"—"}</td><td>{x.first_trade_date??"—"}</td><td>{x.last_trade_date??"—"}</td><td>{x.status}</td><td>{x.transaction_count}</td><td className={(x.realized_pnl??0)>=0?"positive":"negative"}>{x.realized_pnl==null?"—":money(x.realized_pnl)}</td><td>{x.history_completeness}</td></tr>)}{!data?.lifecycles?.length&&<tr><td colSpan={8} className="table-empty">Nenhum lifecycle retornado para os filtros atuais.</td></tr>}</tbody></table></div></Card>
+    <Card title="Drill-down — transações individuais"><div className="table-wrap"><table><thead><tr><th>Data</th><th>Contrato</th><th>Tipo</th><th>Lado</th><th>Qtd</th><th>Preço</th><th>Fluxo</th><th>Origem</th></tr></thead><tbody>{(data?.transactions??[]).map(x=><tr key={x.transaction_id}><td>{x.date??"—"}</td><td><strong>{x.option_ticker}</strong></td><td>{infer_b3_option_type(x.option_ticker)??"—"}</td><td className={x.side==="SELL"?"positive":"negative"}>{x.side}</td><td>{x.quantity}</td><td>{x.execution_price==null?"—":x.execution_price.toFixed(2)}</td><td>{x.total_amount==null?"—":money(x.total_amount)}</td><td>{x.source_type}{x.note_number?" · Nota "+x.note_number:""}</td></tr>)}{!data?.transactions?.length&&<tr><td colSpan={8} className="table-empty">Nenhuma transação retornada.</td></tr>}</tbody></table></div></Card>
   </main>
 }
+
 
 function Card({title,action,children}:{title:string;action?:ReactNode;children:ReactNode}){return <div className="panel"><div className="panel-title"><h2>{title}</h2>{action}</div>{children}</div>}
 
