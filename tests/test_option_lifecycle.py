@@ -34,7 +34,7 @@ def test_short_option_closes_and_calculates_realized_pnl_fifo():
     assert lifecycle.closed_quantity == 1000
     assert lifecycle.unmatched_quantity == 0
     assert lifecycle.realized_pnl == 400.0
-    assert lifecycle.history_completeness == "COMPLETE"
+    assert lifecycle.history_completeness == "UNKNOWN"
     assert lifecycle.contract_metadata_quality == "MISSING"
     assert lifecycle.pnl_basis == "GROSS_UNIT_PRICE"
 
@@ -259,3 +259,25 @@ def test_worthless_expiry_uses_contract_multiplier():
     assert lifecycle.realized_pnl == 50000.0
     assert lifecycle.contract_multiplier == 100.0
     assert lifecycle.pnl_basis == "GROSS_CONTRACT_VALUE"
+
+
+def test_closed_lifecycle_can_explicitly_confirm_complete_history():
+    rows = (
+        tx("1", "EQTLV369", -1000, 0.64, "2026-09-11"),
+        tx("2", "EQTLV369", 1000, 0.30, "2026-09-15"),
+    )
+    lifecycle = OptionLifecycleEngine().build(rows, history_complete=True)
+
+    assert lifecycle.status == "CLOSED"
+    assert lifecycle.history_completeness == "COMPLETE"
+
+
+def test_closed_lifecycle_can_explicitly_mark_history_partial():
+    rows = (
+        tx("1", "EQTLV369", -1000, 0.64, "2026-09-11"),
+        tx("2", "EQTLV369", 1000, 0.30, "2026-09-15"),
+    )
+    lifecycle = OptionLifecycleEngine().build(rows, history_complete=False)
+
+    assert lifecycle.status == "CLOSED"
+    assert lifecycle.history_completeness == "PARTIAL_OR_OPEN"
