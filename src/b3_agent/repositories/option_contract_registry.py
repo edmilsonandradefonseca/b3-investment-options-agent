@@ -7,8 +7,8 @@ import sqlite3
 
 
 @dataclass(frozen=True)
-class OptionContract:
-    """Persistent metadata for an option contract, independent of current holdings."""
+class OptionContractRecord:
+    """Persistent option metadata independent of current holdings."""
 
     option_ticker: str
     expiration_date: date | None = None
@@ -46,7 +46,7 @@ class OptionContractRegistry:
                 """
             )
 
-    def upsert(self, contract: OptionContract) -> None:
+    def upsert(self, contract: OptionContractRecord) -> None:
         with self._connect() as conn:
             conn.execute(
                 """
@@ -77,12 +77,14 @@ class OptionContractRegistry:
                 ),
             )
 
-    def upsert_many(self, contracts: list[OptionContract] | tuple[OptionContract, ...]) -> int:
+    def upsert_many(
+        self, contracts: list[OptionContractRecord] | tuple[OptionContractRecord, ...]
+    ) -> int:
         for contract in contracts:
             self.upsert(contract)
         return len(contracts)
 
-    def get(self, option_ticker: str) -> OptionContract | None:
+    def get(self, option_ticker: str) -> OptionContractRecord | None:
         with self._connect() as conn:
             row = conn.execute(
                 """
@@ -94,20 +96,9 @@ class OptionContractRegistry:
                 (option_ticker,),
             ).fetchone()
 
-        if row is None:
-            return None
+        return self._from_row(row) if row else None
 
-        return OptionContract(
-            option_ticker=row[0],
-            expiration_date=date.fromisoformat(row[1]) if row[1] else None,
-            option_type=row[2],
-            strike=row[3],
-            underlying_ticker=row[4],
-            contract_multiplier=row[5],
-            source_ref=row[6],
-        )
-
-    def list_all(self) -> tuple[OptionContract, ...]:
+    def list_all(self) -> tuple[OptionContractRecord, ...]:
         with self._connect() as conn:
             rows = conn.execute(
                 """
@@ -118,15 +109,16 @@ class OptionContractRegistry:
                 """
             ).fetchall()
 
-        return tuple(
-            OptionContract(
-                option_ticker=row[0],
-                expiration_date=date.fromisoformat(row[1]) if row[1] else None,
-                option_type=row[2],
-                strike=row[3],
-                underlying_ticker=row[4],
-                contract_multiplier=row[5],
-                source_ref=row[6],
-            )
-            for row in rows
+        return tuple(self._from_row(row) for row in rows)
+
+    @staticmethod
+    def _from_row(row: tuple) -> OptionContractRecord:
+        return OptionContractRecord(
+            option_ticker=row[0],
+            expiration_date=date.fromisoformat(row[1]) if row[1] else None,
+            option_type=row[2],
+            strike=row[3],
+            underlying_ticker=row[4],
+            contract_multiplier=row[5],
+            source_ref=row[6],
         )
