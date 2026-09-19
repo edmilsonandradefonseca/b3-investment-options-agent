@@ -25,6 +25,14 @@ from b3_agent.repositories.portfolio import PortfolioRepository
 
 st.set_page_config(page_title="B3 Investment Copilot", page_icon="📊", layout="wide")
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+LEDGER_PATH = Path(
+    os.getenv(
+        "B3_AGENT_OPTION_LEDGER_PATH",
+        str(PROJECT_ROOT / "data" / "option_transactions.sqlite3"),
+    )
+).expanduser().resolve()
+
 # Streamlit has a native left sidebar; for this prototype we visually move it
 # to the right so we can test the intended product layout before adopting a
 # dedicated Windows shell.
@@ -95,8 +103,30 @@ for key, default in {
     "options_status": "Not loaded",
     "ledger_status": "Not loaded",
     "load_error": None,
+    "ledger_initialized": False,
 }.items():
     st.session_state.setdefault(key, default)
+
+
+# The ledger is persistent storage, so it must be read on every new Streamlit
+# session. Previously it was only read after clicking LOAD DATA, which made the
+# history appear to disappear after a restart or a fresh browser session.
+if not st.session_state.ledger_initialized:
+    try:
+        ledger = OptionTransactionLedger(LEDGER_PATH)
+        st.session_state.transactions = ledger.list_all()
+        st.session_state.options_status = (
+            f"✓ Ledger — {len(st.session_state.transactions)} transactions"
+        )
+        st.session_state.ledger_status = (
+            f"✓ Persistent — {len(st.session_state.transactions)} transactions restored"
+        )
+    except Exception as exc:
+        st.session_state.options_status = "✗ Ledger read failed"
+        st.session_state.ledger_status = "✗ Persistent ledger unavailable"
+        st.session_state.load_error = f"Ledger: {exc}"
+    finally:
+        st.session_state.ledger_initialized = True
 
 with st.sidebar:
     st.header("DATA & COPILOT")
@@ -130,7 +160,7 @@ with st.sidebar:
                 st.session_state.btg_status = "✗ Load failed"
                 st.session_state.load_error = f"BTG: {exc}"
         try:
-            ledger = OptionTransactionLedger("data/option_transactions.sqlite3")
+            ledger = OptionTransactionLedger(LEDGER_PATH)
             inserted = 0
             if options_file:
                 inserted += ledger.append(_load_transactions(options_file))
@@ -148,7 +178,7 @@ with st.sidebar:
             st.session_state.load_error = (
                 (st.session_state.load_error or "") + f" | Ledger: {exc}"
             )
-        if not loaded and not st.session_state.transactions:
+        if not loaded and not st.session_state.transactions and not st.session_state.context:
             st.session_state.load_error = "Selecione pelo menos um arquivo Excel."
 
     st.divider()
