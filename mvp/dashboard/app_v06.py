@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import os
 import tempfile
+from datetime import datetime
+import hashlib
 from pathlib import Path
 
 import pandas as pd
@@ -23,6 +25,7 @@ from b3_agent.portfolio import PortfolioIntelligenceEngine
 from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
 from b3_agent.repositories.option_contract_registry import OptionContractRecord, OptionContractRegistry
 from b3_agent.repositories.option_ledger import OptionTransactionLedger
+from b3_agent.repositories.source_manifest import SourceManifestRecord, SourceManifestRepository
 from b3_agent.repositories.portfolio import PortfolioRepository
 
 st.set_page_config(page_title="B3 Investment Copilot", page_icon="📊", layout="wide")
@@ -32,6 +35,13 @@ CONTRACT_REGISTRY_PATH = Path(
     os.getenv(
         "B3_AGENT_OPTION_CONTRACT_REGISTRY_PATH",
         str(PROJECT_ROOT / "data" / "option_contracts.sqlite3"),
+    )
+).expanduser().resolve()
+
+MANIFEST_PATH = Path(
+    os.getenv(
+        "B3_AGENT_SOURCE_MANIFEST_PATH",
+        str(PROJECT_ROOT / "data" / "source_manifest.sqlite3"),
     )
 ).expanduser().resolve()
 
@@ -114,6 +124,7 @@ for key, default in {
     "load_error": None,
     "ledger_initialized": False,
     "contract_registry": (),
+    "source_manifest": (),
 }.items():
     st.session_state.setdefault(key, default)
 
@@ -127,6 +138,8 @@ if not st.session_state.ledger_initialized:
         st.session_state.transactions = ledger.list_all()
         registry = OptionContractRegistry(CONTRACT_REGISTRY_PATH)
         st.session_state.contract_registry = registry.list_all()
+        manifest = SourceManifestRepository(MANIFEST_PATH)
+        st.session_state.source_manifest = manifest.list_all()
         st.session_state.options_status = (
             f"✓ Ledger — {len(st.session_state.transactions)} transactions"
         )
