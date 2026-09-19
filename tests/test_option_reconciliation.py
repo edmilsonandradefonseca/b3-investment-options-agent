@@ -1,6 +1,6 @@
 from datetime import date
 
-from b3_agent.options.reconciliation import OptionsReconciliationEngine
+from b3_agent.options.reconciliation import OptionsReconciliationEngine, TransactionSourceCoverage
 from b3_agent.schemas.option_transaction import OptionTransaction
 from b3_agent.schemas.position import PortfolioContext, Position
 
@@ -72,3 +72,69 @@ def test_canonical_ticker_variants_share_history_coverage() -> None:
     assert result.history_coverage[0].net_historical_quantity == -7000
     assert result.history_coverage[0].current_position_quantity == -7000
     assert result.history_coverage[0].position_alignment == "ALIGNED"
+
+
+def test_completeness_requires_explicit_full_history_source_evidence() -> None:
+    transactions = (
+        OptionTransaction(
+            "t1",
+            "ABEVV153",
+            "BTG",
+            -7000,
+            0.48,
+            -3349.04,
+            as_of=date(2026, 9, 11),
+            source_ref="SOURCE-A",
+        ),
+    )
+
+    unknown = OptionsReconciliationEngine().reconcile(
+        transactions,
+        _portfolio("ABEVV153"),
+    )
+    assert unknown.history_coverage[0].completeness == "UNKNOWN"
+
+    complete = OptionsReconciliationEngine().reconcile(
+        transactions,
+        _portfolio("ABEVV153"),
+        source_coverage=(
+            TransactionSourceCoverage(
+                source_ref="SOURCE-A",
+                coverage_start=date(2026, 1, 1),
+                coverage_end=date(2026, 9, 11),
+                scope="FULL_HISTORY",
+                completeness="COMPLETE",
+            ),
+        ),
+    )
+    assert complete.history_coverage[0].completeness == "COMPLETE"
+
+
+def test_partial_source_evidence_marks_history_partial() -> None:
+    transactions = (
+        OptionTransaction(
+            "t1",
+            "ABEVV153",
+            "BTG",
+            -7000,
+            0.48,
+            -3349.04,
+            as_of=date(2026, 9, 11),
+            source_ref="SOURCE-A",
+        ),
+    )
+
+    result = OptionsReconciliationEngine().reconcile(
+        transactions,
+        _portfolio("ABEVV153"),
+        source_coverage=(
+            TransactionSourceCoverage(
+                source_ref="SOURCE-A",
+                coverage_start=date(2026, 9, 1),
+                coverage_end=date(2026, 9, 11),
+                scope="PERIOD_ONLY",
+                completeness="PARTIAL",
+            ),
+        ),
+    )
+    assert result.history_coverage[0].completeness == "PARTIAL"
