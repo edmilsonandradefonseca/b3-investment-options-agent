@@ -359,6 +359,31 @@ with tab_options:
             "da transação. Uma transação individual não é tratada como a posição atual."
         )
 
+        st.markdown("#### History coverage")
+        coverage_rows = [
+            {
+                "Ticker": item.option_ticker,
+                "First trade": item.first_trade_date,
+                "Last trade": item.last_trade_date,
+                "Transactions": item.transaction_count,
+                "Net history qty": item.net_historical_quantity,
+                "Current qty": item.current_position_quantity,
+                "Position alignment": item.position_alignment,
+                "Completeness": item.completeness,
+            }
+            for item in reconciliation.history_coverage
+        ]
+        st.dataframe(
+            pd.DataFrame(coverage_rows),
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.caption(
+            "ALIGNED significa que a quantidade líquida do histórico coincide com a posição BTG. "
+            "Isso não prova que o histórico contém a operação de abertura; por isso Completeness "
+            "permanece UNKNOWN até existir evidência explícita de cobertura da fonte."
+        )
+
         st.markdown("#### Option lifecycle")
         registry = OptionContractRegistry(CONTRACT_REGISTRY_PATH)
         contract_records = registry.list_all()
