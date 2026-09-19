@@ -182,7 +182,7 @@ option_df = df[df["Tipo"] == "OPTION"].copy()
 option_df["Tipo opção"] = option_df["Tipo opção"].fillna("").astype(str).str.upper()
 
 market_value = float(df["Valor de mercado atual"].fillna(0).sum())
-stock_value = float(stock_df["Valor de mercado"].fillna(0).sum())
+stock_value = float(stock_df["Valor de mercado atual"].fillna(0).sum())
 option_value = float(option_df["Valor de mercado"].fillna(0).sum())
 
 st.title("B3 Investment Copilot")
