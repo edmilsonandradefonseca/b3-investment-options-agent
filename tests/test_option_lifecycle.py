@@ -34,6 +34,9 @@ def test_short_option_closes_and_calculates_realized_pnl_fifo():
     assert lifecycle.closed_quantity == 1000
     assert lifecycle.unmatched_quantity == 0
     assert lifecycle.realized_pnl == 440.0
+    assert lifecycle.history_completeness == "COMPLETE"
+    assert lifecycle.contract_metadata_quality == "MISSING"
+    assert lifecycle.pnl_basis == "GROSS_UNIT_PRICE"
 
 
 def test_partial_close_remains_open():
@@ -49,6 +52,7 @@ def test_partial_close_remains_open():
     assert lifecycle.closed_quantity == 2000
     assert lifecycle.unmatched_quantity == 2500
     assert lifecycle.realized_pnl == 580.0
+    assert lifecycle.history_completeness == "PARTIAL_OR_OPEN"
 
 
 def test_expiration_without_outcome_is_not_assumed_worthless():
@@ -72,6 +76,7 @@ def test_expiration_without_outcome_is_not_assumed_worthless():
     assert lifecycle.status == "EXPIRED_UNRESOLVED"
     assert lifecycle.expiry_state == "EXPIRED_UNRESOLVED"
     assert lifecycle.net_quantity == -1000
+    assert lifecycle.contract_metadata_quality == "COMPLETE"
 
 
 def test_expiration_can_be_classified_explicitly():
@@ -90,6 +95,7 @@ def test_expiration_can_be_classified_explicitly():
 
     assert lifecycle.status == "EXPIRED_WORTHLESS"
     assert lifecycle.realized_pnl == 500.0
+    assert lifecycle.contract_metadata_quality == "PARTIAL"
 
 
 def test_build_option_lifecycles_groups_by_ticker():
