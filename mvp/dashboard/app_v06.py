@@ -21,12 +21,20 @@ from b3_agent.options.reconciliation import OptionsReconciliationEngine
 from b3_agent.options.transactions import OptionsTransactionLoader
 from b3_agent.portfolio import PortfolioIntelligenceEngine
 from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
+from b3_agent.repositories.option_contract_registry import OptionContractRecord, OptionContractRegistry
 from b3_agent.repositories.option_ledger import OptionTransactionLedger
 from b3_agent.repositories.portfolio import PortfolioRepository
 
 st.set_page_config(page_title="B3 Investment Copilot", page_icon="📊", layout="wide")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+CONTRACT_REGISTRY_PATH = Path(
+    os.getenv(
+        "B3_AGENT_OPTION_CONTRACT_REGISTRY_PATH",
+        str(PROJECT_ROOT / "data" / "option_contracts.sqlite3"),
+    )
+).expanduser().resolve()
+
 LEDGER_PATH = Path(
     os.getenv(
         "B3_AGENT_OPTION_LEDGER_PATH",
@@ -105,6 +113,7 @@ for key, default in {
     "ledger_status": "Not loaded",
     "load_error": None,
     "ledger_initialized": False,
+    "contract_registry": (),
 }.items():
     st.session_state.setdefault(key, default)
 
@@ -116,6 +125,8 @@ if not st.session_state.ledger_initialized:
     try:
         ledger = OptionTransactionLedger(LEDGER_PATH)
         st.session_state.transactions = ledger.list_all()
+        registry = OptionContractRegistry(CONTRACT_REGISTRY_PATH)
+        st.session_state.contract_registry = registry.list_all()
         st.session_state.options_status = (
             f"✓ Ledger — {len(st.session_state.transactions)} transactions"
         )
@@ -169,6 +180,26 @@ with st.sidebar:
             for note_file in note_files or []:
                 inserted += ledger.append(_load_brokerage_note(note_file))
                 loaded = True
+            if st.session_state.context is not None:
+                registry = OptionContractRegistry(CONTRACT_REGISTRY_PATH)
+                records = []
+                for position in st.session_state.context.positions:
+                    if position.instrument_type != "OPTION":
+                        continue
+                    expiration = position.expiration_date
+                    records.append(
+                        OptionContractRecord(
+                            option_ticker=position.ticker,
+                            expiration_date=(pd.Timestamp(expiration).date() if pd.notna(expiration) else None),
+                            option_type=position.option_type,
+                            strike=position.strike,
+                            underlying_ticker=position.underlying_ticker,
+                            contract_multiplier=getattr(position, "contract_multiplier", None),
+                            source_ref="BTG current portfolio",
+                        )
+                    )
+                registry.upsert_many(records)
+                st.session_state.contract_registry = registry.list_all()
             st.session_state.transactions = ledger.list_all()
             st.session_state.options_status = (
                 f"✓ Ledger — {len(st.session_state.transactions)} transactions"
@@ -308,18 +339,19 @@ with tab_options:
         )
 
         st.markdown("#### Option lifecycle")
-        contracts = {}
-        for _, row in option_df.iterrows():
-            expiration = row.get("Vencimento")
-            if pd.notna(expiration):
-                expiration_date = pd.Timestamp(expiration).date()
-                contracts[str(row["Ticker"])] = OptionContract(
-                    option_ticker=str(row["Ticker"]),
-                    expiration_date=expiration_date,
-                    option_type=row.get("Tipo opção"),
-                    strike=row.get("Strike"),
-                    underlying_ticker=row.get("Underlying"),
-                )
+        registry = OptionContractRegistry(CONTRACT_REGISTRY_PATH)
+        contract_records = registry.list_all()
+        contracts = {
+            record.option_ticker: OptionContract(
+                option_ticker=record.option_ticker,
+                expiration_date=record.expiration_date,
+                option_type=record.option_type,
+                strike=record.strike,
+                underlying_ticker=record.underlying_ticker,
+            )
+            for record in contract_records
+            if record.expiration_date is not None
+        }
 
         lifecycle_rows = []
         for lifecycle in build_option_lifecycles(
