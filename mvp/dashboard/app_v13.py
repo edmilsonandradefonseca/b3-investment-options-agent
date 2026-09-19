@@ -916,67 +916,67 @@ with tabs[1]:
 
     # Drill-down: selected underlying -> cumulative curve -> contracts -> trades.
     st.markdown("### Drill-down")
-        available = sorted(filtered["Underlying"].unique())
-        if available:
-            selected = st.selectbox(
-                "Escolha um papel",
-                available,
-                key="v09_drilldown",
+    available = sorted(filtered["Underlying"].unique())
+    if available:
+        selected = st.selectbox(
+            "Escolha um papel",
+            available,
+            key="v09_drilldown",
+        )
+        detail = filtered[filtered["Underlying"] == selected].copy()
+        detail_confirmed = detail[detail["P&L"].notna()].copy()
+
+        d1, d2, d3, d4, d5 = st.columns(5)
+        d1.metric("P&L acumulado", f"R$ {detail_confirmed['P&L'].sum():,.0f}" if not detail_confirmed.empty else "R$ 0")
+        d2.metric("PUT", f"R$ {detail_confirmed.loc[detail_confirmed['Type']=='PUT','P&L'].sum():,.0f}" if not detail_confirmed.empty else "R$ 0")
+        d3.metric("CALL", f"R$ {detail_confirmed.loc[detail_confirmed['Type']=='CALL','P&L'].sum():,.0f}" if not detail_confirmed.empty else "R$ 0")
+        d4.metric("Operações", len(detail))
+        d5.metric("Abertas", int(detail["Status"].isin({"OPEN", "EXPIRED_UNRESOLVED", "ASSIGNED", "EXERCISED"}).sum()))
+
+        if not detail_confirmed.empty:
+            curve = detail_confirmed.dropna(subset=["Last trade"]).copy()
+            curve["Date"] = pd.to_datetime(curve["Last trade"])
+            curve = curve.sort_values(["Date", "Ticker"])
+            curve["P&L acumulado"] = curve["P&L"].cumsum()
+            detail_curve = px.line(
+                curve,
+                x="Date",
+                y="P&L acumulado",
+                markers=True,
+                hover_data=["Ticker", "Type", "P&L", "Premium", "Days", "Status"],
             )
-            detail = filtered[filtered["Underlying"] == selected].copy()
-            detail_confirmed = detail[detail["P&L"].notna()].copy()
-
-            d1, d2, d3, d4, d5 = st.columns(5)
-            d1.metric("P&L acumulado", f"R$ {detail_confirmed['P&L'].sum():,.0f}" if not detail_confirmed.empty else "R$ 0")
-            d2.metric("PUT", f"R$ {detail_confirmed.loc[detail_confirmed['Type']=='PUT','P&L'].sum():,.0f}" if not detail_confirmed.empty else "R$ 0")
-            d3.metric("CALL", f"R$ {detail_confirmed.loc[detail_confirmed['Type']=='CALL','P&L'].sum():,.0f}" if not detail_confirmed.empty else "R$ 0")
-            d4.metric("Operações", len(detail))
-            d5.metric("Abertas", int(detail["Status"].isin({"OPEN", "EXPIRED_UNRESOLVED", "ASSIGNED", "EXERCISED"}).sum()))
-
-            if not detail_confirmed.empty:
-                curve = detail_confirmed.dropna(subset=["Last trade"]).copy()
-                curve["Date"] = pd.to_datetime(curve["Last trade"])
-                curve = curve.sort_values(["Date", "Ticker"])
-                curve["P&L acumulado"] = curve["P&L"].cumsum()
-                detail_curve = px.line(
-                    curve,
-                    x="Date",
-                    y="P&L acumulado",
-                    markers=True,
-                    hover_data=["Ticker", "Type", "P&L", "Premium", "Days", "Status"],
-                )
-                detail_curve.update_layout(
-                    height=350,
-                    margin=dict(l=10, r=10, t=10, b=10),
-                    xaxis_title="Data",
-                    yaxis_title="P&L acumulado (R$)",
-                )
-                st.plotly_chart(detail_curve, use_container_width=True)
-
-            st.dataframe(
-                detail.sort_values(["Last trade", "Ticker"]),
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "P&L": st.column_config.NumberColumn("P&L", format="R$ %.2f"),
-                    "Raw lifecycle P&L": st.column_config.NumberColumn("P&L bruto do lifecycle", format="R$ %.2f"),
-                    "Premium": st.column_config.NumberColumn("Prêmio", format="R$ %.2f"),
-                    "Capital": st.column_config.NumberColumn("Capital", format="R$ %.2f"),
-                    "Return %": st.column_config.NumberColumn("Retorno", format="%.2f%%"),
-                },
+            detail_curve.update_layout(
+                height=350,
+                margin=dict(l=10, r=10, t=10, b=10),
+                xaxis_title="Data",
+                yaxis_title="P&L acumulado (R$)",
             )
+            st.plotly_chart(detail_curve, use_container_width=True)
 
-        # Data quality is visible, but kept below the analytical view.
-        with st.expander("Qualidade e cobertura dos dados"):
-            st.write(
-                f"**{len(performances)} lifecycles** reconstruídos • "
-                f"**{len(confirmed)}** confirmados como resultado realizado • "
-                f"**{open_count}** ainda abertos/não concluídos • "
-                f"**{unresolved_count}** sem underlying resolvido."
-            )
-            st.caption(
-                "P&L realizado inclui somente CLOSED e EXPIRED_WORTHLESS. "
-                "OPEN, ASSIGNED, EXERCISED e EXPIRED_UNRESOLVED ficam fora do resultado realizado."
+        st.dataframe(
+            detail.sort_values(["Last trade", "Ticker"]),
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "P&L": st.column_config.NumberColumn("P&L", format="R$ %.2f"),
+                "Raw lifecycle P&L": st.column_config.NumberColumn("P&L bruto do lifecycle", format="R$ %.2f"),
+                "Premium": st.column_config.NumberColumn("Prêmio", format="R$ %.2f"),
+                "Capital": st.column_config.NumberColumn("Capital", format="R$ %.2f"),
+                "Return %": st.column_config.NumberColumn("Retorno", format="%.2f%%"),
+            },
+        )
+
+    # Data quality is visible, but kept below the analytical view.
+    with st.expander("Qualidade e cobertura dos dados"):
+        st.write(
+            f"**{len(performances)} lifecycles** reconstruídos • "
+            f"**{len(confirmed)}** confirmados como resultado realizado • "
+            f"**{open_count}** ainda abertos/não concluídos • "
+            f"**{unresolved_count}** sem underlying resolvido."
+        )
+        st.caption(
+            "P&L realizado inclui somente CLOSED e EXPIRED_WORTHLESS. "
+            "OPEN, ASSIGNED, EXERCISED e EXPIRED_UNRESOLVED ficam fora do resultado realizado."
             )
 
     st.markdown("#### Current option positions")
