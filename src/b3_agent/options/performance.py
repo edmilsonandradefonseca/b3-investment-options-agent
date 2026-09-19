@@ -115,6 +115,8 @@ class OptionPerformanceEngine:
                 2,
             )
 
+            option_type = (contract.option_type if contract else None) or infer_b3_option_type(ticker)
+
             multiplier = contract.contract_multiplier if contract and contract.contract_multiplier else 1.0
             capital_basis = None
             return_basis = "UNAVAILABLE"
@@ -153,8 +155,6 @@ class OptionPerformanceEngine:
             first = _trade_date(lifecycle.first_trade_date)
             last = _trade_date(lifecycle.last_trade_date)
             days = (last - first).days + 1 if first is not None and last is not None else None
-
-            option_type = (contract.option_type if contract else None) or infer_b3_option_type(ticker)
 
             result.append(
                 OptionTradePerformance(
