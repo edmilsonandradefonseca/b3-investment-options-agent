@@ -9,6 +9,17 @@ from b3_agent.schemas.position import PortfolioContext
 
 
 @dataclass(frozen=True)
+class TransactionSourceCoverage:
+    """Explicit evidence about the scope and completeness of one transaction source."""
+
+    source_ref: str
+    coverage_start: date | datetime | None = None
+    coverage_end: date | datetime | None = None
+    scope: str = "PERIOD_ONLY"
+    completeness: str = "UNKNOWN"
+
+
+@dataclass(frozen=True)
 class OptionHistoryCoverage:
     """Evidence about how much transaction history is available for one option."""
 
@@ -33,6 +44,7 @@ class OptionReconciliation:
     btg_position_ids: tuple[str, ...] = ()
     quality_status: str = "VALIDATED"
     history_coverage: tuple[OptionHistoryCoverage, ...] = ()
+    source_coverage: tuple[TransactionSourceCoverage, ...] = ()
 
 
 class OptionsReconciliationEngine:
@@ -42,6 +54,7 @@ class OptionsReconciliationEngine:
         self,
         transactions: tuple[OptionTransaction, ...],
         portfolio: PortfolioContext,
+        source_coverage: tuple[TransactionSourceCoverage, ...] = (),
     ) -> OptionReconciliation:
         btg_options = {
             canonical_option_ticker(position.ticker): position
@@ -125,6 +138,16 @@ class OptionsReconciliationEngine:
                 alignment = "DIFFERENT"
 
             # Quantity alignment is evidence, not proof, of complete history.
+            # Completeness may only be promoted by explicit source evidence.
+            ticker_source_refs = {tx.source_ref for tx in rows}
+            applicable = [item for item in source_coverage if item.source_ref in ticker_source_refs]
+            if applicable and all(item.scope == "FULL_HISTORY" and item.completeness == "COMPLETE" for item in applicable):
+                completeness = "COMPLETE"
+            elif applicable and any(item.completeness == "PARTIAL" for item in applicable):
+                completeness = "PARTIAL"
+            else:
+                completeness = "UNKNOWN"
+
             coverage_rows.append(
                 OptionHistoryCoverage(
                     option_ticker=ticker,
@@ -134,7 +157,7 @@ class OptionsReconciliationEngine:
                     net_historical_quantity=net_quantity,
                     current_position_quantity=current_quantity,
                     position_alignment=alignment,
-                    completeness="UNKNOWN",
+                    completeness=completeness,
                 )
             )
 
@@ -146,4 +169,5 @@ class OptionsReconciliationEngine:
             btg_position_ids=tuple(dict.fromkeys(btg_position_ids)),
             quality_status="VALIDATED",
             history_coverage=tuple(coverage_rows),
+            source_coverage=tuple(source_coverage),
         )
