@@ -17,6 +17,26 @@ class OptionTransaction:
     as_of: date | datetime | None = None
     source_ref: str = ""
 
+    @property
+    def side(self) -> str:
+        """Transaction side derived from the source quantity sign."""
+        return "SELL" if self.quantity < 0 else "BUY"
+
+    @property
+    def execution_price(self) -> float | None:
+        """Unit execution price represented by Custo Médio."""
+        return self.average_cost
+
+    @property
+    def total_amount(self) -> float | None:
+        """Signed transaction amount represented by Custo Total."""
+        return self.total_cost
+
+    @property
+    def absolute_quantity(self) -> float:
+        """Quantity traded without the source-side sign."""
+        return abs(self.quantity)
+
     def __post_init__(self) -> None:
         if not self.transaction_id.strip():
             raise ValueError("transaction_id must be non-empty")
