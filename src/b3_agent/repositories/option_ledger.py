@@ -49,6 +49,8 @@ class OptionTransactionLedger:
                     as_of TEXT,
                     source_ref TEXT NOT NULL DEFAULT '',
                     note_number TEXT,
+                    source_type TEXT NOT NULL DEFAULT 'UNKNOWN',
+                    source_id TEXT,
                     fingerprint TEXT
                 )
                 """
@@ -56,6 +58,10 @@ class OptionTransactionLedger:
             columns = {row[1] for row in connection.execute("PRAGMA table_info(option_transactions)").fetchall()}
             if "fingerprint" not in columns:
                 connection.execute("ALTER TABLE option_transactions ADD COLUMN fingerprint TEXT")
+            if "source_type" not in columns:
+                connection.execute("ALTER TABLE option_transactions ADD COLUMN source_type TEXT NOT NULL DEFAULT 'UNKNOWN'")
+            if "source_id" not in columns:
+                connection.execute("ALTER TABLE option_transactions ADD COLUMN source_id TEXT")
             connection.execute("UPDATE option_transactions SET fingerprint = transaction_id WHERE fingerprint IS NULL")
             connection.execute("""
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_option_transactions_fingerprint
@@ -87,8 +93,9 @@ class OptionTransactionLedger:
                     """
                     INSERT OR IGNORE INTO option_transactions (
                         transaction_id, option_ticker, broker, quantity,
-                        average_cost, total_cost, as_of, source_ref, note_number, fingerprint
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        average_cost, total_cost, as_of, source_ref, note_number,
+                        source_type, source_id, fingerprint
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         transaction.transaction_id,
@@ -100,6 +107,8 @@ class OptionTransactionLedger:
                         self._as_text(transaction.as_of),
                         transaction.source_ref,
                         transaction.note_number,
+                        transaction.source_type,
+                        transaction.source_id,
                         self.fingerprint(transaction),
                     ),
                 )
@@ -112,7 +121,8 @@ class OptionTransactionLedger:
             rows = connection.execute(
                 """
                 SELECT transaction_id, option_ticker, broker, quantity,
-                       average_cost, total_cost, as_of, source_ref, note_number
+                       average_cost, total_cost, as_of, source_ref, note_number,
+                       source_type, source_id
                 FROM option_transactions
                 ORDER BY as_of, transaction_id
                 """
@@ -129,6 +139,8 @@ class OptionTransactionLedger:
                 as_of=self._as_date(row[6]),
                 source_ref=row[7],
                 note_number=row[8],
+                source_type=row[9] or "UNKNOWN",
+                source_id=row[10],
             )
             for row in rows
         )
