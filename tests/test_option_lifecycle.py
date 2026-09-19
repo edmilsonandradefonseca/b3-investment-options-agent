@@ -159,3 +159,67 @@ def test_worthless_expiry_with_missing_execution_price_keeps_pnl_unknown():
 
     assert lifecycle.status == "EXPIRED_WORTHLESS"
     assert lifecycle.realized_pnl is None
+
+
+def test_exercised_long_option_does_not_invent_option_pnl():
+    rows = (tx("1", "ABCXX126", 1000, 0.50, "2026-09-10"),)
+    lifecycle = OptionLifecycleEngine().build(
+        rows,
+        contract=OptionContract(
+            option_ticker="ABCXX126",
+            expiration_date=date(2026, 9, 18),
+            option_type="CALL",
+            strike=10.0,
+            underlying_ticker="ABC3",
+        ),
+        evaluation_date=date(2026, 9, 19),
+        expiry_outcome="EXERCISED",
+    )
+
+    assert lifecycle.status == "EXERCISED"
+    assert lifecycle.expiry_state == "EXERCISED"
+    assert lifecycle.net_quantity == 1000
+    assert lifecycle.realized_pnl == 0.0
+
+
+def test_assigned_short_option_does_not_invent_option_pnl():
+    rows = (tx("1", "ABCXX127", -1000, 0.50, "2026-09-10"),)
+    lifecycle = OptionLifecycleEngine().build(
+        rows,
+        contract=OptionContract(
+            option_ticker="ABCXX127",
+            expiration_date=date(2026, 9, 18),
+            option_type="PUT",
+            strike=10.0,
+            underlying_ticker="ABC3",
+        ),
+        evaluation_date=date(2026, 9, 19),
+        expiry_outcome="ASSIGNED",
+    )
+
+    assert lifecycle.status == "ASSIGNED"
+    assert lifecycle.expiry_state == "ASSIGNED"
+    assert lifecycle.net_quantity == -1000
+    assert lifecycle.realized_pnl == 0.0
+
+
+def test_exercised_requires_long_option_position():
+    rows = (tx("1", "ABCXX128", -1000, 0.50, "2026-09-10"),)
+
+    try:
+        OptionLifecycleEngine().build(rows, expiry_outcome="EXERCISED")
+    except ValueError as exc:
+        assert str(exc) == "EXERCISED requires a net long option position"
+    else:
+        raise AssertionError("expected ValueError")
+
+
+def test_assigned_requires_short_option_position():
+    rows = (tx("1", "ABCXX129", 1000, 0.50, "2026-09-10"),)
+
+    try:
+        OptionLifecycleEngine().build(rows, expiry_outcome="ASSIGNED")
+    except ValueError as exc:
+        assert str(exc) == "ASSIGNED requires a net short option position"
+    else:
+        raise AssertionError("expected ValueError")
