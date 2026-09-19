@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState, type ReactNode } from "react";
+import { FormEvent, useEffect, useMemo, useState, type ReactNode } from "react";
 
 type Page = "Portfolio" | "Options" | "Opportunities" | "Portfolio Intelligence" | "Knowledge";
 type Position = { ticker:string; qty:string; avg:number; price:number; value:number; pnl:number; pct:number };
@@ -64,31 +64,69 @@ function Copilot({setPage}:{setPage:(p:Page)=>void}) {
 }
 
 function Portfolio() {
-  const [range,setRange]=useState("1M");
-  const points=useMemo(()=>history.map((v,i)=>({v,i})),[]);
-  const min=Math.min(...history),max=Math.max(...history);
-  const poly=points.map(p=>((p.i/(points.length-1))*600).toFixed(1)+","+((max-p.v)/(max-min)*180+20).toFixed(1)).join(" L ");
-  return <main className="workspace"><div className="workspace-head"><div><h1>Olá, Edmilson! 👋</h1><p>Aqui está a visão geral da sua carteira.</p></div><span className="updated">◷ Atualizado em 18/09/2026 10:24 &nbsp; ↻</span></div>
+  type PortfolioData = {
+    status: string;
+    as_of?: string;
+    quality_status?: string;
+    cash?: number;
+    summary?: { total_value:number; stock_value:number; option_value:number; position_count:number };
+    positions?: Array<{ticker:string; instrument_type:string; quantity:number; average_cost:number|null; market_price:number|null; market_value:number|null; pnl:number|null; pnl_pct:number|null; option_type:string|null; underlying_ticker:string|null; strike:number|null; expiration_date:string|null}>;
+    message?: string;
+  };
+  const [data,setData]=useState<PortfolioData|null>(null);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+
+  useEffect(()=>{
+    fetch(API_BASE+"/api/portfolio")
+      .then(async r=>{const d=await r.json(); if(!r.ok) throw new Error(d.detail??"Falha ao carregar portfolio"); return d;})
+      .then(d=>{setData(d); setError(d.status==="OK"?"":"Snapshot do portfolio não encontrado.");})
+      .catch(err=>setError(err instanceof Error?err.message:"Falha ao carregar portfolio"))
+      .finally(()=>setLoading(false));
+  },[]);
+
+  const positions=(data?.positions??[]).slice().sort((a,b)=>(b.market_value??0)-(a.market_value??0));
+  const top=positions.slice(0,5);
+  const summary=data?.summary;
+  const total=summary?.total_value??0;
+  const stockPct=total?((summary?.stock_value??0)/total*100):0;
+  const optionPct=total?((summary?.option_value??0)/total*100):0;
+
+  return <main className="workspace">
+    <div className="workspace-head"><div><h1>Olá, Edmilson! 👋</h1><p>Visão real da carteira carregada do BTG.</p></div><span className="updated">{loading?"Carregando…":(data?.as_of?"Snapshot em "+data.as_of:"Sem snapshot")}</span></div>
+    {error&&<div className="analytics-summary"><strong>Dados do Portfolio</strong><span>{data?.message??error}</span></div>}
     <section className="cards">
-      <Metric title="Valor Total" value={money(352480)} detail="▲ +2,34% (+R$ 8.054)" icon="↗"/>
-      <Metric title="Cash" value={money(42360)} detail="12,0% da carteira" icon="◉"/>
-      <Metric title="Ações" value={money(289120)} detail="82,0% da carteira" icon="▥"/>
-      <Metric title="Opções (Valor Líquido)" value={money(21000)} detail="6,0% da carteira" icon="◈"/>
+      <Metric title="Valor Total" value={summary?money(total):"—"} detail={summary?String(summary.position_count)+" posições":"Sem dados"} icon="↗"/>
+      <Metric title="Cash" value={money(data?.cash??0)} detail="Fonte BTG" icon="◉"/>
+      <Metric title="Ações" value={summary?money(summary.stock_value):"—"} detail={summary?stockPct.toFixed(1).replace(".",",")+"% da carteira":"Sem dados"} icon="▥"/>
+      <Metric title="Opções (Valor Líquido)" value={summary?money(summary.option_value):"—"} detail={summary?optionPct.toFixed(1).replace(".",",")+"% da carteira":"Sem dados"} icon="◈"/>
     </section>
     <section className="grid-two">
-      <Card title="Evolução da Carteira" action={<div className="range">{["1M","3M","6M","YTD","ALL"].map(x=><button key={x} className={range===x?"on":""} onClick={()=>setRange(x)}>{x}</button>)}</div>}>
-        <div className="line-chart"><div className="y-labels"><span>380K</span><span>360K</span><span>340K</span><span>320K</span><span>300K</span></div><svg viewBox="0 0 600 230" preserveAspectRatio="none"><defs><linearGradient id="area" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#1684ff" stopOpacity=".28"/><stop offset="1" stopColor="#1684ff" stopOpacity="0"/></linearGradient></defs><path d={"M 0 205 L "+poly.replace(/,/g," ").replace(/ /g," L ").replace(/(\d+\.\d+) (\d+\.\d+)/g,"$1 $2")} fill="none" stroke="#1684ff" strokeWidth="3"/></svg></div>
-        <div className="chart-caption"><span>18 Ago</span><span>25 Ago</span><span>01 Set</span><span>08 Set</span><span>15 Set</span><b>+3,31%</b></div>
+      <Card title="Composição da Carteira">
+        <div className="allocation">
+          <div className="donut"><div className="donut-hole"><b>{money(total)}</b><span>carteira</span></div></div>
+          <div className="legend">
+            <div><i style={{background:"#1684ff"}}/><span>Ações</span><b>{stockPct.toFixed(1).replace(".",",")}%</b></div>
+            <div><i style={{background:"#19d59a"}}/><span>Opções</span><b>{optionPct.toFixed(1).replace(".",",")}%</b></div>
+          </div>
+        </div>
       </Card>
-      <Card title="Alocação de Ativos"><div className="allocation"><div className="donut"><div className="donut-hole"><b>R$ 352.480</b><span>carteira</span></div></div><div className="legend">{allocation.map(a=><div key={a.label}><i style={{background:a.color}}/><span>{a.label}</span><b>{a.value.toFixed(1).replace(".",",")}%</b></div>)}</div></div></Card>
+      <Card title="Fonte dos dados">
+        <div className="analytics-summary">
+          <strong>{data?.quality_status??"—"}</strong>
+          <span>Snapshot oficial carregado pelo BtgRendaVariavelLoader</span>
+          <small>{data?.as_of?"Data-base: "+data.as_of:"Nenhum snapshot disponível."}</small>
+        </div>
+      </Card>
     </section>
     <section className="grid-two">
-      <Card title="Top Posições"><table><thead><tr><th>Ativo</th><th>Qtd</th><th>Preço Médio</th><th>Atual</th><th>Valor (R$)</th><th>P&L</th><th>P&L %</th></tr></thead><tbody>{positions.map(p=><tr key={p.ticker}><td><strong>{p.ticker}</strong></td><td>{p.qty}</td><td>{p.avg.toFixed(2)}</td><td>{p.price.toFixed(2)}</td><td>{p.value.toLocaleString("pt-BR")}</td><td className="positive">+{p.pnl.toLocaleString("pt-BR")}</td><td className="positive">+{p.pct.toFixed(1)}%</td></tr>)}</tbody></table></Card>
-      <Card title="P&L por Categoria"><div className="pnl-list">{[["Ações",8450],["Opções",2890],["Dividendos",420],["Taxas",-475]].map(([n,v])=><div className="pnl-row" key={String(n)}><span>{n}</span><div className="bar-track"><div className={Number(v)>=0?"bar gain":"bar loss"} style={{width:Math.max(8,Math.abs(Number(v))/8450*100)+"%"}}/></div><strong className={Number(v)>=0?"positive":"negative"}>{Number(v)>=0?"+":""}{money(Number(v))}</strong></div>)}</div></Card>
-    </section>
-    <section className="grid-two">
-      <Card title="Principais Insights"><div className="insights">{["PETR4: acompanhar resultado acumulado das covered calls.","VALE3: P&L positivo no histórico carregado.","Revisar concentração financeira e exposição a opções.","Explorar rolagens para entender o resultado por estratégia."].map(x=><div key={x}>● <span>{x}</span></div>)}</div></Card>
-      <Card title="Acesso rápido"><div className="quick"><button>Explorar opções de PETR4 <span>›</span></button><button>Ver resultado acumulado por papel <span>›</span></button><button>Abrir Analytics Lab <span>›</span></button></div></Card>
+      <Card title="Top Posições">
+        <table><thead><tr><th>Ativo</th><th>Qtd</th><th>Preço Médio</th><th>Atual</th><th>Valor (R$)</th><th>P&L</th><th>P&L %</th></tr></thead>
+        <tbody>{top.map(p=><tr key={p.ticker}><td><strong>{p.ticker}</strong></td><td>{p.quantity.toLocaleString("pt-BR")}</td><td>{p.average_cost==null?"—":p.average_cost.toFixed(2)}</td><td>{p.market_price==null?"—":p.market_price.toFixed(2)}</td><td>{p.market_value==null?"—":p.market_value.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}</td><td className={(p.pnl??0)>=0?"positive":"negative"}>{p.pnl==null?"—":money(p.pnl)}</td><td className={(p.pnl_pct??0)>=0?"positive":"negative"}>{p.pnl_pct==null?"—":(p.pnl_pct>=0?"+":"")+p.pnl_pct.toFixed(1).replace(".",",")+"%"}</td></tr>)}</tbody></table>
+      </Card>
+      <Card title="Todas as posições">
+        <div className="table-wrap"><table><thead><tr><th>Ativo</th><th>Tipo</th><th>Qtd</th><th>Valor</th></tr></thead><tbody>{positions.map(p=><tr key={p.ticker}><td><strong>{p.ticker}</strong></td><td>{p.instrument_type}</td><td>{p.quantity.toLocaleString("pt-BR")}</td><td>{p.market_value==null?"—":money(p.market_value)}</td></tr>)}</tbody></table></div>
+      </Card>
     </section>
   </main>;
 }
