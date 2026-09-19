@@ -94,7 +94,10 @@ def test_expiration_can_be_classified_explicitly():
     )
 
     assert lifecycle.status == "EXPIRED_WORTHLESS"
-    assert lifecycle.realized_pnl == 0.0
+    assert lifecycle.expiry_state == "WORTHLESS"
+    assert lifecycle.net_quantity == -1000
+    assert lifecycle.unmatched_quantity == 1000
+    assert lifecycle.realized_pnl == 500.0
     assert lifecycle.contract_metadata_quality == "PARTIAL"
 
 
@@ -111,3 +114,48 @@ def test_build_option_lifecycles_groups_by_ticker():
     assert lifecycles[0].status == "CLOSED"
     assert lifecycles[0].realized_pnl == 50.0
     assert lifecycles[1].status == "OPEN"
+
+
+def test_long_option_expires_worthless_and_loses_premium():
+    rows = (tx("1", "ABCXX124", 1000, 0.50, "2026-09-10"),)
+    contract = OptionContract(
+        option_ticker="ABCXX124",
+        expiration_date=date(2026, 9, 18),
+    )
+
+    lifecycle = OptionLifecycleEngine().build(
+        rows,
+        contract=contract,
+        evaluation_date=date(2026, 9, 19),
+        expiry_outcome="WORTHLESS",
+    )
+
+    assert lifecycle.status == "EXPIRED_WORTHLESS"
+    assert lifecycle.expiry_state == "WORTHLESS"
+    assert lifecycle.net_quantity == 1000
+    assert lifecycle.unmatched_quantity == 1000
+    assert lifecycle.realized_pnl == -500.0
+
+
+def test_worthless_expiry_with_missing_execution_price_keeps_pnl_unknown():
+    row = OptionTransaction(
+        transaction_id="1",
+        option_ticker="ABCXX125",
+        broker="BTG Pactual",
+        quantity=-1000,
+        average_cost=None,
+        total_cost=None,
+        as_of=date(2026, 9, 10),
+    )
+    lifecycle = OptionLifecycleEngine().build(
+        (row,),
+        contract=OptionContract(
+            option_ticker="ABCXX125",
+            expiration_date=date(2026, 9, 18),
+        ),
+        evaluation_date=date(2026, 9, 19),
+        expiry_outcome="WORTHLESS",
+    )
+
+    assert lifecycle.status == "EXPIRED_WORTHLESS"
+    assert lifecycle.realized_pnl is None
