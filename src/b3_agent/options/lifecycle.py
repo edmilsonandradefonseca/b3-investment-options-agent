@@ -67,12 +67,7 @@ def _pair_pnl(
 
 
 class OptionLifecycleEngine:
-    """Reconstruct option lifecycle using FIFO matching of opposite-side trades.
-
-    The engine intentionally does not infer exercise/assignment from expiration
-    alone. It also does not apply a contract multiplier until that multiplier
-    has been explicitly sourced and the accounting convention is defined.
-    """
+    """Reconstruct option lifecycle using FIFO matching of opposite-side trades."""
 
     def build(
         self,
@@ -152,9 +147,7 @@ class OptionLifecycleEngine:
             expiry_state = "NOT_PROVIDED"
 
         history_completeness = (
-            "COMPLETE"
-            if abs(net_quantity) == 0
-            else "PARTIAL_OR_OPEN"
+            "COMPLETE" if abs(net_quantity) == 0 else "PARTIAL_OR_OPEN"
         )
 
         metadata_values = (
@@ -178,7 +171,7 @@ class OptionLifecycleEngine:
             opened_quantity=opened_quantity,
             closed_quantity=closed_quantity,
             unmatched_quantity=unmatched_quantity,
-            realized_pnl=None if realized_has_unpriced else realized_pnl,
+            realized_pnl=None if realized_has_unpriced else round(realized_pnl, 2),
             first_trade_date=ordered[0].as_of,
             last_trade_date=ordered[-1].as_of,
             expiration_date=contract.expiration_date if contract else None,
