@@ -309,16 +309,16 @@ with tab_options:
 
         st.markdown("#### Option lifecycle")
         contracts = {}
-        for row in option_df.itertuples(index=False):
-            expiration = getattr(row, "Vencimento", None)
+        for _, row in option_df.iterrows():
+            expiration = row.get("Vencimento")
             if pd.notna(expiration):
                 expiration_date = pd.Timestamp(expiration).date()
-                contracts[str(row.Ticker)] = OptionContract(
-                    option_ticker=str(row.Ticker),
+                contracts[str(row["Ticker"])] = OptionContract(
+                    option_ticker=str(row["Ticker"]),
                     expiration_date=expiration_date,
-                    option_type=getattr(row, "Tipo opção", None),
-                    strike=getattr(row, "Strike", None),
-                    underlying_ticker=getattr(row, "Underlying", None),
+                    option_type=row.get("Tipo opção"),
+                    strike=row.get("Strike"),
+                    underlying_ticker=row.get("Underlying"),
                 )
 
         lifecycle_rows = []
