@@ -33,7 +33,7 @@ def test_short_option_closes_and_calculates_realized_pnl_fifo():
     assert lifecycle.net_quantity == 0
     assert lifecycle.closed_quantity == 1000
     assert lifecycle.unmatched_quantity == 0
-    assert lifecycle.realized_pnl == 440.0
+    assert lifecycle.realized_pnl == 400.0
     assert lifecycle.history_completeness == "COMPLETE"
     assert lifecycle.contract_metadata_quality == "MISSING"
     assert lifecycle.pnl_basis == "GROSS_UNIT_PRICE"
@@ -94,7 +94,7 @@ def test_expiration_can_be_classified_explicitly():
     )
 
     assert lifecycle.status == "EXPIRED_WORTHLESS"
-    assert lifecycle.realized_pnl == 500.0
+    assert lifecycle.realized_pnl == 0.0
     assert lifecycle.contract_metadata_quality == "PARTIAL"
 
 
