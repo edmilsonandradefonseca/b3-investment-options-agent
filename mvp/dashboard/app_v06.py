@@ -16,6 +16,7 @@ import streamlit as st
 
 from b3_agent.opportunity import OpportunityIntelligenceEngine
 from b3_agent.options.brokerage_notes import BrokerageNoteParser
+from b3_agent.options.lifecycle import OptionContract, build_option_lifecycles
 from b3_agent.options.reconciliation import OptionsReconciliationEngine
 from b3_agent.options.transactions import OptionsTransactionLoader
 from b3_agent.portfolio import PortfolioIntelligenceEngine
@@ -304,6 +305,53 @@ with tab_options:
         st.caption(
             "Histórico preserva Custo Médio como preço de execução e Custo Total como valor "
             "da transação. Uma transação individual não é tratada como a posição atual."
+        )
+
+        st.markdown("#### Option lifecycle")
+        contracts = {}
+        for row in option_df.itertuples(index=False):
+            expiration = getattr(row, "Vencimento", None)
+            if pd.notna(expiration):
+                expiration_date = pd.Timestamp(expiration).date()
+                contracts[str(row.Ticker)] = OptionContract(
+                    option_ticker=str(row.Ticker),
+                    expiration_date=expiration_date,
+                    option_type=getattr(row, "Tipo opção", None),
+                    strike=getattr(row, "Strike", None),
+                    underlying_ticker=getattr(row, "Underlying", None),
+                )
+
+        lifecycle_rows = []
+        for lifecycle in build_option_lifecycles(
+            transactions,
+            contracts=contracts,
+            evaluation_date=max(
+                (tx.as_of for tx in transactions if tx.as_of is not None),
+                default=context.as_of,
+            ),
+        ):
+            lifecycle_rows.append(
+                {
+                    "Ticker": lifecycle.option_ticker,
+                    "Status": lifecycle.status,
+                    "Net qty (history)": lifecycle.net_quantity,
+                    "Closed qty": lifecycle.closed_quantity,
+                    "Open/unmatched qty": lifecycle.unmatched_quantity,
+                    "Realized P&L": lifecycle.realized_pnl,
+                    "Expiration": lifecycle.expiration_date,
+                    "Expiry state": lifecycle.expiry_state,
+                }
+            )
+        st.dataframe(
+            pd.DataFrame(lifecycle_rows),
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.caption(
+            "Lifecycle é reconstruído apenas a partir das transações importadas. "
+            "Quando o vencimento passou mas não temos o evento de exercício/atribuição, "
+            "o status permanece EXPIRED_UNRESOLVED; o sistema não assume que a opção "
+            "expirou sem valor."
         )
     else:
         st.info("Nenhum histórico de transações de opções carregado.")
