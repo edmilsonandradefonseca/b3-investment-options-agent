@@ -223,3 +223,39 @@ def test_assigned_requires_short_option_position():
         assert str(exc) == "ASSIGNED requires a net short option position"
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_contract_multiplier_scales_realized_pnl():
+    rows = (
+        tx("1", "EQTLV369", -1000, 0.64, "2026-09-11"),
+        tx("2", "EQTLV369", 1000, 0.30, "2026-09-15"),
+    )
+    lifecycle = OptionLifecycleEngine().build(
+        rows,
+        contract=OptionContract(
+            option_ticker="EQTLV369",
+            contract_multiplier=100.0,
+        ),
+    )
+
+    assert lifecycle.realized_pnl == 34000.0
+    assert lifecycle.contract_multiplier == 100.0
+    assert lifecycle.pnl_basis == "GROSS_CONTRACT_VALUE"
+
+
+def test_worthless_expiry_uses_contract_multiplier():
+    rows = (tx("1", "ABCXX130", -1000, 0.50, "2026-09-10"),)
+    lifecycle = OptionLifecycleEngine().build(
+        rows,
+        contract=OptionContract(
+            option_ticker="ABCXX130",
+            expiration_date=date(2026, 9, 18),
+            contract_multiplier=100.0,
+        ),
+        evaluation_date=date(2026, 9, 19),
+        expiry_outcome="WORTHLESS",
+    )
+
+    assert lifecycle.realized_pnl == 50000.0
+    assert lifecycle.contract_multiplier == 100.0
+    assert lifecycle.pnl_basis == "GROSS_CONTRACT_VALUE"
