@@ -319,7 +319,7 @@ function Reconciliation(){
   type Match={status:string;excel_transaction_id?:string|null;brokerage_transaction_id?:string|null;reason:string};
   type Coverage={option_ticker:string;first_trade_date?:string|null;last_trade_date?:string|null;transaction_count:number;net_historical_quantity:number;current_position_quantity?:number|null;position_alignment:string;completeness:string};
   type SourceCoverage={source_ref:string;coverage_start?:string|null;coverage_end?:string|null;scope:string;completeness:string};
-  type ReconciliationData={quality_status:string;matches:Match[];history_coverage:Coverage[];source_coverage:SourceCoverage[];quantity_mismatches:Array<[string,number,number]>;potential_cross_source_duplicates:Array<[string,string]>};
+  type ReconciliationData={quality_status:string;matches:Match[];history_coverage:Coverage[];source_coverage:SourceCoverage[];quantity_mismatches:Array<[string,number,number]>;potential_cross_source_duplicates:Array<[string,string]>;as_of?:string|null;source_refs?:string[]};
   const [data,setData]=useState<ReconciliationData|null>(null);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState("");
