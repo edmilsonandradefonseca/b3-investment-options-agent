@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState, type ReactNode } from "react";
+import { FormEvent, useEffect, useState, type ReactNode } from "react";
 
 type Page = "Portfolio" | "Options" | "Opportunities" | "Portfolio Intelligence" | "Knowledge";
 function infer_b3_option_type(ticker:string){const s=ticker.replace(/\s+/g,"").toUpperCase(); const m=s.match(/[A-Z]$/); if(!m)return null; return "ABCDEFGHIJKL".includes(m[0])?"CALL":"MNOPQRSTUVWX".includes(m[0])?"PUT":null;} function pct(v:number){return (v.toFixed(1).replace(".",",")+"%")} function money(v:number){ return new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0}).format(v); }
