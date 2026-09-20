@@ -66,3 +66,40 @@ def test_validated_evidence_allows_action_candidate():
     assert len(result.ranked_opportunities) == 1
     assert len(result.action_candidates) == 1
     assert result.ranked_opportunities[0].eligible is True
+
+def test_future_evidence_rejects_opportunity():
+    evidence = _evidence()
+    future = Evidence(
+        evidence_id=evidence.evidence_id,
+        evidence_type=evidence.evidence_type,
+        subject_id=evidence.subject_id,
+        as_of=date(2026, 9, 19),
+        value=evidence.value,
+        source_refs=evidence.source_refs,
+        quality_status=evidence.quality_status,
+    )
+    result = OpportunityIntelligenceEngine().assess(
+        (_opportunity(),),
+        evidence_registry=(future,),
+    )
+
+    assert "evidence_as_of_after_opportunity=evidence:PETRV300" in result.rejected_opportunities[0].rejection_reasons
+
+
+def test_evidence_without_source_refs_rejects_opportunity():
+    evidence = _evidence()
+    without_sources = Evidence(
+        evidence_id=evidence.evidence_id,
+        evidence_type=evidence.evidence_type,
+        subject_id=evidence.subject_id,
+        as_of=evidence.as_of,
+        value=evidence.value,
+        source_refs=(),
+        quality_status=evidence.quality_status,
+    )
+    result = OpportunityIntelligenceEngine().assess(
+        (_opportunity(),),
+        evidence_registry=(without_sources,),
+    )
+
+    assert "evidence_source_refs=EMPTY:evidence:PETRV300" in result.rejected_opportunities[0].rejection_reasons
