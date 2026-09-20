@@ -310,7 +310,7 @@ function Opportunities(){
         <Card title="Action candidates"><div className="table-wrap"><table><thead><tr><th>Ação</th><th>Prioridade</th><th>Subject</th><th>Racional</th></tr></thead><tbody>{actionCandidates.map(x=><tr key={x.action_candidate_id}><td><strong>{x.action_type}</strong></td><td>{x.priority}</td><td>{x.subject_id}</td><td>{x.rationale||"—"}</td></tr>)}{!actionCandidates.length&&<tr><td colSpan={4} className="table-empty">Nenhum candidato de ação.</td></tr>}</tbody></table></div></Card>
         <Card title="Rejeitadas / revisão"><div className="table-wrap"><table><thead><tr><th>Ticker</th><th>Ação</th><th>Motivos</th></tr></thead><tbody>{rejected.map(x=><tr key={x.opportunity_id}><td><strong>{x.ticker}</strong></td><td>{x.action}</td><td>{x.rejection_reasons?.join(" · ")||"Sem motivo informado"}</td></tr>)}{!rejected.length&&<tr><td colSpan={3} className="table-empty">Nenhuma oportunidade rejeitada.</td></tr>}</tbody></table></div></Card>
       </section>
-      <div className="analytics-summary"><strong>{data.quality_status}</strong><span>as_of: {data.as_of??"não informado"} · {data.source_refs?.length??0} fonte(s) declarada(s)</span><small>A UI não recalcula ranking, valuation, capital ou risco.</small></div>
+      <ProvenanceBlock source={(data.source_refs??[]).join(" · ")||"Nenhuma fonte declarada"} asOf={data.as_of??undefined} quality={data.quality_status}/><small className="ux-note">A UI não recalcula ranking, valuation, capital ou risco.</small>
     </>}
   </main>;
 }
@@ -342,7 +342,7 @@ function Reconciliation(){
   return <main className="workspace reconciliation-page">
     <PageHeader title="Reconciliação" subtitle="Confronto auditável entre transações do Excel e notas de corretagem, sem alterar o P&L." status={loading?"Consultando…":data?"Dados reais via Orchestrator":"Sem dados"}/>
     {error&&<div className="analytics-summary copilot-error"><strong>Reconciliação indisponível</strong><span>{error}</span></div>}
-    {data&&<section className="cards">
+    {data&&<>{data&&<ProvenanceBlock source={(data.source_refs??[]).join(" · ")||"Excel × Notas de corretagem"} asOf={data.as_of??undefined} quality={data.quality_status}/>}</><section className="cards">
       <Metric title="Qualidade" value={data.quality_status} detail="Status do engine de reconciliação" icon="✓"/>
       <Metric title="Reconciliadas" value={String(count("RECONCILED"))} detail="Excel ↔ Nota" icon="⇄"/>
       <Metric title="Possíveis duplicidades" value={String(count("POTENTIAL_DUPLICATE"))} detail="Requer revisão" icon="!"/>
