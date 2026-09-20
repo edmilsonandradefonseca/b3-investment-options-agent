@@ -67,7 +67,7 @@ def _query_terms(query: str) -> tuple[str, ...]:
     """
     return tuple(
         term
-        for term in dict.fromkeys(re.findall(r"\\w+", query.casefold()))
+        for term in dict.fromkeys(re.findall(r"\w+", query.casefold()))
         if len(term) > 1
     )
 
