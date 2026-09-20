@@ -170,3 +170,36 @@ def test_active_snapshots_use_existing_loaders(tmp_path) -> None:
     snapshots = load_active_snapshots(tmp_path)
     assert snapshots["portfolio_context"].quality_status == "VALIDATED"
     assert len(snapshots["options_transactions"]) == 4
+
+
+def test_knowledge_query_contract_uses_obsidian_rag_and_graph(tmp_path, monkeypatch) -> None:
+    vault = tmp_path / "vault"
+    note = vault / "PETR4.md"
+    note.parent.mkdir(parents=True)
+    note.write_text(
+        """---\nentity_type: stock\nentity_id: stock:PETR4\nname: PETR4\ncanonical_id: PETR4\nsource_ref: fixture:PETR4\nprovenance: test\n---\n\nPETR4 possui exposição a petróleo e risco de mercado.\n""",
+        encoding="utf-8",
+    )
+    _patch_data_dir(monkeypatch, tmp_path / "data")
+    server_settings = SimpleNamespace(
+        data_dir=tmp_path / "data",
+        obsidian_vault=vault,
+        llm_enabled=False,
+        llm_model="gpt-5.6-luna",
+    )
+    monkeypatch.setattr(server, "settings", server_settings)
+
+    client = TestClient(server.app)
+    response = client.post(
+        "/knowledge/query",
+        json={"query": "PETR4 petróleo", "rag_top_k": 5, "graph_top_k": 20, "neighbor_depth": 1},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["query"] == "PETR4 petróleo"
+    assert payload["metadata"]["rag_count"] == 1
+    assert payload["metadata"]["entity_count"] == 1
+    assert payload["rag"][0]["source_ref"] == "obsidian:PETR4.md"
+    assert payload["entities"][0]["canonical_id"] == "PETR4"
+    assert payload["sources"] == ["obsidian:PETR4.md", "fixture:PETR4"]
