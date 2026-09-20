@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -13,8 +14,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from b3_agent.config import settings
 from b3_agent.options.transactions import OptionsTransactionLoader
+from b3_agent.options.brokerage_notes import BrokerageNoteIngestionError, BrokerageNoteParser
 from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
 from b3_agent.repositories.transaction import TransactionRepository
+from b3_agent.repositories.option_ledger import OptionTransactionLedger
+from b3_agent.repositories.source_manifest import SourceManifestRecord, SourceManifestRepository
 from b3_agent.schemas.transaction import Transaction
 from b3_agent.storage.sqlite import SQLiteStore
 from b3_agent.orchestration import OrchestratorRequest, OrchestratorResponse, b3_orchestrator, configure_default_workflow, configure_dashboard_workflow
@@ -237,16 +241,50 @@ def _store_brokerage_note(upload: UploadFile) -> dict[str, Any]:
                     break
                 handle.write(chunk)
 
-        # A brokerage note is currently staged as source material. Parsing into
-        # the option ledger remains a separate governed contract.
         if temp_path.stat().st_size < 5:
             raise ValueError("PDF vazio ou inválido")
+
+        parser = BrokerageNoteParser()
+        transactions = parser.parse(temp_path)
+
+        target_bytes = temp_path.read_bytes()
+        source_fingerprint = hashlib.sha256(target_bytes).hexdigest()
         temp_path.replace(target)
+
+        ledger = OptionTransactionLedger(_import_dir().parent / "options.sqlite3")
+        inserted_count = ledger.append(transactions)
+
+        note_number = transactions[0].note_number
+        source_ref = transactions[0].source_ref.split(f":{safe_name}")[0]
+        trade_dates = [item.as_of for item in transactions if item.as_of is not None]
+        coverage_start = min(trade_dates) if trade_dates else None
+        coverage_end = max(trade_dates) if trade_dates else None
+        SourceManifestRepository(_import_dir().parent / "source_manifest.sqlite3").upsert(
+            SourceManifestRecord(
+                source_fingerprint=source_fingerprint,
+                source_type="BROKERAGE_NOTE",
+                source_id=note_number or source_fingerprint,
+                source_ref=source_ref,
+                file_name=safe_name,
+                imported_at=datetime.now(timezone.utc),
+                record_count=len(transactions),
+                coverage_start=coverage_start,
+                coverage_end=coverage_end,
+                scope="PERIOD_ONLY",
+                completeness="UNKNOWN",
+            )
+        )
+
         return {
-            "status": "staged",
+            "status": "processed",
             "file": upload.filename,
             "active_file": str(target),
-            "message": "nota de corretagem recebida e armazenada para processamento",
+            "note_number": note_number,
+            "trade_date": coverage_start.isoformat() if coverage_start == coverage_end and coverage_start else None,
+            "parsed_count": len(transactions),
+            "inserted_count": inserted_count,
+            "transaction_ids": [item.transaction_id for item in transactions],
+            "message": "nota de corretagem processada e registrada no ledger",
         }
     except HTTPException:
         raise
