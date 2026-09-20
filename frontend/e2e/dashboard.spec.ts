@@ -83,7 +83,7 @@ test("Copilot exposes all golden conversational cases and calls the orchestrator
     } else {
       await route.continue();
     }
-  });\n
+  });
   for (const id of ["GC-C01", "GC-C02", "GC-C03", "GC-C04", "GC-C05", "GC-C06", "GC-C07", "GC-C08"]) {
     await expect(page.getByText(id, { exact: false })).toBeVisible();
   }
