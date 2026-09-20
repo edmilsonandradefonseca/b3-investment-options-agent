@@ -347,7 +347,7 @@ function Reconciliation(){
       <Metric title="Reconciliadas" value={String(count("RECONCILED"))} detail="Excel ↔ Nota" icon="⇄"/>
       <Metric title="Possíveis duplicidades" value={String(count("POTENTIAL_DUPLICATE"))} detail="Requer revisão" icon="!"/>
       <Metric title="Somente uma fonte" value={String(count("EXCEL_ONLY")+count("BROKERAGE_ONLY"))} detail={count("EXCEL_ONLY")+" Excel · "+count("BROKERAGE_ONLY")+" Nota"} icon="◇"/>
-    </section>}
+     </section></> }
     <Card title="Status das transações">
       <div className="table-wrap"><table><thead><tr><th>Status</th><th>Excel</th><th>Nota</th><th>Motivo</th></tr></thead>
       <tbody>{matches.map((x,i)=><tr key={x.excel_transaction_id+"-"+x.brokerage_transaction_id+"-"+i}><td><strong className={x.status==="RECONCILED"?"positive":x.status==="POTENTIAL_DUPLICATE"?"warning-text":""}>{x.status}</strong></td><td>{x.excel_transaction_id??"—"}</td><td>{x.brokerage_transaction_id??"—"}</td><td>{x.reason}</td></tr>)}{!matches.length&&<tr><td colSpan={4} className="table-empty">Nenhum relacionamento retornado.</td></tr>}</tbody></table></div>
