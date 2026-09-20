@@ -11,13 +11,27 @@ const nav: Array<{id: Page; icon: string; subtitle: string}> = [
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
 
-function infer_b3_option_type(ticker:string){const s=ticker.replace(/\s+/g,"").toUpperCase(); const m=s.match(/[A-Z]$/); if(!m)return null; return "ABCDEFGHIJKL".includes(m[0])?"CALL":"MNOPQRSTUVWX".includes(m[0])?"PUT":null;} function pct(v:number){return (v.toFixed(1).replace(".",",")+"%")} function money(v:number){ return new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0}).format(v); }
+function pct(v:number){return (v.toFixed(1).replace(".",",")+"%")} function money(v:number){ return new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0}).format(v); }
 
 function Metric({title,value,detail,icon}:{title:string;value:string;detail:string;icon:string}) {
   return <div className="metric"><div className="metric-top"><span>{title}</span><b className="metric-icon">{icon}</b></div><strong>{value}</strong><small className={detail.startsWith("▲") ? "positive" : ""}>{detail}</small></div>;
 }
 
 function Sidebar({page,setPage}:{page:Page;setPage:(p:Page)=>void}) {
+  const [uploadStatus,setUploadStatus]=useState("");
+  async function upload(endpoint:string,file:File){
+    setUploadStatus("Enviando "+file.name+"…");
+    try{
+      const form=new FormData();
+      form.append("file",file);
+      const r=await fetch(API_BASE+endpoint,{method:"POST",body:form});
+      const d=await r.json();
+      if(!r.ok) throw new Error(d.detail??d.error??"Falha no upload");
+      setUploadStatus(d.message??"Arquivo carregado com sucesso");
+    }catch(err){
+      setUploadStatus("Erro: "+(err instanceof Error?err.message:"falha no upload"));
+    }
+  }
   return <aside className="sidebar">
     <div className="brand"><span className="brand-mark">▮▮▮</span><div><strong>B3 Investment Copilot</strong><small>Seu copiloto de investimentos com IA</small></div></div>
     <nav>{nav.map(n=><button key={n.id} className={"nav-item "+(page===n.id?"active":"")} onClick={()=>setPage(n.id)}><span className="nav-icon">{n.icon}</span><span><strong>{n.id}</strong><small>{n.subtitle}</small></span></button>)}</nav>
@@ -25,13 +39,15 @@ function Sidebar({page,setPage}:{page:Page;setPage:(p:Page)=>void}) {
       <div className="connection"><b>BTG Portfolio</b><span className="status">● Orchestrator</span><small>Snapshot via workflow</small></div>
       <div className="connection"><b>Options Transactions</b><span className="status">● Orchestrator</span><small>Ledger via workflow</small></div>
       <div className="connection"><b>Reconciliação</b><span className="status">● Disponível</span><small>Engine no backend</small></div>
-      <label className="load">↥ &nbsp; Carregar arquivos Excel<input type="file" accept=".xlsx,.xlsm" hidden /></label>
+      <label className="load">↥ &nbsp; Carregar planilha BTG<input type="file" accept=".xlsx,.xlsm" hidden onChange={e=>{const file=e.target.files?.[0];if(file)void upload("/imports/portfolio",file);e.currentTarget.value="";}} /></label>
+      <label className="load">↥ &nbsp; Carregar transações de opções<input type="file" accept=".xlsx,.xlsm" hidden onChange={e=>{const file=e.target.files?.[0];if(file)void upload("/imports/options",file);e.currentTarget.value="";}} /></label>
+      <label className="load">↥ &nbsp; Carregar notas de corretagem<input type="file" accept=".pdf" hidden onChange={e=>{const file=e.target.files?.[0];if(file)void upload("/imports/brokerage-notes",file);e.currentTarget.value="";}} /></label>
+      {uploadStatus&&<small className="upload-status" role="status">{uploadStatus}</small>}
     </section>
     <section className="knowledge-status"><label>BASE DE CONHECIMENTO</label><span>◈ Obsidian <i>Backend</i></span><span>◉ RAG <i>Backend</i></span><span>● Knowledge Graph <i>Backend</i></span></section>
     <footer>v1.0 React · B3 Investment Copilot</footer>
   </aside>;
 }
-
 function Copilot({setPage}:{setPage:(p:Page)=>void}) {
   const [question,setQuestion]=useState(""); const [answer,setAnswer]=useState(""); const [asking,setAsking]=useState(false);
   async function ask(e:FormEvent){e.preventDefault(); if(!question.trim()||asking)return; setAsking(true); try{const r=await fetch(API_BASE+"/orchestrate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({task:question.trim(),context:{client:"react-desktop"}})}); const d=await r.json(); if(!r.ok)throw new Error(d.detail??"Falha no orquestrador"); setAnswer(d.result?.answer??d.result?.summary??JSON.stringify(d.result,null,2));}catch(err){setAnswer("Orquestrador indisponível: "+(err instanceof Error?err.message:"erro"));}finally{setAsking(false);}}
@@ -179,6 +195,7 @@ function Options() {
     }));
     const performance=d.result?.dashboard_snapshot?.options_performance??{lifecycles:[],by_underlying:[]};
     const lifecycles=performance.lifecycles??[];
+    const optionTypeByTicker=new Map(lifecycles.map((x:any)=>[x.option_ticker,x.option_type]));
     const realized=lifecycles.reduce((sum:any,x:any)=>sum+(x.realized_pnl??0),0);
     const received=lifecycles.reduce((sum:any,x:any)=>sum+(x.premium_received??0),0);
     const paid=lifecycles.reduce((sum:any,x:any)=>sum+(x.premium_paid??0),0);
@@ -207,7 +224,7 @@ function Options() {
     <section className="cards"><Metric title="P&L realizado acumulado" value={s?money(s.realized_pnl):"—"} detail={s?s.lifecycle_count+" lifecycles confirmados":"Sem consulta"} icon="Σ"/><Metric title="Prêmios recebidos" value={s?money(s.premium_received):"—"} detail={s?s.profitable_lifecycles+" positivos · "+s.losing_lifecycles+" negativos":"Sem consulta"} icon="↓"/><Metric title="Lifecycles" value={s?String(s.lifecycle_count):"—"} detail={data?.data_quality?.transactions_included?data.data_quality.transactions_included+" transações":"Sem consulta"} icon="↻"/><Metric title="Resultado %" value={s?.return_pct!=null?pct(s.return_pct):"—"} detail="Sobre a base de capital disponível" icon="%"/></section>
     <section className="grid-two"><Card title="P&L acumulado"><div className="analytics-summary"><strong>{s?money(s.realized_pnl):"—"}</strong><span>resultado realizado no período selecionado</span><small>{data?.data_quality?.warning??"Os dados são provenientes do ledger persistido."}</small></div></Card><Card title="Qualidade dos dados"><div className="analytics-summary"><strong>{data?.data_quality?.transactions_included??"—"}</strong><span>transações incluídas</span><small>{data?.data_quality?.status??"Ainda não consultado"}</small></div></Card></section>
     <Card title={(underlying==="Todos"?"Todos os ativos":underlying)+" — Lifecycles"}><div className="table-wrap"><table><thead><tr><th>Contrato</th><th>Tipo</th><th>Início</th><th>Fim</th><th>Status</th><th>Operações</th><th>P&L</th><th>Histórico</th></tr></thead><tbody>{(data?.lifecycles??[]).map(x=><tr key={x.option_ticker}><td><strong>{x.option_ticker}</strong></td><td>{x.option_type??"—"}</td><td>{x.first_trade_date??"—"}</td><td>{x.last_trade_date??"—"}</td><td>{x.status}</td><td>{x.transaction_count}</td><td className={(x.realized_pnl??0)>=0?"positive":"negative"}>{x.realized_pnl==null?"—":money(x.realized_pnl)}</td><td>{x.history_completeness}</td></tr>)}{!data?.lifecycles?.length&&<tr><td colSpan={8} className="table-empty">Nenhum lifecycle retornado para os filtros atuais.</td></tr>}</tbody></table></div></Card>
-    <Card title="Drill-down — transações individuais"><div className="table-wrap"><table><thead><tr><th>Data</th><th>Contrato</th><th>Tipo</th><th>Lado</th><th>Qtd</th><th>Preço</th><th>Fluxo</th><th>Origem</th></tr></thead><tbody>{(data?.transactions??[]).map(x=><tr key={x.transaction_id}><td>{x.date??"—"}</td><td><strong>{x.option_ticker}</strong></td><td>{infer_b3_option_type(x.option_ticker)??"—"}</td><td className={x.side==="SELL"?"positive":"negative"}>{x.side}</td><td>{x.quantity}</td><td>{x.execution_price==null?"—":x.execution_price.toFixed(2)}</td><td>{x.total_amount==null?"—":money(x.total_amount)}</td><td>{x.source_type}{x.note_number?" · Nota "+x.note_number:""}</td></tr>)}{!data?.transactions?.length&&<tr><td colSpan={8} className="table-empty">Nenhuma transação retornada.</td></tr>}</tbody></table></div></Card>
+    <Card title="Drill-down — transações individuais"><div className="table-wrap"><table><thead><tr><th>Data</th><th>Contrato</th><th>Tipo</th><th>Lado</th><th>Qtd</th><th>Preço</th><th>Fluxo</th><th>Origem</th></tr></thead><tbody>{(data?.transactions??[]).map(x=><tr key={x.transaction_id}><td>{x.date??"—"}</td><td><strong>{x.option_ticker}</strong></td><td>{optionTypeByTicker.get(x.option_ticker)??"—"}</td><td className={x.side==="SELL"?"positive":"negative"}>{x.side}</td><td>{x.quantity}</td><td>{x.execution_price==null?"—":x.execution_price.toFixed(2)}</td><td>{x.total_amount==null?"—":money(x.total_amount)}</td><td>{x.source_type}{x.note_number?" · Nota "+x.note_number:""}</td></tr>)}{!data?.transactions?.length&&<tr><td colSpan={8} className="table-empty">Nenhuma transação retornada.</td></tr>}</tbody></table></div></Card>
   </main>
 }
 
