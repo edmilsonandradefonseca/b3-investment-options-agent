@@ -10,7 +10,7 @@ Dashboard documentation, validation and incremental completion of the React Dash
 - Active development branch: `feature/mcp-mvp`
 - Pull request: #6 — Dashboard gate: React + Orchestrator + BTG E2E
 - Software source of truth: GitHub repository
-- Current validated head: `8634847`
+- Current development head: `b7fe968`
 
 ## Dashboard status
 
@@ -32,7 +32,7 @@ Dashboard documentation, validation and incremental completion of the React Dash
 | Options transactions Excel | VALIDATED loader/snapshot flow |
 | Brokerage notes PDF | PROCESSED into SQLite option ledger + source manifest; multiple-file upload supported |
 
-Brokerage notes are now parsed and persisted. They are still a separate source from the active options Excel snapshot and must pass reconciliation before becoming part of a canonical consolidated P&L view.
+Brokerage notes are now parsed and persisted. Runtime reconciliation now loads the SQLite ledger alongside the active options Excel snapshot, exposes auditable cross-source match statuses, and keeps the brokerage ledger out of the existing P&L input path to avoid double counting.
 
 ## Dashboard ↔ Orchestrator
 
@@ -68,10 +68,20 @@ The gate covers backend contracts/deep tests, React build and Playwright E2E.
 - Golden Cases C01–C08.
 - Brokerage ledger idempotency and source manifest.
 
+## Phase 3 — Runtime integration
+
+Implemented in commits `57a571c` and `e5882d8` with runtime tests in `b7fe968`.
+
+- `options_reconciliation` is now part of the orchestrator state and Dashboard snapshot.
+- Runtime loads persisted brokerage transactions from `data/options.sqlite3`.
+- Source-manifest coverage is propagated into reconciliation evidence.
+- Excel and brokerage transactions remain separate inputs; brokerage transactions are not added to `OptionPerformanceEngine`.
+- Existing P&L calculation therefore remains protected from cross-source double counting.
+
 ## Current next steps
 
-1. Integrate brokerage ledger with the reconciliation/runtime path without double counting.
-2. Implement the Reconciliation Dashboard view.
+1. Implement the Reconciliation Dashboard view.
+2. Implement Opportunities using the existing OpportunitySet/Opportunity Intelligence.
 3. Implement Opportunities using the existing OpportunitySet/Opportunity Intelligence.
 4. Validate C01–C08 against the real workflow, not only mocked E2E responses.
 5. Implement/validate the Knowledge view when the underlying knowledge layer is ready.
