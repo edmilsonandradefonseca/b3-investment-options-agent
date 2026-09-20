@@ -121,3 +121,30 @@ test("opportunities view consumes structured OpportunitySet contract", async ({ 
   await expect(page.getByText("OpportunitySet", { exact: true })).toBeVisible();
   await expect(page.getByText("Nenhum OpportunitySet disponível", { exact: true })).toBeVisible();
 });
+
+
+test("knowledge view consumes bounded knowledge query contract", async ({ page }) => {
+  await page.route("**/knowledge/query", async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        query: "PETR4",
+        as_of: null,
+        rag: [{ source_ref: "obsidian:PETR4.md", relative_path: "PETR4.md", snippet: "PETR4 e risco de mercado.", score: 2 }],
+        entities: [{ entity_id: "stock:PETR4", entity_type: "stock", name: "PETR4", canonical_id: "PETR4", source_ref: "fixture:PETR4" }],
+        relations: [],
+        events: [],
+        sources: ["obsidian:PETR4.md", "fixture:PETR4"],
+        metadata: { rag_count: 1, entity_count: 1, relation_count: 0, point_in_time: false, notes_scanned: 1, entities_indexed: 1 }
+      })
+    });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: /Knowledge/ }).click();
+  await expect(page.getByRole("heading", { name: "Knowledge" })).toBeVisible();
+  await expect(page.getByText("Evidências RAG", { exact: true })).toBeVisible();
+  await expect(page.getByText("PETR4.md", { exact: true })).toBeVisible();
+  await expect(page.getByText("stock", { exact: true })).toBeVisible();
+  await expect(page.getByText("fixture:PETR4", { exact: true })).toBeVisible();
+});
