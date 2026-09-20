@@ -1,6 +1,10 @@
 from datetime import date
 
-from b3_agent.options.reconciliation import OptionsReconciliationEngine, TransactionSourceCoverage
+from b3_agent.options.reconciliation import (
+    OptionsReconciliationEngine,
+    ReconciliationMatch,
+    TransactionSourceCoverage,
+)
 from b3_agent.schemas.option_transaction import OptionTransaction
 from b3_agent.schemas.position import PortfolioContext, Position
 
@@ -174,4 +178,12 @@ def test_cross_source_duplicate_detection_uses_typed_provenance() -> None:
         _portfolio("EQTLV369"),
     )
 
-    assert result.potential_cross_source_duplicates == (("xlsx-1", "note-1"),)
+    assert result.potential_cross_source_duplicates == ()
+    assert result.matches == (
+        ReconciliationMatch(
+            status="RECONCILED",
+            excel_transaction_id="xlsx-1",
+            brokerage_transaction_id="note-1",
+            reason="same ticker, signed quantity, execution price and total amount",
+        ),
+    )
