@@ -18,6 +18,10 @@ Displays deterministic options transactions, lifecycles and accumulated realized
 
 Displays deterministic portfolio exposures and capital-risk information obtained through the Orchestrator.
 
+### Reconciliation
+
+Provides an auditable Excel × brokerage-note view using the runtime reconciliation contract. It shows match status, historical coverage, source coverage and explicit warnings without duplicating business logic in React.
+
 ### Opportunities
 
 Navigation entry exists, but the current React page is still a placeholder. The next implementation must consume the existing OpportunitySet/Opportunity Intelligence backend rather than reimplementing business rules in TypeScript.
