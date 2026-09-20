@@ -2,7 +2,7 @@
 
 ## Status
 
-**IN PROGRESS**
+**IN PROGRESS — UX-02b implementation**
 
 Phase 7 Knowledge UI is frozen. Phase 8 starts from the last green Dashboard gate.
 
@@ -76,6 +76,17 @@ Define reusable presentation primitives:
 - opportunity/card pattern.
 
 No business semantics are introduced by these primitives.
+
+### UX-02b — Apply common language to current views
+
+Implemented presentation-only consolidation across the current React views:
+- shared `PageHeader` for page title/subtitle/status;
+- shared `QualityBadge`, `ProvenanceBlock`, `WarningCallout` and `StatePanel` primitives;
+- common keyboard focus treatment;
+- adaptive viewport behavior replacing the hard `1200px` body minimum;
+- shared provenance treatment applied to opportunity/reconciliation surfaces.
+
+No Orchestrator contract or analytical business rule was changed.
 
 ### UX-03 — Navigation and orientation
 
