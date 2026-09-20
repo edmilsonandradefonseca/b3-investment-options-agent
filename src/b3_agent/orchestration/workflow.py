@@ -155,8 +155,8 @@ def build_workflow(*, retriever: ObsidianRetriever, reasoning_agent: InvestmentR
     if memory_manager is not None: graph.add_node("persist_memory", persist_memory)
     if synthesis_agent is not None: graph.add_node("synthesis", synthesis)
 
-    graph.add_edge(START, "retrieve")
     graph.add_node("dashboard_snapshot", dashboard_snapshot)
+    graph.add_edge(START, "retrieve")
     graph.add_conditional_edges(
         "retrieve",
         route_after_retrieve,
