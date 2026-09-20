@@ -155,7 +155,7 @@ def persist_insight(insight: dict[str, Any]) -> dict[str, Any]:
         "status": "persisted",
         "type": "insight",
         "insight_id": str(insight.get("insight_id") or insight.get("id") or ""),
-        "path": str(path),
+        "path": path.as_posix(),
     }
 
 
