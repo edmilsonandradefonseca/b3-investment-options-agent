@@ -20,6 +20,8 @@ from b3_agent.schemas.position import PortfolioContext
 from b3_agent.schemas.opportunity import OpportunitySet
 from b3_agent.portfolio.snapshot import load_active_snapshots
 from b3_agent.portfolio.context import PortfolioIntelligenceEngine
+from b3_agent.options.performance import OptionPerformanceEngine
+from b3_agent.schemas.option_transaction import OptionTransaction
 from langgraph.graph import END, START, StateGraph
 
 from .contracts import B3State
@@ -60,6 +62,17 @@ def configure_dashboard_workflow() -> None:
         portfolio = initial.get("portfolio_context")
         if portfolio is not None:
             initial["portfolio_intelligence"] = asdict(PortfolioIntelligenceEngine().build(portfolio))
+        raw_transactions = initial.get("options_transactions", ())
+        if raw_transactions:
+            transactions = tuple(OptionTransaction(**item) if isinstance(item, dict) else item for item in raw_transactions)
+            performances = OptionPerformanceEngine().build(transactions)
+            aggregate = OptionPerformanceEngine().aggregate_by_underlying(performances)
+            initial["options_performance"] = {
+                "lifecycles": [asdict(item) for item in performances],
+                "by_underlying": [asdict(item) for item in aggregate],
+            }
+        else:
+            initial["options_performance"] = {"lifecycles": [], "by_underlying": []}
         return workflow.invoke(initial)
 
     configure_workflow(invoke)
