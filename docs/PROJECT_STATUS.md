@@ -19,7 +19,7 @@ Dashboard documentation, validation and incremental completion of the React Dash
 | Portfolio | IMPLEMENTED / manually validated / E2E |
 | Options Intelligence | IMPLEMENTED / manually validated / E2E |
 | Portfolio Intelligence | IMPLEMENTED / manually validated / E2E |
-| Opportunities | PLACEHOLDER |
+| Opportunities | IMPLEMENTED against OpportunitySet contract / E2E |
 | Copilot | IMPLEMENTED; Golden Cases C01–C08 covered by automated UI/contract tests |
 | Knowledge | Backend indicators only; UI not implemented |
 | Reconciliation | Backend engine available; UI not implemented |
@@ -88,12 +88,20 @@ Implemented in commits `b1adab9`, `c5bc67b` and E2E coverage in `629d86d`.
 - React contains presentation only; reconciliation logic remains in Python.
 - Added Playwright coverage for the structured reconciliation response.
 
+## Phase 5 — Opportunities UI
+
+Implemented the Opportunities Dashboard view against the existing `OpportunitySet` / `OpportunityIntelligence` contract.
+
+- Added `opportunity_set` to the Dashboard snapshot contract.
+- React presents eligible opportunities, action candidates, rejected opportunities, quality and provenance metadata.
+- No ranking, valuation, capital or risk logic was duplicated in TypeScript.
+- Playwright covers the empty OpportunitySet contract path.
+- The current Dashboard runtime does not fabricate opportunities when upstream market inputs are unavailable; production population of `OpportunitySet` remains the next backend integration step.
 ## Current next steps
 
 1. Validate the Reconciliation Dashboard view in CI and manually.
-2. Implement Opportunities using the existing OpportunitySet/Opportunity Intelligence.
-3. Implement Opportunities using the existing OpportunitySet/Opportunity Intelligence.
-4. Validate C01–C08 against the real workflow, not only mocked E2E responses.
+2. Integrate production generation/population of OpportunitySet into the Dashboard deterministic snapshot when authoritative market inputs are available.
+3. Validate C01–C08 against the real workflow, not only mocked E2E responses.
 5. Implement/validate the Knowledge view when the underlying knowledge layer is ready.
 6. Keep documentation synchronized with code and tests.
 
