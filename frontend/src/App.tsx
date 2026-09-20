@@ -20,6 +20,7 @@ function Metric({title,value,detail,icon}:{title:string;value:string;detail:stri
 
 function Sidebar({page,setPage}:{page:Page;setPage:(p:Page)=>void}) {
   const [uploadStatus,setUploadStatus]=useState("");
+  const [brokerageSelection,setBrokerageSelection]=useState<string[]>([]);
   async function upload(endpoint:string,file:File){
     setUploadStatus("Enviando "+file.name+"…");
     try{
@@ -33,6 +34,25 @@ function Sidebar({page,setPage}:{page:Page;setPage:(p:Page)=>void}) {
       setUploadStatus("Erro: "+(err instanceof Error?err.message:"falha no upload"));
     }
   }
+  async function uploadBrokerageNotes(files:File[]){
+    if(!files.length)return;
+    setUploadStatus(`Enviando ${files.length} nota(s) de corretagem…`);
+    let stored=0;
+    try{
+      for(const file of files){
+        const form=new FormData();
+        form.append("file",file);
+        const r=await fetch(API_BASE+"/imports/brokerage-notes",{method:"POST",body:form});
+        const d=await r.json();
+        if(!r.ok) throw new Error(d.detail??d.error??(`Falha ao enviar ${file.name}`));
+        stored++;
+      }
+      setUploadStatus(`✓ ${stored} nota(s) recebida(s) e armazenada(s) para processamento`);
+      setBrokerageSelection(files.map(file=>file.name));
+    }catch(err){
+      setUploadStatus(`Erro após ${stored}/${files.length} nota(s): ${err instanceof Error?err.message:"falha no upload"}`);
+    }
+  }
   return <aside className="sidebar">
     <div className="brand"><span className="brand-mark">▮▮▮</span><div><strong>B3 Investment Copilot</strong><small>Seu copiloto de investimentos com IA</small></div></div>
     <nav>{nav.map(n=><button key={n.id} className={"nav-item "+(page===n.id?"active":"")} onClick={()=>setPage(n.id)}><span className="nav-icon">{n.icon}</span><span><strong>{n.id}</strong><small>{n.subtitle}</small></span></button>)}</nav>
@@ -42,8 +62,8 @@ function Sidebar({page,setPage}:{page:Page;setPage:(p:Page)=>void}) {
       <div className="connection"><b>Reconciliação</b><span className="status">● Disponível</span><small>Engine no backend</small></div>
       <label className="load">↥ &nbsp; Carregar planilha BTG<input type="file" accept=".xlsx,.xlsm" hidden onChange={e=>{const file=e.target.files?.[0];if(file)void upload("/imports/portfolio",file);e.currentTarget.value="";}} /></label>
       <label className="load">↥ &nbsp; Carregar transações de opções<input type="file" accept=".xlsx,.xlsm" hidden onChange={e=>{const file=e.target.files?.[0];if(file)void upload("/imports/options",file);e.currentTarget.value="";}} /></label>
-      <label className="load">↥ &nbsp; Carregar notas de corretagem<input type="file" accept=".pdf" hidden onChange={e=>{const file=e.target.files?.[0];if(file)void upload("/imports/brokerage-notes",file);e.currentTarget.value="";}} /></label>
-      {uploadStatus&&<small className="upload-status" role="status">{uploadStatus}</small>}
+      <label className="load">↥ &nbsp; Carregar notas de corretagem<input type="file" accept=".pdf" multiple hidden onChange={e=>{const files=Array.from(e.target.files??[]);if(files.length)void uploadBrokerageNotes(files);e.currentTarget.value="";}} /></label>
+      {uploadStatus&&<small className="upload-status" role="status">{uploadStatus}</small>}{brokerageSelection.length>0&&<small className="upload-status" role="status">Notas armazenadas: {brokerageSelection.join(", ")}</small>}
     </section>
     <section className="knowledge-status"><label>BASE DE CONHECIMENTO</label><span>◈ Obsidian <i>Backend</i></span><span>◉ RAG <i>Backend</i></span><span>● Knowledge Graph <i>Backend</i></span></section>
     <footer>v1.0 React · B3 Investment Copilot</footer>
