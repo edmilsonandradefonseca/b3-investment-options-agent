@@ -36,7 +36,7 @@ pub fn run() {
         .manage(OrchestratorProcess(Mutex::new(None)))
         .setup(|app| {
             let resource_dir = app.path().resource_dir()?;
-            let orchestrator = resource_dir.join("binaries").join("orchestrator.exe");
+            let orchestrator = resource_dir.join("binaries").join("orchestrator-x86_64-pc-windows-msvc.exe");
             let data_dir = app.path().app_data_dir()?;
             let logs_dir = app.path().app_log_dir()?;
             std::fs::create_dir_all(&data_dir)?;
