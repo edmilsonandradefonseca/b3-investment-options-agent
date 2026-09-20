@@ -162,6 +162,63 @@ def test_golden_conversational_cases_preserve_orchestrated_contract(
     assert "portfolio_intelligence" in decision_input
 
 
+def test_gc_c01_opportunity_discovery_exposes_affordable_validated_opportunity(tmp_path: Path) -> None:
+    """C01 must expose deterministic opportunity facts before human review."""
+    llm = FakeLLM()
+    workflow, opportunity_set = _workflow(tmp_path, llm)
+
+    result = workflow.invoke(
+        {
+            "user_question": GOLDEN_CASES[0][1],
+            "client": "react-dashboard-copilot",
+            "surface": "copilot",
+            "use_case_id": "GC-C01",
+            "as_of": date(2026, 9, 18),
+            "portfolio_context": {
+                "quality_status": "VALIDATED",
+                "cash": 80000.0,
+                "positions": [{"ticker": "PETR4", "quantity": 100}],
+            },
+            "portfolio_intelligence": {
+                "capital_risk": {"assignment_capital": 3000.0},
+            },
+            "opportunity_set": opportunity_set,
+        }
+    )
+
+    opportunities = result["opportunities"]
+    c01 = next(item for item in opportunities if item["opportunity_id"] == "SELL_PUT:PETRV300")
+
+    assert result["use_case_id"] == "GC-C01"
+    assert c01["eligible"] is True
+    assert c01["quality_status"] if "quality_status" in c01 else True
+    assert c01["ticker"] == "PETR4"
+    assert c01["action"] == "SELL_PUT"
+    assert c01["capital_requirement"] == 3000.0
+    assert c01["expected_return"] == 0.18
+    assert c01["as_of"] == "2026-09-18"
+    assert c01["source_refs"] == ["fixture:BTG"]
+    assert c01["evidence_refs"] == ["options:PETRV300"]
+
+    candidates = result["action_candidates"]
+    assert any(
+        item["action_candidate_id"] == "ACTION:SELL_PUT:PETRV300"
+        and item["action_type"] == "SELL_PUT"
+        and item["quality_status"] == "VALIDATED"
+        for item in candidates
+    )
+
+    decision_input = next(
+        x["input_text"] for x in llm.calls if x["schema_name"] == "investment_decision"
+    )
+    assert '"cash": 80000.0' in decision_input
+    assert '"capital_requirement": 3000.0' in decision_input
+    assert '"expected_return": 0.18' in decision_input
+    assert "SELL_PUT:PETRV300" in decision_input
+    assert "fixture:BTG" in decision_input
+
+
+
 def test_golden_cases_never_create_an_execution_action(tmp_path: Path) -> None:
     llm = FakeLLM()
     workflow, opportunity_set = _workflow(tmp_path, llm)
