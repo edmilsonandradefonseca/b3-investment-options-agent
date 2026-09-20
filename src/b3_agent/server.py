@@ -17,7 +17,7 @@ from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
 from b3_agent.repositories.transaction import TransactionRepository
 from b3_agent.schemas.transaction import Transaction
 from b3_agent.storage.sqlite import SQLiteStore
-from b3_agent.orchestration import OrchestratorRequest, OrchestratorResponse, b3_orchestrator, configure_default_workflow
+from b3_agent.orchestration import OrchestratorRequest, OrchestratorResponse, b3_orchestrator, configure_default_workflow, configure_dashboard_workflow
 
 
 class OrchestrateRequest(BaseModel):
@@ -87,9 +87,12 @@ app.add_middleware(
 
 
 @lru_cache(maxsize=1)
-def _configure_runtime() -> None:
-    """Compose the production workflow once, on first orchestration request."""
-    configure_default_workflow()
+def _configure_runtime(*, dashboard: bool = False) -> None:
+    """Compose the workflow required by the request type."""
+    if dashboard:
+        configure_dashboard_workflow()
+    else:
+        configure_default_workflow()
 
 
 def _transaction_repository() -> TransactionRepository:
@@ -245,7 +248,8 @@ def orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
             ticker=request.ticker,
             context=request.context,
         )
-        _configure_runtime()
+        dashboard_view = bool(normalized.context.get("dashboard_view"))
+        _configure_runtime(dashboard=dashboard_view)
         response = b3_orchestrator(
             task=normalized.task,
             ticker=normalized.ticker,
