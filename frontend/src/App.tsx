@@ -1,6 +1,16 @@
 import { FormEvent, useEffect, useState, type ReactNode } from "react";
 
 type Page = "Portfolio" | "Options" | "Opportunities" | "Portfolio Intelligence" | "Knowledge";
+const nav: Array<{id: Page; icon: string; subtitle: string}> = [
+  { id: "Portfolio", icon: "▣", subtitle: "Visão geral" },
+  { id: "Options", icon: "◇", subtitle: "Opções & P&L" },
+  { id: "Opportunities", icon: "✦", subtitle: "Oportunidades" },
+  { id: "Portfolio Intelligence", icon: "◈", subtitle: "Exposição & risco" },
+  { id: "Knowledge", icon: "◉", subtitle: "Conhecimento" },
+];
+
+const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
+
 function infer_b3_option_type(ticker:string){const s=ticker.replace(/\s+/g,"").toUpperCase(); const m=s.match(/[A-Z]$/); if(!m)return null; return "ABCDEFGHIJKL".includes(m[0])?"CALL":"MNOPQRSTUVWX".includes(m[0])?"PUT":null;} function pct(v:number){return (v.toFixed(1).replace(".",",")+"%")} function money(v:number){ return new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0}).format(v); }
 
 function Metric({title,value,detail,icon}:{title:string;value:string;detail:string;icon:string}) {
