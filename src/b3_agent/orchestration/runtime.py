@@ -44,6 +44,7 @@ def configure_dashboard_workflow() -> None:
             "dashboard_snapshot": {
                 "portfolio_context": state.get("portfolio_context"),
                 "portfolio_intelligence": state.get("portfolio_intelligence"),
+                "options_performance": state.get("options_performance", {"lifecycles": [], "by_underlying": []}),
                 "options_transactions": list(state.get("options_transactions", ())),
             },
             "status": "COMPLETED",
