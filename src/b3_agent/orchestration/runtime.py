@@ -79,6 +79,37 @@ def configure_dashboard_workflow() -> None:
 
     configure_workflow(invoke)
 
+def _apply_portfolio_capital_constraint(defaults: dict[str, Any]) -> dict[str, Any]:
+    """Re-rank an upstream OpportunitySet against authoritative portfolio cash."""
+    active_portfolio = defaults.get("portfolio_context")
+    active_opportunity_set = defaults.get("opportunity_set")
+    if not isinstance(active_opportunity_set, OpportunitySet):
+        return defaults
+
+    available_capital = None
+    if isinstance(active_portfolio, PortfolioContext):
+        available_capital = active_portfolio.cash
+    elif isinstance(active_portfolio, dict):
+        raw_cash = active_portfolio.get("cash")
+        if isinstance(raw_cash, (int, float)):
+            available_capital = float(raw_cash)
+
+    if available_capital is None:
+        return defaults
+
+    all_opportunities = (
+        tuple(active_opportunity_set.ranked_opportunities)
+        + tuple(active_opportunity_set.rejected_opportunities)
+    )
+    defaults["opportunity_set"] = OpportunityPipeline().build(
+        all_opportunities,
+        as_of=active_opportunity_set.as_of,
+        source_refs=active_opportunity_set.source_refs,
+        available_capital=available_capital,
+    )
+    return defaults
+
+
 def configure_default_workflow(*, vault_path: Path | None = None,
                                 portfolio_context: PortfolioContext | dict[str, Any] | None = None,
                                 opportunity_set: OpportunitySet | None = None) -> None:
@@ -133,30 +164,7 @@ def configure_default_workflow(*, vault_path: Path | None = None,
             active_portfolio.get("portfolio_intelligence", {}),
         )
 
-    # Re-apply the current portfolio cash constraint at the runtime boundary.
-    # OpportunitySet instances may have been produced upstream without a
-    # capital value; the conversational runtime must not trust that stale
-    # ranking when authoritative portfolio cash is available.
-    active_opportunity_set = deterministic_defaults.get("opportunity_set")
-    if isinstance(active_opportunity_set, OpportunitySet):
-        available_capital = None
-        if isinstance(active_portfolio, PortfolioContext):
-            available_capital = active_portfolio.cash
-        elif isinstance(active_portfolio, dict):
-            raw_cash = active_portfolio.get("cash")
-            if isinstance(raw_cash, (int, float)):
-                available_capital = float(raw_cash)
-        if available_capital is not None:
-            all_opportunities = (
-                tuple(active_opportunity_set.ranked_opportunities)
-                + tuple(active_opportunity_set.rejected_opportunities)
-            )
-            deterministic_defaults["opportunity_set"] = OpportunityPipeline().build(
-                all_opportunities,
-                as_of=active_opportunity_set.as_of,
-                source_refs=active_opportunity_set.source_refs,
-                available_capital=available_capital,
-            )
+    deterministic_defaults = _apply_portfolio_capital_constraint(deterministic_defaults)
 
     raw_transactions = deterministic_defaults.get("options_transactions", ())
     if raw_transactions:
