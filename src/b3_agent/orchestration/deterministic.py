@@ -23,6 +23,7 @@ def build_opportunity_set(
     diversification: dict[str, str] | None = None,
     relative_assessment: dict[str, str] | None = None,
     source_refs: tuple[str, ...] = (),
+    available_capital: float | None = None,
 ) -> OpportunitySet:
     """Build the deterministic OpportunitySet consumed by the V3.1 graph.
 
@@ -42,6 +43,7 @@ def build_opportunity_set(
         diversification=diversification,
         relative_assessment=relative_assessment,
         source_refs=source_refs,
+        available_capital=available_capital,
     )
 
 
