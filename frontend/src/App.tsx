@@ -1,9 +1,10 @@
 import { FormEvent, useEffect, useState, type ReactNode } from "react";
 
-type Page = "Portfolio" | "Options" | "Opportunities" | "Portfolio Intelligence" | "Knowledge" | "Copilot";
+type Page = "Portfolio" | "Options" | "Reconciliation" | "Opportunities" | "Portfolio Intelligence" | "Knowledge" | "Copilot";
 const nav: Array<{id: Page; icon: string; subtitle: string}> = [
   { id: "Portfolio", icon: "▣", subtitle: "Visão geral" },
   { id: "Options", icon: "◇", subtitle: "Opções & P&L" },
+  { id: "Reconciliation", icon: "⇄", subtitle: "Excel × Notas" },
   { id: "Opportunities", icon: "✦", subtitle: "Oportunidades" },
   { id: "Portfolio Intelligence", icon: "◈", subtitle: "Exposição & risco" },
   { id: "Knowledge", icon: "◉", subtitle: "Conhecimento" },
@@ -264,6 +265,54 @@ function Options() {
 }
 
 
+
+function Reconciliation(){
+  type Match={status:string;excel_transaction_id?:string|null;brokerage_transaction_id?:string|null;reason:string};
+  type Coverage={option_ticker:string;first_trade_date?:string|null;last_trade_date?:string|null;transaction_count:number;net_historical_quantity:number;current_position_quantity?:number|null;position_alignment:string;completeness:string};
+  type SourceCoverage={source_ref:string;coverage_start?:string|null;coverage_end?:string|null;scope:string;completeness:string};
+  type ReconciliationData={quality_status:string;matches:Match[];history_coverage:Coverage[];source_coverage:SourceCoverage[];quantity_mismatches:Array<[string,number,number]>;potential_cross_source_duplicates:Array<[string,string]>};
+  const [data,setData]=useState<ReconciliationData|null>(null);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+  async function refresh(){
+    setLoading(true);setError("");
+    try{
+      const r=await fetch(API_BASE+"/orchestrate",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({task:"Carregar reconciliação de opções para o Dashboard",context:{client:"react-dashboard",dashboard_view:"reconciliation"}})});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.detail??d.error??"Falha ao consultar o orquestrador");
+      const value=d.result?.dashboard_snapshot?.options_reconciliation;
+      if(!value)throw new Error("Orquestrador não retornou options_reconciliation");
+      setData(value);
+    }catch(err){setError(err instanceof Error?err.message:"Falha ao consultar o orquestrador");}
+    finally{setLoading(false);}
+  }
+  useEffect(()=>{void refresh();},[]);
+  const matches=data?.matches??[];
+  const count=(status:string)=>matches.filter(x=>x.status===status).length;
+  return <main className="workspace reconciliation-page">
+    <div className="workspace-head"><div><h1>Reconciliação</h1><p>Confronto auditável entre transações do Excel e notas de corretagem, sem alterar o P&L.</p></div><span className="updated">{loading?"Consultando…":data?"Dados reais via Orchestrator":"Sem dados"}</span></div>
+    {error&&<div className="analytics-summary copilot-error"><strong>Reconciliação indisponível</strong><span>{error}</span></div>}
+    {data&&<section className="cards">
+      <Metric title="Qualidade" value={data.quality_status} detail="Status do engine de reconciliação" icon="✓"/>
+      <Metric title="Reconciliadas" value={String(count("RECONCILED"))} detail="Excel ↔ Nota" icon="⇄"/>
+      <Metric title="Possíveis duplicidades" value={String(count("POTENTIAL_DUPLICATE"))} detail="Requer revisão" icon="!"/>
+      <Metric title="Somente uma fonte" value={String(count("EXCEL_ONLY")+count("BROKERAGE_ONLY"))} detail={count("EXCEL_ONLY")+" Excel · "+count("BROKERAGE_ONLY")+" Nota"} icon="◇"/>
+    </section>}
+    <Card title="Status das transações">
+      <div className="table-wrap"><table><thead><tr><th>Status</th><th>Excel</th><th>Nota</th><th>Motivo</th></tr></thead>
+      <tbody>{matches.map((x,i)=><tr key={x.excel_transaction_id+"-"+x.brokerage_transaction_id+"-"+i}><td><strong className={x.status==="RECONCILED"?"positive":x.status==="POTENTIAL_DUPLICATE"?"warning-text":""}>{x.status}</strong></td><td>{x.excel_transaction_id??"—"}</td><td>{x.brokerage_transaction_id??"—"}</td><td>{x.reason}</td></tr>)}{!matches.length&&<tr><td colSpan={4} className="table-empty">Nenhum relacionamento retornado.</td></tr>}</tbody></table></div>
+    </Card>
+    <section className="grid-two">
+      <Card title="Cobertura histórica"><div className="table-wrap"><table><thead><tr><th>Contrato</th><th>Transações</th><th>Qtd. líquida</th><th>Posição atual</th><th>Alinhamento</th><th>Completude</th></tr></thead><tbody>{(data?.history_coverage??[]).map(x=><tr key={x.option_ticker}><td><strong>{x.option_ticker}</strong></td><td>{x.transaction_count}</td><td>{x.net_historical_quantity}</td><td>{x.current_position_quantity??"—"}</td><td>{x.position_alignment}</td><td>{x.completeness}</td></tr>)}{!data?.history_coverage?.length&&<tr><td colSpan={6} className="table-empty">Sem cobertura histórica.</td></tr>}</tbody></table></div></Card>
+      <Card title="Fontes"><div className="table-wrap"><table><thead><tr><th>Origem</th><th>Período</th><th>Escopo</th><th>Completude</th></tr></thead><tbody>{(data?.source_coverage??[]).map(x=><tr key={x.source_ref}><td>{x.source_ref}</td><td>{x.coverage_start??"—"} → {x.coverage_end??"—"}</td><td>{x.scope}</td><td>{x.completeness}</td></tr>)}{!data?.source_coverage?.length&&<tr><td colSpan={4} className="table-empty">Nenhuma cobertura de fonte registrada.</td></tr>}</tbody></table></div></Card>
+    </section>
+    {(data?.quantity_mismatches?.length||data?.potential_cross_source_duplicates?.length)&&<Card title="Itens que exigem revisão">
+      <div className="analytics-summary"><strong>WARNING</strong><span>{data.quantity_mismatches.length} divergência(s) de quantidade · {data.potential_cross_source_duplicates.length} possível(is) duplicidade(s)</span><small>O engine não faz merge automático desses casos.</small></div>
+    </Card>}
+  </main>;
+}
+
 function PortfolioIntelligence(){
   const [data,setData]=useState<any>(null);
   const [error,setError]=useState("");
@@ -351,6 +400,6 @@ function CopilotPage(){
 
 function Card({title,action,children}:{title:string;action?:ReactNode;children:ReactNode}){return <div className="panel"><div className="panel-title"><h2>{title}</h2>{action}</div>{children}</div>}
 
-function App(){const [page,setPage]=useState<Page>("Portfolio"); return <div className="app-shell"><header className="topbar"><div className="brand"><span className="brand-mark">▮▮▮</span><div><strong>B3 Investment Copilot</strong><small>Seu copiloto de investimentos com IA</small></div></div><div className="search">⌕ <span>Buscar ativos, estratégias ou fazer uma pergunta...</span><kbd>Ctrl K</kbd></div><div className="market"><span>Mercado <b>via Orchestrator</b></span><span className="bell">♧</span><span className="avatar">EF</span><b>Edmilson⌄</b></div></header><div className="body"><Sidebar page={page} setPage={setPage}/><div>{page==="Portfolio"?<Portfolio/>:page==="Options"?<Options/>:page==="Portfolio Intelligence"?<PortfolioIntelligence/>:page==="Copilot"?<CopilotPage/>:<main className="workspace"><div className="workspace-head"><div><h1>{page}</h1><p>Workspace React preparado para o próximo módulo.</p></div></div><div className="panel placeholder"><h2>{page}</h2><p>Este módulo será conectado aos engines Python existentes sem duplicar a lógica de negócio.</p></div></main>}</div><Copilot setPage={setPage}/></div></div>}
+function App(){const [page,setPage]=useState<Page>("Portfolio"); return <div className="app-shell"><header className="topbar"><div className="brand"><span className="brand-mark">▮▮▮</span><div><strong>B3 Investment Copilot</strong><small>Seu copiloto de investimentos com IA</small></div></div><div className="search">⌕ <span>Buscar ativos, estratégias ou fazer uma pergunta...</span><kbd>Ctrl K</kbd></div><div className="market"><span>Mercado <b>via Orchestrator</b></span><span className="bell">♧</span><span className="avatar">EF</span><b>Edmilson⌄</b></div></header><div className="body"><Sidebar page={page} setPage={setPage}/><div>{page==="Portfolio"?<Portfolio/>:page==="Options"?<Options/>:page==="Reconciliation"?<Reconciliation/>:page==="Portfolio Intelligence"?<PortfolioIntelligence/>:page==="Copilot"?<CopilotPage/>:<main className="workspace"><div className="workspace-head"><div><h1>{page}</h1><p>Workspace React preparado para o próximo módulo.</p></div></div><div className="panel placeholder"><h2>{page}</h2><p>Este módulo será conectado aos engines Python existentes sem duplicar a lógica de negócio.</p></div></main>}</div><Copilot setPage={setPage}/></div></div>}
 
 export default App;
