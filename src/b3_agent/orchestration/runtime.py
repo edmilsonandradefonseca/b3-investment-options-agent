@@ -110,6 +110,7 @@ def configure_dashboard_workflow() -> None:
                 "options_performance": state.get("options_performance", {"lifecycles": [], "by_underlying": []}),
                 "options_transactions": list(state.get("options_transactions", ())),
                 "options_reconciliation": state.get("options_reconciliation"),
+                "opportunity_set": asdict(state["opportunity_set"]) if isinstance(state.get("opportunity_set"), OpportunitySet) else state.get("opportunity_set"),
             },
             "status": "COMPLETED",
         }
