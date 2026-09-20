@@ -249,7 +249,10 @@ def orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
             context=request.context,
         )
         dashboard_view = bool(normalized.context.get("dashboard_view"))
-        _configure_runtime(dashboard=dashboard_view)
+        if dashboard_view:
+            _configure_runtime(dashboard=True)
+        else:
+            _configure_runtime()
         response = b3_orchestrator(
             task=normalized.task,
             ticker=normalized.ticker,
