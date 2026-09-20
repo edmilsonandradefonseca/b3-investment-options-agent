@@ -78,10 +78,35 @@ function Portfolio() {
   const [error,setError]=useState("");
 
   useEffect(()=>{
-    fetch(API_BASE+"/api/portfolio")
-      .then(async r=>{const d=await r.json(); if(!r.ok) throw new Error(d.detail??"Falha ao carregar portfolio"); return d;})
-      .then(d=>{setData(d); setError(d.status==="OK"?"":"Snapshot do portfolio não encontrado.");})
-      .catch(err=>setError(err instanceof Error?err.message:"Falha ao carregar portfolio"))
+    fetch(API_BASE+"/orchestrate",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        task:"Carregar snapshot do portfolio para o Dashboard",
+        context:{client:"react-dashboard",dashboard_view:"portfolio"}
+      })
+    })
+      .then(async r=>{const d=await r.json(); if(!r.ok) throw new Error(d.detail??d.error??"Falha ao consultar o orquestrador"); return d;})
+      .then(d=>{
+        const snapshot=d.result?.dashboard_snapshot;
+        const portfolio=snapshot?.portfolio_context;
+        if(!portfolio) throw new Error("Orquestrador não retornou portfolio_context");
+        setData({
+          status:d.status==="COMPLETED"?"OK":d.status,
+          as_of:portfolio.as_of,
+          quality_status:portfolio.quality_status,
+          cash:portfolio.cash,
+          summary:{
+            total_value:(portfolio.positions??[]).reduce((sum:number,p:any)=>sum+(p.market_value??0),0)+(portfolio.cash??0),
+            stock_value:(portfolio.positions??[]).filter((p:any)=>p.instrument_type==="STOCK").reduce((sum:number,p:any)=>sum+(p.market_value??0),0),
+            option_value:(portfolio.positions??[]).filter((p:any)=>p.instrument_type==="OPTION").reduce((sum:number,p:any)=>sum+(p.market_value??0),0),
+            position_count:(portfolio.positions??[]).length
+          },
+          positions:portfolio.positions??[]
+        });
+        setError("");
+      })
+      .catch(err=>setError(err instanceof Error?err.message:"Falha ao consultar o orquestrador"))
       .finally(()=>setLoading(false));
   },[]);
 
