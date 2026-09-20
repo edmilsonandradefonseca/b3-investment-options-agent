@@ -135,18 +135,22 @@ The project has progressed beyond the initial governance baseline and now includ
 
 Dashboard development is active on `feature/mcp-mvp`.
 
-Current Dashboard state:
-- Portfolio: implemented and manually validated.
-- Options Intelligence: implemented and manually validated.
-- Portfolio Intelligence: implemented and manually validated.
-- Opportunities: placeholder; next implementation target.
-- Copilot: implemented with Golden Cases C01–C08.
+Current state:
+- Portfolio: implemented; automated E2E and manual validation completed.
+- Options Intelligence: implemented; automated E2E and manual validation completed.
+- Portfolio Intelligence: implemented; automated E2E and manual validation completed.
+- Opportunities: placeholder.
+- Copilot: implemented; Golden Cases C01–C08 are exposed and covered by automated UI/contract tests.
 - Portfolio and options Excel ingestion: validated snapshot workflows.
-- Brokerage-note PDF ingestion: multi-file upload supported; current state is STAGED until ledger processing is implemented.
+- Brokerage-note PDF ingestion: implemented with parser, SQLite option ledger, source manifest and idempotent persistence.
+- Reconciliation engine: available in backend; dedicated Dashboard UI is not yet implemented.
+- Knowledge/RAG/Knowledge Graph: architectural direction/backend indicators; not yet a complete Dashboard experience.
 
-See `docs/PROJECT_STATUS.md` for the current development state and `docs/dashboard/` for Dashboard architecture and ingestion documentation.
+The current Dashboard + Copilot Gate is green on commit `8634847` (CI #606 and Dashboard Gate #91).
 
-The next evolution is focused on completing the end-to-end MVP experience, including the knowledge/context layer, agent orchestration and executive dashboards, followed by systematic evaluation.
+See `docs/dashboard/` for the canonical Dashboard documentation, including architecture, use cases, testing and operations.
+
+The next evolution is intentionally incremental: reconcile brokerage ledger data with the existing options snapshot without double counting, then implement the missing Dashboard modules and real workflow validation.
 
 ## Repository structure
 

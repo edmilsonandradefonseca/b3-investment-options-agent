@@ -1,6 +1,6 @@
 # Dashboard Golden Use Cases
 
-The Dashboard Copilot currently exposes eight Golden Cases:
+The Dashboard Copilot exposes eight Golden Cases:
 
 | ID | Name | Primary validation |
 |---|---|---|
@@ -13,4 +13,14 @@ The Dashboard Copilot currently exposes eight Golden Cases:
 | C07 | Existing PUT | Existing option position + alternatives |
 | C08 | Insufficient Evidence | Evidence/governance behavior |
 
-Golden Case text and automated assertions live with the Dashboard tests and frontend implementation. These cases are validation scenarios, not autonomous trading instructions.
+## Current test status
+
+All eight cases are present in the React Copilot and are asserted by the Dashboard E2E.
+
+The E2E currently validates the UI/boundary contract and uses a mocked structured Orchestrator response. Therefore C01–C08 are **not yet equivalent to real end-to-end workflow validation**.
+
+See:
+- `docs/dashboard/use-cases.md`
+- `docs/dashboard/testing.md`
+
+These cases are validation scenarios, not autonomous trading instructions.
