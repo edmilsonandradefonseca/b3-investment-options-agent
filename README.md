@@ -50,4 +50,15 @@ Each phase follows: **Implement → Test → Validate → Freeze → Next phase.
 
 ## Status
 
-Repository initialized. Governance baseline is being established before implementation begins.
+Dashboard development is active on `feature/mcp-mvp`.
+
+Current Dashboard state:
+- Portfolio: implemented and manually validated.
+- Options Intelligence: implemented and manually validated.
+- Portfolio Intelligence: implemented and manually validated.
+- Opportunities: placeholder; next implementation target.
+- Copilot: implemented with Golden Cases C01–C08.
+- Portfolio and options Excel ingestion: validated snapshot workflows.
+- Brokerage-note PDF ingestion: multi-file upload supported; current state is STAGED until ledger processing is implemented.
+
+See `docs/PROJECT_STATUS.md` for the current development state and `docs/dashboard/` for Dashboard architecture and ingestion documentation.
