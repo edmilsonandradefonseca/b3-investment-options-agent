@@ -33,6 +33,26 @@ def build_workflow(*, retriever: ObsidianRetriever, reasoning_agent: InvestmentR
             raise ValueError("workflow requires user_question or request")
         return {"user_question": request}
 
+    def dashboard_snapshot(state: B3State) -> dict[str, Any]:
+        """Return deterministic dashboard data without invoking reasoning agents.
+
+        The Dashboard is a client of the orchestrator contract. Snapshot reads
+        are deliberately short-circuited before knowledge/LLM reasoning so a
+        UI refresh cannot create an investment decision or memory side effect.
+        """
+        portfolio = state.get("portfolio_context")
+        options = state.get("options_transactions", ())
+        return {
+            "dashboard_snapshot": {
+                "portfolio_context": portfolio,
+                "options_transactions": list(options),
+            },
+            "status": "COMPLETED",
+        }
+
+    def route_after_retrieve(state: B3State) -> str:
+        return "dashboard_snapshot" if state.get("dashboard_view") else "deterministic_context"
+
     def deterministic_context(state: B3State) -> dict[str, Any]:
         opportunity_set = state.get("opportunity_set")
         if opportunity_set is None:
@@ -136,7 +156,16 @@ def build_workflow(*, retriever: ObsidianRetriever, reasoning_agent: InvestmentR
     if synthesis_agent is not None: graph.add_node("synthesis", synthesis)
 
     graph.add_edge(START, "retrieve")
-    graph.add_edge("retrieve", "deterministic_context")
+    graph.add_node("dashboard_snapshot", dashboard_snapshot)
+    graph.add_conditional_edges(
+        "retrieve",
+        route_after_retrieve,
+        {
+            "dashboard_snapshot": "dashboard_snapshot",
+            "deterministic_context": "deterministic_context",
+        },
+    )
+    graph.add_edge("dashboard_snapshot", END)
     graph.add_edge("deterministic_context", "knowledge_context")
     graph.add_edge("knowledge_context", "market_analysis")
     graph.add_edge("knowledge_context", "portfolio_analysis")
