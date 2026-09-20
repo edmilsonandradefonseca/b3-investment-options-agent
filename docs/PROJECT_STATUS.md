@@ -78,9 +78,19 @@ Implemented in commits `57a571c` and `e5882d8` with runtime tests in `b7fe968`.
 - Excel and brokerage transactions remain separate inputs; brokerage transactions are not added to `OptionPerformanceEngine`.
 - Existing P&L calculation therefore remains protected from cross-source double counting.
 
+## Phase 4 — Reconciliation UI
+
+Implemented in commits `b1adab9`, `c5bc67b` and E2E coverage in `629d86d`.
+
+- Added a dedicated Reconciliation navigation view.
+- UI consumes `dashboard_snapshot.options_reconciliation` from the Orchestrator.
+- Shows match statuses, history coverage, source coverage and review warnings.
+- React contains presentation only; reconciliation logic remains in Python.
+- Added Playwright coverage for the structured reconciliation response.
+
 ## Current next steps
 
-1. Implement the Reconciliation Dashboard view.
+1. Validate the Reconciliation Dashboard view in CI and manually.
 2. Implement Opportunities using the existing OpportunitySet/Opportunity Intelligence.
 3. Implement Opportunities using the existing OpportunitySet/Opportunity Intelligence.
 4. Validate C01–C08 against the real workflow, not only mocked E2E responses.
