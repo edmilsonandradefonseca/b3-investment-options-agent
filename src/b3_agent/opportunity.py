@@ -93,6 +93,15 @@ class OpportunityIntelligenceEngine:
                         reasons.append(
                             f"evidence_quality_unsupported={evidence.quality_status}:{evidence_ref}"
                         )
+                    if evidence is not None:
+                        if not evidence.subject_id:
+                            reasons.append(f"evidence_subject_empty={evidence_ref}")
+                        if evidence.as_of > opportunity.as_of:
+                            reasons.append(
+                                f"evidence_as_of_after_opportunity={evidence_ref}"
+                            )
+                        if not evidence.source_refs:
+                            reasons.append(f"evidence_source_refs=EMPTY:{evidence_ref}")
             if opportunity.action not in {"BUY", "ACCUMULATE", "SELL_PUT", "SELL_CALL"}:
                 reasons.append(f"unsupported action={opportunity.action}")
             if (
