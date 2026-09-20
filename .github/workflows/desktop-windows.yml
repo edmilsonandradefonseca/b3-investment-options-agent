@@ -31,6 +31,46 @@ jobs:
           New-Item -ItemType Directory -Force -Path frontend/src-tauri/binaries | Out-Null
           Copy-Item dist/orchestrator.exe frontend/src-tauri/binaries/orchestrator.exe
 
+      - name: Smoke test orchestrator executable
+        working-directory: .
+        shell: pwsh
+        run: |
+          $dataDir = Join-Path $env:RUNNER_TEMP "b3-agent-data"
+          $logsDir = Join-Path $env:RUNNER_TEMP "b3-agent-logs"
+          New-Item -ItemType Directory -Force -Path $dataDir, $logsDir | Out-Null
+          $process = Start-Process -FilePath "dist/orchestrator.exe" -PassThru -WindowStyle Hidden -Environment @{
+            B3_AGENT_ENV = "ci"
+            B3_AGENT_DATA_DIR = $dataDir
+            B3_AGENT_LOGS_DIR = $logsDir
+            B3_AGENT_LLM_ENABLED = "false"
+            B3_AGENT_HOST = "127.0.0.1"
+            B3_AGENT_PORT = "8000"
+          }
+          try {
+            $healthy = $false
+            for ($i = 0; $i -lt 30; $i++) {
+              Start-Sleep -Seconds 1
+              try {
+                $response = Invoke-RestMethod "http://127.0.0.1:8000/health" -TimeoutSec 2
+                if ($response.status -eq "ok") {
+                  $healthy = $true
+                  break
+                }
+              } catch {}
+              if ($process.HasExited) {
+                throw "orchestrator.exe exited before /health became available (exit code $($process.ExitCode))"
+              }
+            }
+            if (-not $healthy) {
+              throw "orchestrator.exe did not become healthy within 30 seconds"
+            }
+          } finally {
+            if (-not $process.HasExited) {
+              Stop-Process -Id $process.Id -Force
+            }
+            Wait-Process -Id $process.Id -Timeout 10 -ErrorAction SilentlyContinue
+          }
+
       - name: Smoke test bundled orchestrator
         working-directory: .
         shell: pwsh
