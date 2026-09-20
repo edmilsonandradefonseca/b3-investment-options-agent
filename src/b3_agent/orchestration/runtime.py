@@ -21,7 +21,6 @@ from b3_agent.schemas.opportunity import OpportunitySet
 from b3_agent.portfolio.snapshot import load_active_snapshots
 from b3_agent.portfolio.context import PortfolioIntelligenceEngine
 from b3_agent.options.performance import OptionPerformanceEngine
-from b3_agent.opportunity_pipeline import OpportunityPipeline
 from b3_agent.schemas.option_transaction import OptionTransaction
 from langgraph.graph import END, START, StateGraph
 
@@ -97,15 +96,55 @@ def _apply_portfolio_capital_constraint(defaults: dict[str, Any]) -> dict[str, A
     if available_capital is None:
         return defaults
 
-    all_opportunities = (
-        tuple(active_opportunity_set.ranked_opportunities)
-        + tuple(active_opportunity_set.rejected_opportunities)
+    ranked = []
+    rejected = list(active_opportunity_set.rejected_opportunities)
+    rejected_ids = {item.opportunity_id for item in rejected}
+    capital_reason = None
+
+    for assessment in active_opportunity_set.ranked_opportunities:
+        if (
+            available_capital is not None
+            and assessment.capital_requirement is not None
+            and assessment.capital_requirement > available_capital
+        ):
+            from dataclasses import replace
+
+            capital_reason = (
+                f"capital_requirement={assessment.capital_requirement} exceeds "
+                f"available_capital={available_capital}"
+            )
+            rejected.append(
+                replace(
+                    assessment,
+                    eligible=False,
+                    rejection_reasons=tuple(
+                        dict.fromkeys((*assessment.rejection_reasons, capital_reason))
+                    ),
+                )
+            )
+            rejected_ids.add(assessment.opportunity_id)
+        else:
+            ranked.append(assessment)
+
+    if capital_reason is None:
+        return defaults
+
+    from dataclasses import replace
+
+    affordable_ids = {item.opportunity_id for item in ranked}
+    action_candidates = tuple(
+        candidate
+        for candidate in active_opportunity_set.action_candidates
+        if not any(
+            ref in rejected_ids
+            for ref in candidate.opportunity_refs
+        )
     )
-    defaults["opportunity_set"] = OpportunityPipeline().build(
-        all_opportunities,
-        as_of=active_opportunity_set.as_of,
-        source_refs=active_opportunity_set.source_refs,
-        available_capital=available_capital,
+    defaults["opportunity_set"] = replace(
+        active_opportunity_set,
+        ranked_opportunities=tuple(ranked),
+        rejected_opportunities=tuple(rejected),
+        action_candidates=action_candidates,
     )
     return defaults
 
