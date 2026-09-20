@@ -10,7 +10,7 @@ Dashboard documentation, validation and incremental completion of the React Dash
 - Active development branch: `feature/mcp-mvp`
 - Pull request: #6 — Dashboard gate: React + Orchestrator + BTG E2E
 - Software source of truth: GitHub repository
-- Current development head: `c528d79`
+- Current development head: `e494658`
 
 ## Dashboard status
 
@@ -110,6 +110,17 @@ Implemented and validated the eight Golden Cases through the real LangGraph work
 - Dashboard + Copilot Gate #145: SUCCESS.
 
 This closes the workflow-integration portion of Phase 6. It does not claim production acceptance with an external LLM; that remains a separate validation layer.
+
+## Phase 7 — Knowledge UI
+
+Implemented the first read-only Knowledge workspace.
+
+- Added POST /knowledge/query as a bounded server-side retrieval contract.
+- Query execution uses ObsidianRetriever + InMemoryKnowledgeGraphStore + KnowledgeIndexer + KnowledgeContextBuilder.
+- The UI presents RAG evidence, graph entities, relations and provenance metadata.
+- Added backend contract coverage with a temporary Obsidian fixture and Playwright UI contract coverage.
+- No LLM reasoning is invoked by the Knowledge view.
+- No Qdrant/Neo4j installation is required; vector/graph persistence remains behind the existing provider-independent contracts.
 
 ## Current next steps
 
