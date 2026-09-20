@@ -94,6 +94,7 @@ def _workflow(tmp_path: Path, llm: FakeLLM):
         (opportunity,),
         as_of=date(2026, 9, 18),
         source_refs=("fixture:BTG",),
+        available_capital=80000.0,
     )
 
     return build_workflow(
