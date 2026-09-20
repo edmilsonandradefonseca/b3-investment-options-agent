@@ -27,9 +27,35 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install . pyinstaller
-          pyinstaller --onefile --name orchestrator --hidden-import=uvicorn.logging --hidden-import=uvicorn.loops.auto --hidden-import=uvicorn.protocols.http.auto src/b3_agent/server.py
+          pyinstaller --onefile --name orchestrator --hidden-import=uvicorn.logging --hidden-import=uvicorn.loops.auto --hidden-import=uvicorn.protocols.http.auto src/b3_agent/desktop_server.py
           New-Item -ItemType Directory -Force -Path frontend/src-tauri/binaries | Out-Null
           Copy-Item dist/orchestrator.exe frontend/src-tauri/binaries/orchestrator.exe
+
+      - name: Smoke test bundled orchestrator
+        working-directory: .
+        shell: pwsh
+        run: |
+          $env:B3_AGENT_ENV = "desktop-smoke"
+          $env:B3_AGENT_DATA_DIR = "$env:RUNNER_TEMP\b3-agent-data"
+          $env:B3_AGENT_LOGS_DIR = "$env:RUNNER_TEMP\b3-agent-logs"
+          New-Item -ItemType Directory -Force -Path $env:B3_AGENT_DATA_DIR, $env:B3_AGENT_LOGS_DIR | Out-Null
+          $process = Start-Process -FilePath "dist\orchestrator.exe" -PassThru -WindowStyle Hidden
+          try {
+            $healthy = $false
+            for ($i = 0; $i -lt 30; $i++) {
+              Start-Sleep -Milliseconds 500
+              try {
+                $health = Invoke-RestMethod -Uri "http://127.0.0.1:8000/health" -TimeoutSec 2
+                if ($health.service -eq "b3-orchestrator-server" -and $health.status -eq "ok") {
+                  $healthy = $true
+                  break
+                }
+              } catch {}
+            }
+            if (-not $healthy) { throw "Bundled orchestrator did not become healthy on http://127.0.0.1:8000" }
+          } finally {
+            if ($process -and -not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+          }
 
       - name: Setup Node
         uses: actions/setup-node@v4
