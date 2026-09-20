@@ -1,4 +1,4 @@
-name: Dashboard Gate
+name: Dashboard + Copilot Gate
 
 on:
   push:
@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   backend:
-    name: Backend contract and dashboard tests
+    name: Backend contracts + Copilot golden cases
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -26,7 +26,7 @@ jobs:
       - name: Install Python dependencies
         run: pip install -e ".[dev]"
       - name: Run dashboard/backend tests
-        run: pytest -q
+        run: pytest -q tests/test_dashboard_gate.py tests/test_copilot_use_cases.py
 
   frontend-build:
     name: React build and boundary gate
@@ -45,7 +45,7 @@ jobs:
         run: npm run build
 
   dashboard-e2e:
-    name: React + Orchestrator + BTG fixture E2E
+    name: React + Orchestrator + BTG + Copilot E2E
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [backend, frontend-build]
