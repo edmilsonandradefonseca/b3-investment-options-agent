@@ -170,7 +170,38 @@ function Portfolio() {
 function Options() {
   type Analytics = { summary?: { realized_pnl:number; premium_received:number; premium_paid:number; return_pct:number|null; lifecycle_count:number; profitable_lifecycles:number; losing_lifecycles:number }; lifecycles?: Array<{option_ticker:string; option_type:string|null; status:string; realized_pnl:number|null; first_trade_date:string|null; last_trade_date:string|null; transaction_count:number; history_completeness:string}>; transactions?: Array<{transaction_id:string; option_ticker:string; date:string|null; side:string; quantity:number; execution_price:number|null; total_amount:number|null; source_type:string; source_id:string|null; note_number:string|null}>; data_quality?: {status:string;transactions_included?:number;warning?:string;note?:string} };
   const [underlying,setUnderlying]=useState("Todos"), [type,setType]=useState("Todas"), [start,setStart]=useState("2026-05-01"), [end,setEnd]=useState("2026-09-30"), [data,setData]=useState<Analytics|null>(null), [status,setStatus]=useState("Clique em Atualizar análise");
-  async function refresh(){ setStatus("Consultando ledger…"); try { const qs=new URLSearchParams({underlying,option_type:type,start_date:start,end_date:end}); const r=await fetch(API_BASE+"/api/options/analytics?"+qs.toString()); const d=await r.json(); if(!r.ok) throw new Error(d.detail??"Falha no endpoint"); setData(d); setStatus("Dados reais carregados"); } catch(err) { setStatus("Erro: "+(err instanceof Error?err.message:"falha")); setData(null); } }
+  async function refresh(){ setStatus("Consultando opções via orquestrador…"); try {
+    const r=await fetch(API_BASE+"/orchestrate",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        task:"Carregar snapshot das transações de opções para o Dashboard",
+        context:{client:"react-dashboard",dashboard_view:"options"}
+      })
+    });
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.detail??d.error??"Falha ao consultar o orquestrador");
+    const raw=d.result?.dashboard_snapshot?.options_transactions??[];
+    const transactions=raw.map((x:any)=>({
+      transaction_id:x.transaction_id,
+      option_ticker:x.option_ticker,
+      date:x.as_of??null,
+      side:x.side??"",
+      quantity:x.quantity??0,
+      execution_price:x.execution_price??null,
+      total_amount:x.total_amount??null,
+      source_type:x.source_type??"",
+      source_id:x.source_id??null,
+      note_number:x.note_number??null
+    }));
+    setData({
+      summary:{realized_pnl:0,premium_received:0,premium_paid:0,return_pct:null,lifecycle_count:0,profitable_lifecycles:0,losing_lifecycles:0},
+      lifecycles:[],
+      transactions,
+      data_quality:{status:"SNAPSHOT_VIA_ORCHESTRATOR",transactions_included:transactions.length,note:"Snapshot bruto carregado pelo workflow determinístico. Lifecycle/P&L de opções será conectado ao engine de performance no próximo passo."}
+    });
+    setStatus("Dados reais carregados via orquestrador");
+  } catch(err) { setStatus("Erro: "+(err instanceof Error?err.message:"falha")); setData(null); } }
   const s=data?.summary;
   return <main className="workspace options-page">
     <div className="workspace-head"><div><h1>Options Intelligence</h1><p>Resultado acumulado, rolagens e drill-down por papel.</p></div><span className="updated">{status}</span></div>
