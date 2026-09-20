@@ -28,6 +28,11 @@ The React Opportunities view consumes the structured `dashboard_snapshot.opportu
 
 The current Dashboard deterministic snapshot does not itself manufacture market opportunities: when no `OpportunitySet` is supplied by the upstream workflow, the UI explicitly shows that no OpportunitySet is available. This keeps the UI honest and avoids inventing investment opportunities from incomplete market inputs.
 
+
+### Knowledge
+
+Provides a read-only Knowledge workspace backed by the deterministic Obsidian retriever and in-memory Knowledge Graph. The UI sends bounded queries to POST /knowledge/query and presents RAG evidence, graph entities, relations and provenance metadata. It does not invoke LLM reasoning or create investment decisions. Vector databases remain intentionally out of scope for this phase.
+
 ### Copilot
 
 Provides the Golden Conversational Cases C01–C08 and sends questions to `POST /orchestrate`. The response surface exposes synthesis, decision proposal, risk validation, opportunity count, data quality, provenance and evidence.
@@ -70,7 +75,7 @@ The Dashboard must distinguish:
 
 - Brokerage-note PDFs are parsed into the option ledger. Runtime reconciliation exposes `RECONCILED`, `POTENTIAL_DUPLICATE`, `EXCEL_ONLY` and `BROKERAGE_ONLY` relationships without feeding both sources into P&L.
 - Opportunities UI is implemented against the OpportunitySet contract; upstream production of a populated OpportunitySet for the Dashboard remains a separate integration step.
-- Dashboard validation is still in progress.
+- Knowledge UI is implemented against the bounded /knowledge/query contract; semantic/vector retrieval remains a future backend replacement behind the same bounded retrieval boundary.
 
 ## Source of truth
 
