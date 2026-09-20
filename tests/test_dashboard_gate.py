@@ -58,6 +58,7 @@ def test_dashboard_contract_uses_btg_loader_and_orchestrator(tmp_path, monkeypat
     assert len(snapshot["options_transactions"]) == 4
     assert snapshot["portfolio_intelligence"]["capital_risk"] is not None
     assert len(snapshot["options_performance"]["lifecycles"]) == 2
+    assert snapshot["opportunity_set"] is None
 
 
 def test_dashboard_upload_contracts(tmp_path, monkeypatch) -> None:
