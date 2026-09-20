@@ -60,6 +60,7 @@ class OpportunityIntelligenceEngine:
         capital_efficiency: dict[str, str] | None = None,
         diversification: dict[str, str] | None = None,
         relative_assessment: dict[str, str] | None = None,
+        available_capital: float | None = None,
     ) -> OpportunitySet:
         portfolio_fit = portfolio_fit or {}
         risk = risk or {}
@@ -78,6 +79,15 @@ class OpportunityIntelligenceEngine:
                 reasons.append(f"unsupported quality_status={opportunity.quality_status}")
             if opportunity.action not in {"BUY", "ACCUMULATE", "SELL_PUT", "SELL_CALL"}:
                 reasons.append(f"unsupported action={opportunity.action}")
+            if (
+                available_capital is not None
+                and opportunity.capital_requirement is not None
+                and opportunity.capital_requirement > available_capital
+            ):
+                reasons.append(
+                    f"capital_requirement={opportunity.capital_requirement} exceeds "
+                    f"available_capital={available_capital}"
+                )
 
             fit = portfolio_fit.get(opportunity.opportunity_id, "UNKNOWN").upper()
             risk_value = risk.get(opportunity.opportunity_id, "UNKNOWN").upper()
