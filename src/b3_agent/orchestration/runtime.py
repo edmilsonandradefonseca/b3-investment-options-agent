@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import asdict
 from typing import Any
 
 from b3_agent.agents.reasoning import InvestmentReasoningAgent
@@ -58,7 +59,7 @@ def configure_dashboard_workflow() -> None:
         initial = {**snapshots, **state}
         portfolio = initial.get("portfolio_context")
         if portfolio is not None:
-            initial["portfolio_intelligence"] = PortfolioIntelligenceEngine().build(portfolio)
+            initial["portfolio_intelligence"] = asdict(PortfolioIntelligenceEngine().build(portfolio))
         return workflow.invoke(initial)
 
     configure_workflow(invoke)
