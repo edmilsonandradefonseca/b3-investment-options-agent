@@ -77,6 +77,8 @@ class OpportunityIntelligenceEngine:
                 reasons.append("quality_status=REJECTED")
             elif opportunity.quality_status not in self.policy.quality_order:
                 reasons.append(f"unsupported quality_status={opportunity.quality_status}")
+            if not opportunity.evidence_refs:
+                reasons.append("evidence_refs=EMPTY")
             if opportunity.action not in {"BUY", "ACCUMULATE", "SELL_PUT", "SELL_CALL"}:
                 reasons.append(f"unsupported action={opportunity.action}")
             if (
