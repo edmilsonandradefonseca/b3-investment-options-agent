@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from .schemas.opportunity import (
     ActionCandidate,
     Opportunity,
+    Evidence,
     OpportunityAssessment,
     OpportunitySet,
 )
@@ -61,6 +62,7 @@ class OpportunityIntelligenceEngine:
         diversification: dict[str, str] | None = None,
         relative_assessment: dict[str, str] | None = None,
         available_capital: float | None = None,
+        evidence_registry: tuple[Evidence, ...] | None = None,
     ) -> OpportunitySet:
         portfolio_fit = portfolio_fit or {}
         risk = risk or {}
@@ -79,6 +81,18 @@ class OpportunityIntelligenceEngine:
                 reasons.append(f"unsupported quality_status={opportunity.quality_status}")
             if not opportunity.evidence_refs:
                 reasons.append("evidence_refs=EMPTY")
+            elif evidence_registry is not None:
+                evidence_by_id = {item.evidence_id: item for item in evidence_registry}
+                for evidence_ref in opportunity.evidence_refs:
+                    evidence = evidence_by_id.get(evidence_ref)
+                    if evidence is None:
+                        reasons.append(f"evidence_ref_missing={evidence_ref}")
+                    elif evidence.quality_status == "REJECTED":
+                        reasons.append(f"evidence_quality=REJECTED:{evidence_ref}")
+                    elif evidence.quality_status not in {"VALIDATED", "WARNING"}:
+                        reasons.append(
+                            f"evidence_quality_unsupported={evidence.quality_status}:{evidence_ref}"
+                        )
             if opportunity.action not in {"BUY", "ACCUMULATE", "SELL_PUT", "SELL_CALL"}:
                 reasons.append(f"unsupported action={opportunity.action}")
             if (
