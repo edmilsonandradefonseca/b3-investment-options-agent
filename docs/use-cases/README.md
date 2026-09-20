@@ -17,7 +17,7 @@ The Dashboard Copilot exposes eight Golden Cases:
 
 All eight cases are present in the React Copilot and are asserted by the Dashboard E2E.
 
-The E2E currently validates the UI/boundary contract and uses a mocked structured Orchestrator response. Therefore C01–C08 are **not yet equivalent to real end-to-end workflow validation**.
+The React E2E validates the UI/boundary contract with a mocked structured Orchestrator response. In addition, `tests/test_copilot_golden_workflow.py` executes all eight scenarios through the **real LangGraph workflow**, including deterministic context propagation, capital governance, synthesis, decision schema and the real `RiskValidator`. The workflow test uses deterministic specialist/knowledge/reasoning doubles so CI does not depend on external LLM credentials. Therefore this is real workflow integration coverage, but not an external-LLM production acceptance test.
 
 See:
 - `docs/dashboard/use-cases.md`
