@@ -37,6 +37,7 @@ class B3State(TypedDict, total=False):
     portfolio_intelligence: Any
     options_transactions: list[dict[str, Any]]
     options_performance: dict[str, Any]
+    dashboard_snapshot: dict[str, Any]
     opportunity_set: Any
     knowledge_context: dict[str, Any]
     memory_context: list[dict[str, Any]]
