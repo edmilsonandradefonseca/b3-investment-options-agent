@@ -202,8 +202,34 @@ function Options() {
 }
 
 
+function PortfolioIntelligence(){
+  const [data,setData]=useState<any>(null);
+  const [error,setError]=useState("");
+  useEffect(()=>{
+    fetch(API_BASE+"/orchestrate",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({task:"Carregar Portfolio Intelligence determinístico",context:{client:"react-dashboard",dashboard_view:"portfolio-intelligence"}})
+    }).then(async r=>{const d=await r.json(); if(!r.ok) throw new Error(d.detail??d.error??"Falha ao consultar o orquestrador"); return d;})
+      .then(d=>setData(d.result?.dashboard_snapshot?.portfolio_intelligence??null))
+      .catch(e=>setError(e instanceof Error?e.message:"Falha ao consultar o orquestrador"));
+  },[]);
+  const risk=data?.capital_risk;
+  return <main className="workspace">
+    <div className="workspace-head"><div><h1>Portfolio Intelligence</h1><p>Exposição, cobertura e risco de capital calculados pelos engines determinísticos.</p></div><span className="updated">{data?"Dados reais via Orchestrator":"Carregando…"}</span></div>
+    {error&&<div className="analytics-summary"><strong>Erro</strong><span>{error}</span></div>}
+    {risk&&<section className="cards">
+      <Metric title="Capital para assignment" value={money(risk.assignment_capital)} detail="Short puts" icon="⌂"/>
+      <Metric title="Cash após assignment" value={money(risk.cash_after_assignment)} detail={risk.fully_cash_secured?"Cobertura suficiente":"Necessita atenção"} icon="◉"/>
+      <Metric title="Calls descobertas" value={String(risk.uncovered_call_shares)} detail="Ações equivalentes" icon="△"/>
+      <Metric title="Exposições" value={String(data?.exposures?.length??0)} detail="Por underlying" icon="◇"/>
+    </section>}
+    <Card title="Exposição por ativo"><div className="table-wrap"><table><thead><tr><th>Underlying</th><th>Valor líquido</th><th>Peso</th><th>Opções</th><th>Short</th><th>Assignment</th><th>Cobertura Call</th></tr></thead><tbody>{(data?.exposures??[]).map((x:any)=><tr key={x.ticker}><td><strong>{x.ticker}</strong></td><td>{money(x.net_market_value??0)}</td><td>{((x.weight??0)*100).toFixed(1).replace(".",",")}%</td><td>{x.option_count}</td><td>{x.short_option_count}</td><td>{money(x.assignment_capital??0)}</td><td>{x.call_coverage_ratio==null?"—":x.call_coverage_ratio.toFixed(2)}</td></tr>)}{!data&& !error&&<tr><td colSpan={7} className="table-empty">Carregando…</td></tr>}{data&&!data.exposures?.length&&<tr><td colSpan={7} className="table-empty">Nenhuma exposição retornada.</td></tr>}</tbody></table></div></Card>
+  </main>;
+}
+
 function Card({title,action,children}:{title:string;action?:ReactNode;children:ReactNode}){return <div className="panel"><div className="panel-title"><h2>{title}</h2>{action}</div>{children}</div>}
 
-function App(){const [page,setPage]=useState<Page>("Portfolio"); return <div className="app-shell"><header className="topbar"><div className="brand"><span className="brand-mark">▮▮▮</span><div><strong>B3 Investment Copilot</strong><small>Seu copiloto de investimentos com IA</small></div></div><div className="search">⌕ <span>Buscar ativos, estratégias ou fazer uma pergunta...</span><kbd>Ctrl K</kbd></div><div className="market"><span>Mercado <b>via Orchestrator</b></span><span className="bell">♧</span><span className="avatar">EF</span><b>Edmilson⌄</b></div></header><div className="body"><Sidebar page={page} setPage={setPage}/><div>{page==="Portfolio"?<Portfolio/>:page==="Options"?<Options/>:<main className="workspace"><div className="workspace-head"><div><h1>{page}</h1><p>Workspace React preparado para o próximo módulo.</p></div></div><div className="panel placeholder"><h2>{page}</h2><p>O shell React já está pronto. Este módulo será conectado aos engines Python existentes sem duplicar a lógica de negócio.</p></div></main>}</div><Copilot setPage={setPage}/></div></div>}
+function App(){const [page,setPage]=useState<Page>("Portfolio"); return <div className="app-shell"><header className="topbar"><div className="brand"><span className="brand-mark">▮▮▮</span><div><strong>B3 Investment Copilot</strong><small>Seu copiloto de investimentos com IA</small></div></div><div className="search">⌕ <span>Buscar ativos, estratégias ou fazer uma pergunta...</span><kbd>Ctrl K</kbd></div><div className="market"><span>Mercado <b>via Orchestrator</b></span><span className="bell">♧</span><span className="avatar">EF</span><b>Edmilson⌄</b></div></header><div className="body"><Sidebar page={page} setPage={setPage}/><div>{page==="Portfolio"?<Portfolio/>:page==="Options"?<Options/>:page==="Portfolio Intelligence"?<PortfolioIntelligence/>:<main className="workspace"><div className="workspace-head"><div><h1>{page}</h1><p>Workspace React preparado para o próximo módulo.</p></div></div><div className="panel placeholder"><h2>{page}</h2><p>Este módulo será conectado aos engines Python existentes sem duplicar a lógica de negócio.</p></div></main>}</div><Copilot setPage={setPage}/></div></div>}
 
 export default App;
