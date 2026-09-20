@@ -80,3 +80,8 @@ The Dashboard must distinguish:
 ## Source of truth
 
 Software behavior and versioned technical documentation are maintained in GitHub. Dashboard behavior should be documented from the implemented code and tests, not from an aspirational architecture.
+
+
+## UX / Visual Phase 8
+
+The Dashboard is now entering a dedicated UX/visual consolidation phase. This phase is presentation-only: existing Orchestrator contracts, deterministic engines and governance rules remain authoritative. The objective is to create a consistent visual language across all current views, improve navigation/orientation, standardize quality/provenance/warning states, and add regression coverage. See `docs/dashboard/ux.md` for the frozen Phase 8 scope and acceptance criteria.
