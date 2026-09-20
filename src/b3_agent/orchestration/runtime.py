@@ -21,12 +21,75 @@ from b3_agent.schemas.opportunity import OpportunitySet
 from b3_agent.portfolio.snapshot import load_active_snapshots
 from b3_agent.portfolio.context import PortfolioIntelligenceEngine
 from b3_agent.options.performance import OptionPerformanceEngine
+from b3_agent.options.reconciliation import OptionsReconciliationEngine, TransactionSourceCoverage
+from b3_agent.repositories.option_ledger import OptionTransactionLedger
+from b3_agent.repositories.source_manifest import SourceManifestRepository
 from b3_agent.schemas.option_transaction import OptionTransaction
 from langgraph.graph import END, START, StateGraph
 
 from .contracts import B3State
 from .orchestrator import configure_workflow
 from .workflow import build_workflow
+
+
+
+
+def _build_options_reconciliation(data_dir: Path, portfolio: Any, raw_transactions: Any) -> dict[str, Any] | None:
+    """Build auditable cross-source reconciliation without changing P&L inputs."""
+    if not isinstance(portfolio, PortfolioContext):
+        return None
+
+    excel_transactions = tuple(
+        OptionTransaction(**item) if isinstance(item, dict) else item
+        for item in (raw_transactions or ())
+    )
+    ledger_path = Path(data_dir) / "options.sqlite3"
+    brokerage_transactions = (
+        OptionTransactionLedger(ledger_path).list_all()
+        if ledger_path.is_file()
+        else ()
+    )
+    transactions = excel_transactions + brokerage_transactions
+    if not transactions:
+        return None
+
+    source_coverage: list[TransactionSourceCoverage] = []
+    if excel_transactions:
+        source_coverage.append(
+            TransactionSourceCoverage(
+                source_ref="Options Transactions XLSX",
+                scope="PERIOD_ONLY",
+                completeness="UNKNOWN",
+            )
+        )
+
+    if brokerage_transactions:
+        manifest_path = Path(data_dir) / "source_manifest.sqlite3"
+        manifests = SourceManifestRepository(manifest_path).list_all() if manifest_path.is_file() else ()
+        for manifest in manifests:
+            matching_refs = {
+                transaction.source_ref
+                for transaction in brokerage_transactions
+                if transaction.source_id == manifest.source_id
+                or transaction.source_ref.startswith(manifest.source_ref)
+            }
+            for source_ref in sorted(matching_refs):
+                source_coverage.append(
+                    TransactionSourceCoverage(
+                        source_ref=source_ref,
+                        coverage_start=manifest.coverage_start,
+                        coverage_end=manifest.coverage_end,
+                        scope=manifest.scope,
+                        completeness=manifest.completeness,
+                    )
+                )
+
+    reconciliation = OptionsReconciliationEngine().reconcile(
+        transactions,
+        portfolio,
+        source_coverage=tuple(source_coverage),
+    )
+    return asdict(reconciliation)
 
 
 def configure_dashboard_workflow() -> None:
@@ -46,6 +109,7 @@ def configure_dashboard_workflow() -> None:
                 "portfolio_intelligence": state.get("portfolio_intelligence"),
                 "options_performance": state.get("options_performance", {"lifecycles": [], "by_underlying": []}),
                 "options_transactions": list(state.get("options_transactions", ())),
+                "options_reconciliation": state.get("options_reconciliation"),
             },
             "status": "COMPLETED",
         }
@@ -74,6 +138,11 @@ def configure_dashboard_workflow() -> None:
             }
         else:
             initial["options_performance"] = {"lifecycles": [], "by_underlying": []}
+        initial["options_reconciliation"] = _build_options_reconciliation(
+            settings.data_dir,
+            initial.get("portfolio_context"),
+            initial.get("options_transactions", ()),
+        )
         return workflow.invoke(initial)
 
     configure_workflow(invoke)
@@ -224,6 +293,12 @@ def configure_default_workflow(*, vault_path: Path | None = None,
             "lifecycles": [],
             "by_underlying": [],
         }
+
+    deterministic_defaults["options_reconciliation"] = _build_options_reconciliation(
+        settings.data_dir,
+        deterministic_defaults.get("portfolio_context"),
+        deterministic_defaults.get("options_transactions", ()),
+    )
 
     if deterministic_defaults:
         def invoke_with_deterministic_context(state):
