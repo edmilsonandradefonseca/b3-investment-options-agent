@@ -34,6 +34,16 @@ class OptionHistoryCoverage:
 
 
 @dataclass(frozen=True)
+class ReconciliationMatch:
+    """Auditable relationship between transactions from different sources."""
+
+    status: str
+    excel_transaction_id: str | None = None
+    brokerage_transaction_id: str | None = None
+    reason: str = ""
+
+
+@dataclass(frozen=True)
 class OptionReconciliation:
     """Reconciles historical option transactions against the authoritative BTG snapshot."""
 
@@ -45,10 +55,31 @@ class OptionReconciliation:
     quality_status: str = "VALIDATED"
     history_coverage: tuple[OptionHistoryCoverage, ...] = ()
     source_coverage: tuple[TransactionSourceCoverage, ...] = ()
+    matches: tuple[ReconciliationMatch, ...] = ()
 
 
 class OptionsReconciliationEngine:
-    """Links transaction history to current BTG positions without equating a single trade to holdings."""
+    """Links transaction history to current BTG positions without equating a trade to holdings."""
+
+    @staticmethod
+    def _same_economic_trade(left: OptionTransaction, right: OptionTransaction) -> bool:
+        """Match fields that both the XLSX and brokerage-note sources expose."""
+        return (
+            canonical_option_ticker(left.option_ticker)
+            == canonical_option_ticker(right.option_ticker)
+            and left.quantity == right.quantity
+            and left.average_cost == right.average_cost
+            and left.total_cost == right.total_cost
+        )
+
+    @staticmethod
+    def _same_candidate(left: OptionTransaction, right: OptionTransaction) -> bool:
+        """Identify a possible duplicate when the economic values are not identical."""
+        return (
+            canonical_option_ticker(left.option_ticker)
+            == canonical_option_ticker(right.option_ticker)
+            and left.quantity == right.quantity
+        )
 
     def reconcile(
         self,
@@ -67,7 +98,7 @@ class OptionsReconciliationEngine:
         btg_position_ids: list[str] = []
 
         # A transaction belongs to the current-position history when its ticker
-        # exists in the authoritative BTG snapshot.  Individual transaction
+        # exists in the authoritative BTG snapshot. Individual transaction
         # quantities are intentionally NOT compared with current holdings:
         # several trades may form one current position.
         for transaction in transactions:
@@ -80,56 +111,90 @@ class OptionsReconciliationEngine:
             current.append(transaction)
             btg_position_ids.append(position.position_id)
 
-        # Quantity reconciliation is meaningful at aggregate ticker level,
-        # not per transaction.  Net historical quantity is compared with the
-        # current BTG quantity only when the history can represent the full
-        # lifecycle.  With a partial transaction extract, no mismatch is
-        # inferred merely from different quantities.
-        quantity_mismatches: list[tuple[str, float, float]] = []
-
-        # Excel exports and brokerage notes can describe the same economic
-        # trade with different transaction IDs. Do not merge either record
-        # because Excel may omit date/note identity. Expose candidates for audit.
         excel = [tx for tx in transactions if tx.source_type == "OPTIONS_XLSX"]
         notes = [tx for tx in transactions if tx.source_type == "BROKERAGE_NOTE"]
+
+        matches: list[ReconciliationMatch] = []
         potential_cross_source_duplicates: list[tuple[str, str]] = []
+        paired_excel: set[str] = set()
+        paired_notes: set[str] = set()
+
+        # Pair each exact economic match once. Transaction IDs are source-local,
+        # so they are evidence of provenance, not the reconciliation key.
+        for left in excel:
+            for right in notes:
+                if right.transaction_id in paired_notes:
+                    continue
+                if self._same_economic_trade(left, right):
+                    paired_excel.add(left.transaction_id)
+                    paired_notes.add(right.transaction_id)
+                    matches.append(
+                        ReconciliationMatch(
+                            status="RECONCILED",
+                            excel_transaction_id=left.transaction_id,
+                            brokerage_transaction_id=right.transaction_id,
+                            reason="same ticker, signed quantity, execution price and total amount",
+                        )
+                    )
+                    break
+
+        # Same ticker + signed quantity without an exact economic match is an
+        # auditable candidate, not an automatic merge.
         for left in excel:
             for right in notes:
                 if (
-                    canonical_option_ticker(left.option_ticker) == canonical_option_ticker(right.option_ticker)
-                    and left.quantity == right.quantity
-                    and left.average_cost == right.average_cost
-                    and left.total_cost == right.total_cost
+                    left.transaction_id not in paired_excel
+                    and right.transaction_id not in paired_notes
+                    and self._same_candidate(left, right)
                 ):
-                    potential_cross_source_duplicates.append((left.transaction_id, right.transaction_id))
-        for ticker, position in btg_options.items():
-            ticker_transactions = [
-                tx for tx in transactions
-                if canonical_option_ticker(tx.option_ticker) == ticker
-            ]
-            if not ticker_transactions:
-                continue
+                    potential_cross_source_duplicates.append(
+                        (left.transaction_id, right.transaction_id)
+                    )
+                    matches.append(
+                        ReconciliationMatch(
+                            status="POTENTIAL_DUPLICATE",
+                            excel_transaction_id=left.transaction_id,
+                            brokerage_transaction_id=right.transaction_id,
+                            reason="same ticker and signed quantity but different economic fields",
+                        )
+                    )
 
-            net_quantity = sum(tx.quantity for tx in ticker_transactions)
-            if net_quantity == position.quantity:
-                continue
+        for transaction in excel:
+            if transaction.transaction_id not in paired_excel:
+                matches.append(
+                    ReconciliationMatch(
+                        status="EXCEL_ONLY",
+                        excel_transaction_id=transaction.transaction_id,
+                        reason="no exact brokerage-note match",
+                    )
+                )
 
-            # The source transaction extract may be partial (e.g. only
-            # executed trades available in the imported statement).  Preserve
-            # the difference as informational data only when requested by a
-            # future reconciliation contract; do not downgrade quality here.
-            _ = net_quantity
+        for transaction in notes:
+            if transaction.transaction_id not in paired_notes:
+                matches.append(
+                    ReconciliationMatch(
+                        status="BROKERAGE_ONLY",
+                        brokerage_transaction_id=transaction.transaction_id,
+                        reason="no exact Excel transaction match",
+                    )
+                )
 
-        coverage_rows: list[OptionHistoryCoverage] = []
+        quantity_mismatches: list[tuple[str, float, float]] = []
+
+        coverage_by_ref = {item.source_ref: item for item in source_coverage}
         grouped: dict[str, list[OptionTransaction]] = {}
         for transaction in transactions:
-            grouped.setdefault(canonical_option_ticker(transaction.option_ticker), []).append(transaction)
+            grouped.setdefault(
+                canonical_option_ticker(transaction.option_ticker), []
+            ).append(transaction)
 
+        coverage_rows: list[OptionHistoryCoverage] = []
         for ticker, rows in sorted(grouped.items()):
             position = btg_options.get(ticker)
             dates = [tx.as_of for tx in rows if tx.as_of is not None]
             net_quantity = sum(tx.quantity for tx in rows)
             current_quantity = position.quantity if position is not None else None
+
             if position is None:
                 alignment = "NO_CURRENT_POSITION"
             elif net_quantity == current_quantity:
@@ -137,16 +202,31 @@ class OptionsReconciliationEngine:
             else:
                 alignment = "DIFFERENT"
 
-            # Quantity alignment is evidence, not proof, of complete history.
-            # Completeness may only be promoted by explicit source evidence.
-            ticker_source_refs = {tx.source_ref for tx in rows}
-            applicable = [item for item in source_coverage if item.source_ref in ticker_source_refs]
-            if applicable and all(item.scope == "FULL_HISTORY" and item.completeness == "COMPLETE" for item in applicable):
+            applicable = [
+                coverage_by_ref[tx.source_ref]
+                for tx in rows
+                if tx.source_ref in coverage_by_ref
+            ]
+            if applicable and all(
+                item.scope == "FULL_HISTORY" and item.completeness == "COMPLETE"
+                for item in applicable
+            ):
                 completeness = "COMPLETE"
-            elif applicable and any(item.completeness == "PARTIAL" for item in applicable):
+            elif applicable and any(
+                item.completeness == "PARTIAL" for item in applicable
+            ):
                 completeness = "PARTIAL"
             else:
                 completeness = "UNKNOWN"
+
+            if (
+                position is not None
+                and completeness == "COMPLETE"
+                and net_quantity != position.quantity
+            ):
+                quantity_mismatches.append(
+                    (ticker, net_quantity, position.quantity)
+                )
 
             coverage_rows.append(
                 OptionHistoryCoverage(
@@ -161,13 +241,22 @@ class OptionsReconciliationEngine:
                 )
             )
 
+        quality_status = (
+            "WARNING"
+            if quantity_mismatches or potential_cross_source_duplicates
+            else "VALIDATED"
+        )
+
         return OptionReconciliation(
             current=tuple(current),
             historical_only=tuple(historical_only),
             quantity_mismatches=tuple(quantity_mismatches),
-            potential_cross_source_duplicates=tuple(potential_cross_source_duplicates),
+            potential_cross_source_duplicates=tuple(
+                potential_cross_source_duplicates
+            ),
             btg_position_ids=tuple(dict.fromkeys(btg_position_ids)),
-            quality_status="VALIDATED",
+            quality_status=quality_status,
             history_coverage=tuple(coverage_rows),
             source_coverage=tuple(source_coverage),
+            matches=tuple(matches),
         )
