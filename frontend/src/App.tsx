@@ -37,20 +37,22 @@ function Sidebar({page,setPage}:{page:Page;setPage:(p:Page)=>void}) {
   async function uploadBrokerageNotes(files:File[]){
     if(!files.length)return;
     setUploadStatus(`Enviando ${files.length} nota(s) de corretagem…`);
-    let stored=0;
+    let processed=0;
+    let inserted=0;
     try{
       for(const file of files){
         const form=new FormData();
         form.append("file",file);
         const r=await fetch(API_BASE+"/imports/brokerage-notes",{method:"POST",body:form});
         const d=await r.json();
-        if(!r.ok) throw new Error(d.detail??d.error??(`Falha ao enviar ${file.name}`));
-        stored++;
+        if(!r.ok) throw new Error(d.detail??d.error??(`Falha ao processar ${file.name}`));
+        processed++;
+        inserted+=Number(d.inserted_count??0);
       }
-      setUploadStatus(`✓ ${stored} nota(s) recebida(s) e armazenada(s) para processamento`);
+      setUploadStatus(`✓ ${processed} nota(s) processada(s) · ${inserted} nova(s) transação(ões) no ledger`);
       setBrokerageSelection(files.map(file=>file.name));
     }catch(err){
-      setUploadStatus(`Erro após ${stored}/${files.length} nota(s): ${err instanceof Error?err.message:"falha no upload"}`);
+      setUploadStatus(`Erro após ${processed}/${files.length} nota(s): ${err instanceof Error?err.message:"falha no processamento"}`);
     }
   }
   return <aside className="sidebar">
