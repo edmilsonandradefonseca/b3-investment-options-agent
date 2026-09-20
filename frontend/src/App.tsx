@@ -362,6 +362,51 @@ function Reconciliation(){
   </main>;
 }
 
+
+function Knowledge(){
+  type Evidence={source_ref:string;relative_path:string;snippet:string;score:number};
+  type Entity={entity_id:string;entity_type:string;name:string;canonical_id?:string|null;source_ref?:string|null;provenance?:string|null};
+  type Relation={source_id:string;relation:string;target_id:string;source_ref?:string|null};
+  type KnowledgeData={query:string;as_of?:string|null;rag:Evidence[];entities:Entity[];relations:Relation[];events:Entity[];sources:string[];metadata:Record<string,any>};
+  const [query,setQuery]=useState("PETR4");
+  const [data,setData]=useState<KnowledgeData|null>(null);
+  const [loading,setLoading]=useState(false);
+  const [error,setError]=useState("");
+  async function search(){
+    const q=query.trim(); if(!q||loading)return;
+    setLoading(true);setError("");
+    try{
+      const r=await fetch(API_BASE+"/knowledge/query",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({query:q,rag_top_k:5,graph_top_k:20,neighbor_depth:1})});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.detail??d.error??"Falha ao consultar a base de conhecimento");
+      setData(d);
+    }catch(err){setData(null);setError(err instanceof Error?err.message:"Falha ao consultar a base de conhecimento");}
+    finally{setLoading(false);}
+  }
+  useEffect(()=>{void search();},[]);
+  return <main className="workspace knowledge-page">
+    <div className="workspace-head"><div><h1>Knowledge</h1><p>Exploração governada de Obsidian, RAG e Knowledge Graph, sem geração de decisão de investimento.</p></div><span className="updated">{loading?"Consultando…":data?"Dados reais via Knowledge Service":"Pronto"}</span></div>
+    <Card title="Pesquisa de conhecimento"><div className="copilot-question"><input aria-label="Consulta de conhecimento" value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")void search();}} placeholder="Ex.: PETR4, risco de assignment, estratégia..." /><button className="primary-btn" disabled={loading||!query.trim()} onClick={()=>void search()}>{loading?"Consultando…":"Pesquisar"}</button></div></Card>
+    {error&&<div className="analytics-summary copilot-error"><strong>Knowledge indisponível</strong><span>{error}</span></div>}
+    {data&&<>
+      <section className="cards">
+        <Metric title="Evidências RAG" value={String(data.rag.length)} detail="Recuperadas do Obsidian" icon="⌕"/>
+        <Metric title="Entidades" value={String(data.entities.length)} detail="Knowledge Graph" icon="◉"/>
+        <Metric title="Relações" value={String(data.relations.length)} detail="Vizinhança bounded" icon="⇄"/>
+        <Metric title="Fontes" value={String(data.sources.length)} detail={data.metadata?.point_in_time?"Point-in-time":"Sem filtro temporal"} icon="◈"/>
+      </section>
+      <section className="grid-two">
+        <Card title="Evidências RAG"><div className="knowledge-list">{data.rag.map(x=><article key={x.source_ref}><strong>{x.relative_path}</strong><small>score {x.score} · {x.source_ref}</small><p>{x.snippet}</p></article>)}{!data.rag.length&&<div className="analytics-empty compact"><strong>Nenhuma evidência encontrada</strong><span>A consulta não retornou notas relevantes.</span></div>}</div></Card>
+        <Card title="Entidades do Knowledge Graph"><div className="table-wrap"><table><thead><tr><th>Tipo</th><th>Nome</th><th>Canonical ID</th><th>Fonte</th></tr></thead><tbody>{data.entities.map(x=><tr key={x.entity_id}><td>{x.entity_type}</td><td><strong>{x.name}</strong></td><td>{x.canonical_id??"—"}</td><td>{x.source_ref??"—"}</td></tr>)}{!data.entities.length&&<tr><td colSpan={4} className="table-empty">Nenhuma entidade encontrada.</td></tr>}</tbody></table></div></Card>
+      </section>
+      <section className="grid-two">
+        <Card title="Relações"><div className="table-wrap"><table><thead><tr><th>Origem</th><th>Relação</th><th>Destino</th><th>Fonte</th></tr></thead><tbody>{data.relations.map((x,i)=><tr key={x.source_id+"-"+x.relation+"-"+x.target_id+"-"+i}><td>{x.source_id}</td><td><strong>{x.relation}</strong></td><td>{x.target_id}</td><td>{x.source_ref??"—"}</td></tr>)}{!data.relations.length&&<tr><td colSpan={4} className="table-empty">Nenhuma relação encontrada.</td></tr>}</tbody></table></div></Card>
+        <Card title="Proveniência"><div className="analytics-summary"><strong>{data.sources.length} fonte(s)</strong><span>{data.sources.join(" · ")||"Nenhuma fonte explícita."}</span><small>{data.metadata?.notes_scanned??0} nota(s) escaneada(s) · {data.metadata?.entities_indexed??0} entidade(s) indexada(s)</small></div></Card>
+      </section>
+    </>}
+  </main>;
+}
+
 function PortfolioIntelligence(){
   const [data,setData]=useState<any>(null);
   const [error,setError]=useState("");
@@ -449,6 +494,6 @@ function CopilotPage(){
 
 function Card({title,action,children}:{title:string;action?:ReactNode;children:ReactNode}){return <div className="panel"><div className="panel-title"><h2>{title}</h2>{action}</div>{children}</div>}
 
-function App(){const [page,setPage]=useState<Page>("Portfolio"); return <div className="app-shell"><header className="topbar"><div className="brand"><span className="brand-mark">▮▮▮</span><div><strong>B3 Investment Copilot</strong><small>Seu copiloto de investimentos com IA</small></div></div><div className="search">⌕ <span>Buscar ativos, estratégias ou fazer uma pergunta...</span><kbd>Ctrl K</kbd></div><div className="market"><span>Mercado <b>via Orchestrator</b></span><span className="bell">♧</span><span className="avatar">EF</span><b>Edmilson⌄</b></div></header><div className="body"><Sidebar page={page} setPage={setPage}/><div>{page==="Portfolio"?<Portfolio/>:page==="Options"?<Options/>:page==="Reconciliation"?<Reconciliation/>:page==="Opportunities"?<Opportunities/>:page==="Portfolio Intelligence"?<PortfolioIntelligence/>:page==="Copilot"?<CopilotPage/>:<main className="workspace"><div className="workspace-head"><div><h1>{page}</h1><p>Workspace React preparado para o próximo módulo.</p></div></div><div className="panel placeholder"><h2>{page}</h2><p>Este módulo será conectado aos engines Python existentes sem duplicar a lógica de negócio.</p></div></main>}</div><Copilot setPage={setPage}/></div></div>}
+function App(){const [page,setPage]=useState<Page>("Portfolio"); return <div className="app-shell"><header className="topbar"><div className="brand"><span className="brand-mark">▮▮▮</span><div><strong>B3 Investment Copilot</strong><small>Seu copiloto de investimentos com IA</small></div></div><div className="search">⌕ <span>Buscar ativos, estratégias ou fazer uma pergunta...</span><kbd>Ctrl K</kbd></div><div className="market"><span>Mercado <b>via Orchestrator</b></span><span className="bell">♧</span><span className="avatar">EF</span><b>Edmilson⌄</b></div></header><div className="body"><Sidebar page={page} setPage={setPage}/><div>{page==="Portfolio"?<Portfolio/>:page==="Options"?<Options/>:page==="Reconciliation"?<Reconciliation/>:page==="Opportunities"?<Opportunities/>:page==="Portfolio Intelligence"?<PortfolioIntelligence/>:page==="Knowledge"?<Knowledge/>:page==="Copilot"?<CopilotPage/>:<main className="workspace"><div className="workspace-head"><div><h1>{page}</h1><p>Workspace React preparado para o próximo módulo.</p></div></div><div className="panel placeholder"><h2>{page}</h2><p>Este módulo será conectado aos engines Python existentes sem duplicar a lógica de negócio.</p></div></main>}</div><Copilot setPage={setPage}/></div></div>}
 
 export default App;
