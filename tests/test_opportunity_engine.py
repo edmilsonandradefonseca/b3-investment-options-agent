@@ -61,6 +61,7 @@ def test_rejected_opportunity_is_kept_separate() -> None:
         instrument_type="OPTION",
         action="HOLD_WAIT",
         as_of=date(2026, 9, 15),
+        evidence_refs=("evidence:BAD",),
     )
 
     result = engine.assess((rejected, opportunity("GOOD", 0.10)))
