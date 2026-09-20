@@ -174,7 +174,7 @@ def persist_decision(
         "status": "persisted",
         "type": "decision",
         "decision_id": str(decision.get("id") or ""),
-        "path": str(path),
+        "path": path.as_posix(),
     }
 
 
