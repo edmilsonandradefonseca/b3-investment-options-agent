@@ -195,7 +195,6 @@ function Options() {
     }));
     const performance=d.result?.dashboard_snapshot?.options_performance??{lifecycles:[],by_underlying:[]};
     const lifecycles=performance.lifecycles??[];
-    const optionTypeByTicker=new Map(lifecycles.map((x:any)=>[x.option_ticker,x.option_type]));
     const realized=lifecycles.reduce((sum:any,x:any)=>sum+(x.realized_pnl??0),0);
     const received=lifecycles.reduce((sum:any,x:any)=>sum+(x.premium_received??0),0);
     const paid=lifecycles.reduce((sum:any,x:any)=>sum+(x.premium_paid??0),0);
@@ -218,6 +217,7 @@ function Options() {
     setStatus("Dados reais carregados via orquestrador");
   } catch(err) { setStatus("Erro: "+(err instanceof Error?err.message:"falha")); setData(null); } }
   const s=data?.summary;
+  const optionTypeByTicker=new Map((data?.lifecycles??[]).map((x:any)=>[x.option_ticker,x.option_type]));
   return <main className="workspace options-page">
     <div className="workspace-head"><div><h1>Options Intelligence</h1><p>Resultado acumulado, rolagens e drill-down por papel.</p></div><span className="updated">{status}</span></div>
     <section className="filters"><label>Ativo<select value={underlying} onChange={e=>setUnderlying(e.target.value)}><option>Todos</option><option>PETR4</option><option>VALE3</option><option>ITUB4</option></select></label><label>Tipo<select value={type} onChange={e=>setType(e.target.value)}><option>Todas</option><option>CALL</option><option>PUT</option></select></label><label>Início<input type="date" value={start} onChange={e=>setStart(e.target.value)}/></label><label>Fim<input type="date" value={end} onChange={e=>setEnd(e.target.value)}/></label><button className="primary-btn" onClick={refresh}>Atualizar análise</button></section>
