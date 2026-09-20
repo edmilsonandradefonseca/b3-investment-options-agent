@@ -22,6 +22,21 @@ from b3_agent.repositories.source_manifest import SourceManifestRecord, SourceMa
 from b3_agent.schemas.transaction import Transaction
 from b3_agent.storage.sqlite import SQLiteStore
 from b3_agent.orchestration import OrchestratorRequest, OrchestratorResponse, b3_orchestrator, configure_default_workflow, configure_dashboard_workflow
+from b3_agent.knowledge.context import KnowledgeContextBuilder
+from b3_agent.knowledge.in_memory_graph import InMemoryKnowledgeGraphStore
+from b3_agent.knowledge.indexer import KnowledgeIndexer
+from b3_agent.knowledge.obsidian import ObsidianKnowledgeStore
+from b3_agent.knowledge.retrieval import ObsidianRetriever
+
+
+class KnowledgeQueryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(min_length=1)
+    as_of: datetime | None = None
+    rag_top_k: int = Field(default=5, ge=1, le=20)
+    graph_top_k: int = Field(default=20, ge=1, le=100)
+    neighbor_depth: int = Field(default=1, ge=0, le=2)
 
 
 class OrchestrateRequest(BaseModel):
@@ -327,6 +342,44 @@ def health() -> dict[str, Any]:
 def version() -> dict[str, str]:
     return {"service": "b3-orchestrator-server", "version": app.version}
 
+
+
+
+def _knowledge_query(request: KnowledgeQueryRequest) -> dict[str, Any]:
+    """Run bounded, deterministic Obsidian + KG retrieval for the Knowledge UI."""
+    if settings.obsidian_vault is None:
+        raise HTTPException(status_code=503, detail="B3_AGENT_OBSIDIAN_VAULT is not configured")
+    vault = ObsidianKnowledgeStore(settings.obsidian_vault)
+    graph = InMemoryKnowledgeGraphStore()
+    index_result = KnowledgeIndexer(vault, graph).index_all()
+    context = KnowledgeContextBuilder(ObsidianRetriever(vault), graph).build(
+        request.query,
+        rag_top_k=request.rag_top_k,
+        graph_top_k=request.graph_top_k,
+        neighbor_depth=request.neighbor_depth,
+        as_of=request.as_of,
+    )
+    payload = context.as_dict()
+    payload["metadata"] = {
+        **payload.get("metadata", {}),
+        "notes_scanned": index_result.notes_scanned,
+        "notes_changed": index_result.notes_changed,
+        "notes_unchanged": index_result.notes_unchanged,
+        "entities_indexed": index_result.entities_indexed,
+        "relations_indexed": index_result.relations_indexed,
+    }
+    return payload
+
+
+@app.post("/knowledge/query")
+def query_knowledge(request: KnowledgeQueryRequest) -> dict[str, Any]:
+    """Return bounded knowledge evidence and graph context without LLM reasoning."""
+    try:
+        return _knowledge_query(request)
+    except HTTPException:
+        raise
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 @app.post("/orchestrate", response_model=OrchestrateResponse)
 def orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
