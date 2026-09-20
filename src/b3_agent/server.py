@@ -212,6 +212,56 @@ def import_options(file: UploadFile = File(...)) -> dict[str, Any]:
     return result
 
 
+def _store_brokerage_note(upload: UploadFile) -> dict[str, Any]:
+    """Validate and stage a brokerage-note PDF behind the orchestrator boundary."""
+    if not upload.filename or not upload.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="nota de corretagem deve ser PDF (.pdf)")
+
+    notes_dir = _import_dir() / "brokerage_notes"
+    notes_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = Path(upload.filename).name
+    target = notes_dir / safe_name
+    temp_path: Path | None = None
+    try:
+        with NamedTemporaryFile(
+            prefix=f".{safe_name}.",
+            suffix=".pdf",
+            dir=notes_dir,
+            delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            while True:
+                chunk = upload.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                handle.write(chunk)
+
+        # A brokerage note is currently staged as source material. Parsing into
+        # the option ledger remains a separate governed contract.
+        if temp_path.stat().st_size < 5:
+            raise ValueError("PDF vazio ou inválido")
+        temp_path.replace(target)
+        return {
+            "status": "staged",
+            "file": upload.filename,
+            "active_file": str(target),
+            "message": "nota de corretagem recebida e armazenada para processamento",
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"nota de corretagem inválida: {exc}") from exc
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink(missing_ok=True)
+
+
+@app.post("/imports/brokerage-notes")
+def import_brokerage_note(file: UploadFile = File(...)) -> dict[str, Any]:
+    """Stage a brokerage-note PDF without bypassing the orchestrator boundary."""
+    return _store_brokerage_note(file)
+
+
 def _response_to_model(response: OrchestratorResponse) -> OrchestrateResponse:
     return OrchestrateResponse(
         status=response.status,
