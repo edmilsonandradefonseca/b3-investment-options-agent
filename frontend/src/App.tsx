@@ -266,6 +266,55 @@ function Options() {
 
 
 
+function Opportunities(){
+  type Opportunity={opportunity_id:string;ticker:string;instrument_type:string;action:string;eligible:boolean;attractiveness:string;portfolio_fit:string;expected_return:number|null;capital_requirement:number|null;liquidity_value:number|null;rationale:string;evidence_refs:string[];source_refs:string[];rejection_reasons:string[]};
+  type OpportunitySet={as_of?:string|null;quality_status?:string;ranking_policy_version?:string;ranked_opportunities?:Opportunity[];rejected_opportunities?:Opportunity[];action_candidates?:Array<{action_candidate_id:string;action_type:string;subject_id:string;priority:string;rationale:string}>;source_refs?:string[]};
+  const [data,setData]=useState<OpportunitySet|null>(null);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+  async function refresh(){
+    setLoading(true);setError("");
+    try{
+      const r=await fetch(API_BASE+"/orchestrate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({task:"Carregar oportunidades determinísticas para o Dashboard",context:{client:"react-dashboard",dashboard_view:"opportunities"}})});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.detail??d.error??"Falha ao consultar o orquestrador");
+      setData(d.result?.dashboard_snapshot?.opportunity_set??null);
+    }catch(err){setError(err instanceof Error?err.message:"Falha ao consultar o orquestrador");}
+    finally{setLoading(false);}
+  }
+  useEffect(()=>{void refresh();},[]);
+  const ranked=data?.ranked_opportunities??[];
+  const rejected=data?.rejected_opportunities??[];
+  const actionCandidates=data?.action_candidates??[];
+  return <main className="workspace opportunities-page">
+    <div className="workspace-head"><div><h1>Opportunities</h1><p>Oportunidades produzidas pelo OpportunitySet determinístico e filtradas pelas regras de governança.</p></div><span className="updated">{loading?"Consultando…":data?"Dados reais via Orchestrator":"Sem OpportunitySet"}</span></div>
+    {error&&<div className="analytics-summary copilot-error"><strong>Oportunidades indisponíveis</strong><span>{error}</span></div>}
+    {data&&<section className="cards">
+      <Metric title="Qualidade" value={data.quality_status??"—"} detail={data.ranking_policy_version?"Policy "+data.ranking_policy_version:"Engine determinístico"} icon="✦"/>
+      <Metric title="Elegíveis" value={String(ranked.length)} detail="Ranking determinístico" icon="✓"/>
+      <Metric title="Rejeitadas" value={String(rejected.length)} detail="Com motivo explícito" icon="!"/>
+      <Metric title="Action candidates" value={String(actionCandidates.length)} detail="Sem execução automática" icon="⌁"/>
+    </section>}
+    {!data&&!loading&&!error&&<Card title="OpportunitySet"><div className="analytics-empty"><strong>Nenhum OpportunitySet disponível</strong><span>A camada de UI está conectada ao contrato do Orchestrator, mas ainda não há um conjunto de oportunidades produzido para o snapshot atual.</span></div></Card>}
+    {data&&<>
+      <Card title="Oportunidades elegíveis">
+        <div className="opportunity-grid">{ranked.map((x,i)=><article className="opportunity-card" key={x.opportunity_id}>
+          <div className="opportunity-head"><span>#{i+1} · {x.instrument_type}</span><b>{x.action}</b></div>
+          <h3>{x.ticker}</h3>
+          <p>{x.rationale||"Sem racional adicional retornado pelo engine."}</p>
+          <div className="opportunity-meta"><span>Attractiveness <b>{x.attractiveness}</b></span><span>Fit <b>{x.portfolio_fit}</b></span><span>Retorno <b>{x.expected_return==null?"—":(x.expected_return*100).toFixed(1).replace(".",",")+"%"}</b></span><span>Capital <b>{x.capital_requirement==null?"—":money(x.capital_requirement)}</b></span></div>
+          <small>{x.evidence_refs?.length??0} evidência(s) · {x.source_refs?.length??0} fonte(s)</small>
+        </article>)}{!ranked.length&&<div className="analytics-empty compact"><strong>Nenhuma oportunidade elegível</strong><span>O OpportunitySet retornou zero oportunidades elegíveis para este snapshot.</span></div>}</div>
+      </Card>
+      <section className="grid-two">
+        <Card title="Action candidates"><div className="table-wrap"><table><thead><tr><th>Ação</th><th>Prioridade</th><th>Subject</th><th>Racional</th></tr></thead><tbody>{actionCandidates.map(x=><tr key={x.action_candidate_id}><td><strong>{x.action_type}</strong></td><td>{x.priority}</td><td>{x.subject_id}</td><td>{x.rationale||"—"}</td></tr>)}{!actionCandidates.length&&<tr><td colSpan={4} className="table-empty">Nenhum candidato de ação.</td></tr>}</tbody></table></div></Card>
+        <Card title="Rejeitadas / revisão"><div className="table-wrap"><table><thead><tr><th>Ticker</th><th>Ação</th><th>Motivos</th></tr></thead><tbody>{rejected.map(x=><tr key={x.opportunity_id}><td><strong>{x.ticker}</strong></td><td>{x.action}</td><td>{x.rejection_reasons?.join(" · ")||"Sem motivo informado"}</td></tr>)}{!rejected.length&&<tr><td colSpan={3} className="table-empty">Nenhuma oportunidade rejeitada.</td></tr>}</tbody></table></div></Card>
+      </section>
+      <div className="analytics-summary"><strong>{data.quality_status}</strong><span>as_of: {data.as_of??"não informado"} · {data.source_refs?.length??0} fonte(s) declarada(s)</span><small>A UI não recalcula ranking, valuation, capital ou risco.</small></div>
+    </>}
+  </main>;
+}
+
 function Reconciliation(){
   type Match={status:string;excel_transaction_id?:string|null;brokerage_transaction_id?:string|null;reason:string};
   type Coverage={option_ticker:string;first_trade_date?:string|null;last_trade_date?:string|null;transaction_count:number;net_historical_quantity:number;current_position_quantity?:number|null;position_alignment:string;completeness:string};
@@ -400,6 +449,6 @@ function CopilotPage(){
 
 function Card({title,action,children}:{title:string;action?:ReactNode;children:ReactNode}){return <div className="panel"><div className="panel-title"><h2>{title}</h2>{action}</div>{children}</div>}
 
-function App(){const [page,setPage]=useState<Page>("Portfolio"); return <div className="app-shell"><header className="topbar"><div className="brand"><span className="brand-mark">▮▮▮</span><div><strong>B3 Investment Copilot</strong><small>Seu copiloto de investimentos com IA</small></div></div><div className="search">⌕ <span>Buscar ativos, estratégias ou fazer uma pergunta...</span><kbd>Ctrl K</kbd></div><div className="market"><span>Mercado <b>via Orchestrator</b></span><span className="bell">♧</span><span className="avatar">EF</span><b>Edmilson⌄</b></div></header><div className="body"><Sidebar page={page} setPage={setPage}/><div>{page==="Portfolio"?<Portfolio/>:page==="Options"?<Options/>:page==="Reconciliation"?<Reconciliation/>:page==="Portfolio Intelligence"?<PortfolioIntelligence/>:page==="Copilot"?<CopilotPage/>:<main className="workspace"><div className="workspace-head"><div><h1>{page}</h1><p>Workspace React preparado para o próximo módulo.</p></div></div><div className="panel placeholder"><h2>{page}</h2><p>Este módulo será conectado aos engines Python existentes sem duplicar a lógica de negócio.</p></div></main>}</div><Copilot setPage={setPage}/></div></div>}
+function App(){const [page,setPage]=useState<Page>("Portfolio"); return <div className="app-shell"><header className="topbar"><div className="brand"><span className="brand-mark">▮▮▮</span><div><strong>B3 Investment Copilot</strong><small>Seu copiloto de investimentos com IA</small></div></div><div className="search">⌕ <span>Buscar ativos, estratégias ou fazer uma pergunta...</span><kbd>Ctrl K</kbd></div><div className="market"><span>Mercado <b>via Orchestrator</b></span><span className="bell">♧</span><span className="avatar">EF</span><b>Edmilson⌄</b></div></header><div className="body"><Sidebar page={page} setPage={setPage}/><div>{page==="Portfolio"?<Portfolio/>:page==="Options"?<Options/>:page==="Reconciliation"?<Reconciliation/>:page==="Opportunities"?<Opportunities/>:page==="Portfolio Intelligence"?<PortfolioIntelligence/>:page==="Copilot"?<CopilotPage/>:<main className="workspace"><div className="workspace-head"><div><h1>{page}</h1><p>Workspace React preparado para o próximo módulo.</p></div></div><div className="panel placeholder"><h2>{page}</h2><p>Este módulo será conectado aos engines Python existentes sem duplicar a lógica de negócio.</p></div></main>}</div><Copilot setPage={setPage}/></div></div>}
 
 export default App;
