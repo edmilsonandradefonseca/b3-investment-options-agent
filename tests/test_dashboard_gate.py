@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 
 from b3_agent import server
 from b3_agent.config import settings
+from b3_agent.options.brokerage_notes import BrokerageNoteParser
+from b3_agent.repositories.option_ledger import OptionTransactionLedger
 from b3_agent.orchestration import b3_orchestrator
 from b3_agent.orchestration import runtime
 from b3_agent.portfolio.snapshot import load_active_snapshots
@@ -68,6 +70,11 @@ def test_dashboard_upload_contracts(tmp_path, monkeypatch) -> None:
     make_btg_portfolio(portfolio)
     make_options_transactions(options)
     make_brokerage_note(note)
+    parsed_note = BrokerageNoteParser().parse_text(
+        """NOTA DE CORRETAGEM\n34515456\nNr. nota\n17/09/2026\nData pregão\n1-BOVESPA C OPCAO DE COMPRA 10/26 ASAIJ970 ON 3000 0,94 2.820,00 D\n""",
+        source_file="nota.pdf",
+    )
+    monkeypatch.setattr(server.BrokerageNoteParser, "parse", lambda self, path: parsed_note)
 
     client = TestClient(server.app)
     with portfolio.open("rb") as handle:
@@ -83,8 +90,11 @@ def test_dashboard_upload_contracts(tmp_path, monkeypatch) -> None:
     with note.open("rb") as handle:
         response = client.post("/imports/brokerage-notes", files={"file": ("nota.pdf", handle, "application/pdf")})
     assert response.status_code == 200
-    assert response.json()["status"] == "staged"
+    assert response.json()["status"] == "processed"
+    assert response.json()["parsed_count"] == 1
+    assert response.json()["inserted_count"] == 1
     assert (imports / "brokerage_notes" / "nota.pdf").exists()
+    assert len(OptionTransactionLedger(data_dir / "options.sqlite3").list_all()) == 1
 
 
 def test_dashboard_upload_rejects_wrong_note_type(tmp_path, monkeypatch) -> None:
