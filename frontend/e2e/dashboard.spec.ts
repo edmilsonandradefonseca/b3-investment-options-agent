@@ -10,7 +10,7 @@ test("dashboard reads BTG snapshot through orchestrator", async ({ page }) => {
   await page.getByRole("button", { name: /Options/ }).click();
   await page.getByRole("button", { name: "Atualizar análise" }).click();
   await expect(page.getByText("Dados reais carregados via orquestrador", { exact: true })).toBeVisible();
-  await expect(page.getByText("PETRV300", { exact: true })).toBeVisible();
+  await expect(page.getByText("PETRV300", { exact: true }).first()).toBeVisible();
 
   await page.getByRole("button", { name: /Portfolio Intelligence/ }).click();
   await expect(page.getByText("Dados reais via Orchestrator", { exact: true })).toBeVisible();
@@ -32,7 +32,6 @@ test("dashboard upload buttons use orchestrator contracts", async ({ page }) => 
   await noteInput.setInputFiles(path.resolve("..", ".ci-data", "nota-corretagem.pdf"));
   await expect(page.getByRole("status")).toContainText("nota de corretagem recebida");
 });
-
 
 test("Copilot exposes all golden conversational cases and calls the orchestrator", async ({ page }) => {
   let receivedBody: any = null;
