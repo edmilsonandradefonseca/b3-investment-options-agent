@@ -4,6 +4,8 @@ from datetime import date
 from pathlib import Path
 
 from openpyxl import Workbook
+from pypdf import PdfWriter
+from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
 
 def make_btg_portfolio(path: Path) -> None:
