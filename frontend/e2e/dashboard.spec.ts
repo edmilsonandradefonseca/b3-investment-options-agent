@@ -107,7 +107,7 @@ test("reconciliation view reads structured runtime reconciliation", async ({ pag
   await page.getByRole("button", { name: /Reconciliation/ }).click();
 
   await expect(page.getByRole("heading", { name: "Reconciliação" })).toBeVisible();
-  await expect(page.getByText("Qualidade", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Qualidade", exact: true })).toBeVisible();
   await expect(page.getByText("EXCEL_ONLY", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("Options Transactions XLSX", { exact: true })).toBeVisible();
   await expect(page.getByText("PERIOD_ONLY", { exact: true }).first()).toBeVisible();
