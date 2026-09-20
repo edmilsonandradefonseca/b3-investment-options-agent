@@ -57,7 +57,7 @@ try {
     if (-not (Test-Endpoint $frontendUrl)) {
         Write-Host "Starting React Dashboard..." -ForegroundColor Yellow
         $frontendInfo = New-Object System.Diagnostics.ProcessStartInfo
-        $frontendInfo.FileName = "npm"
+        $frontendInfo.FileName = "npm.cmd"
         $frontendInfo.Arguments = "run dev -- --host 127.0.0.1"
         $frontendInfo.WorkingDirectory = $frontend
         $frontendInfo.UseShellExecute = $false
