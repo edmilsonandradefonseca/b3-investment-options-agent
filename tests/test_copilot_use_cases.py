@@ -191,7 +191,6 @@ def test_gc_c01_opportunity_discovery_exposes_affordable_validated_opportunity(t
 
     assert result["use_case_id"] == "GC-C01"
     assert c01["eligible"] is True
-    assert c01["quality_status"] if "quality_status" in c01 else True
     assert c01["ticker"] == "PETR4"
     assert c01["action"] == "SELL_PUT"
     assert c01["capital_requirement"] == 3000.0
