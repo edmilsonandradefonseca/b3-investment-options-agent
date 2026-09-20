@@ -57,7 +57,12 @@ try {
     if (-not (Test-Endpoint $frontendUrl)) {
         Write-Host "Starting React Dashboard..." -ForegroundColor Yellow
         $frontendInfo = New-Object System.Diagnostics.ProcessStartInfo
-        $frontendInfo.FileName = "npm.cmd"
+        $nodeCommand = Get-Command node.exe -CommandType Application -ErrorAction Stop
+        $npmCmd = Join-Path (Split-Path -Parent $nodeCommand.Source) "npm.cmd"
+        if (-not (Test-Path $npmCmd)) {
+            throw "Could not locate npm.cmd next to node.exe at $npmCmd."
+        }
+        $frontendInfo.FileName = $npmCmd
         $frontendInfo.Arguments = "run dev -- --host 127.0.0.1"
         $frontendInfo.WorkingDirectory = $frontend
         $frontendInfo.UseShellExecute = $false
