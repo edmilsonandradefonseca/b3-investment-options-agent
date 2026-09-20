@@ -36,6 +36,9 @@ test("dashboard upload buttons use orchestrator contracts", async ({ page }) => 
 
 test("Copilot exposes all golden conversational cases and calls the orchestrator", async ({ page }) => {
   let receivedBody: any = null;
+  await page.goto("/");
+  await page.getByRole("button", { name: /Copilot/ }).click();
+
   await page.route("**/orchestrate", async route => {
     if (route.request().method() === "POST") {
       receivedBody = route.request().postDataJSON();
@@ -80,11 +83,7 @@ test("Copilot exposes all golden conversational cases and calls the orchestrator
     } else {
       await route.continue();
     }
-  });
-
-  await page.goto("/");
-  await page.getByRole("button", { name: /Copilot/ }).click();
-
+  });\n
   for (const id of ["GC-C01", "GC-C02", "GC-C03", "GC-C04", "GC-C05", "GC-C06", "GC-C07", "GC-C08"]) {
     await expect(page.getByText(id, { exact: false })).toBeVisible();
   }
