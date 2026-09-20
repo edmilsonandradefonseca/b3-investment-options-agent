@@ -38,7 +38,48 @@ def make_options_transactions(path: Path) -> None:
 
 
 def make_brokerage_note(path: Path) -> None:
-    path.write_bytes(b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF\n")
+    writer = PdfWriter()
+    page = writer.add_blank_page(width=612, height=792)
+
+    font = DictionaryObject(
+        {
+            NameObject("/Type"): NameObject("/Font"),
+            NameObject("/Subtype"): NameObject("/Type1"),
+            NameObject("/BaseFont"): NameObject("/Helvetica"),
+        }
+    )
+    font_ref = writer._add_object(font)
+
+    resources = DictionaryObject(
+        {
+            NameObject("/Font"): DictionaryObject(
+                {NameObject("/F1"): font_ref}
+            )
+        }
+    )
+    page[NameObject("/Resources")] = resources
+
+    lines = [
+        "NOTA DE CORRETAGEM",
+        "34515456",
+        "17/09/2026",
+        "1-BOVESPA C OPCAO DE COMPRA 10/26 ASAIJ970 ON 3000 0,94 2.820,00 D",
+        "1-BOVESPA V OPCAO DE COMPRA 11/26 ASAIK102 ON 3000 1,04 3.120,00 C",
+        "1-BOVESPA V OPCAO DE COMPRA 11/26 ASAIK102 ON 4000 1,03 4.120,00 C",
+    ]
+    stream = DecodedStreamObject()
+    commands = ["BT", "/F1 10 Tf", "72 720 Td"]
+    for index, line in enumerate(lines):
+        escaped = line.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+        if index:
+            commands.append("0 -18 Td")
+        commands.append(f"({escaped}) Tj")
+    commands.append("ET")
+    stream.set_data("\n".join(commands).encode("latin-1"))
+    page[NameObject("/Contents")] = writer._add_object(stream)
+
+    with path.open("wb") as handle:
+        writer.write(handle)
 
 
 def prepare(base: Path) -> None:
