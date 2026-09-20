@@ -28,6 +28,11 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"]
+    "targets": [
+      "nsis"
+    ],
+    "resources": [
+      "binaries/orchestrator.exe"
+    ]
   }
 }
