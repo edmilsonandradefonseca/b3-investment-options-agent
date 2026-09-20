@@ -91,7 +91,7 @@ test("Copilot exposes all golden conversational cases and calls the orchestrator
   await page.getByText("GC-C01", { exact: false }).first().click();
   await page.getByRole("button", { name: "Enviar ao Orchestrator" }).click();
 
-  await expect(page.getByText("Resposta estruturada para validação do Copilot", { exact: false })).toBeVisible();
+  await expect(page.getByText("Resposta estruturada para validação do Copilot.", { exact: true })).toBeVisible();
   await expect(page.getByText("PASS", { exact: true })).toBeVisible();
   await expect(page.getByText("REQUIRED", { exact: true })).toBeVisible();
 
