@@ -49,3 +49,31 @@ def test_ledger_is_append_only_and_deduplicates(tmp_path):
     rows = ledger.list_by_ticker("ASAIK102")
     assert len(rows) == 2
     assert [row.quantity for row in rows] == [-3000, -4000]
+
+
+def test_brokerage_upload_endpoint_parses_and_persists_note(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+    from b3_agent import server
+
+    transactions = BrokerageNoteParser().parse_text(NOTE_TEXT, source_file="nota.pdf")
+    monkeypatch.setattr(server.settings, "data_dir", tmp_path)
+    monkeypatch.setattr(
+        server.BrokerageNoteParser,
+        "parse",
+        lambda self, path: transactions,
+    )
+
+    response = TestClient(server.app).post(
+        "/imports/brokerage-notes",
+        files={"file": ("nota.pdf", b"%PDF-1.4 fake", "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "processed"
+    assert payload["parsed_count"] == 3
+    assert payload["inserted_count"] == 3
+    assert payload["note_number"] == "34515456"
+
+    ledger = OptionTransactionLedger(tmp_path / "options.sqlite3")
+    assert len(ledger.list_all()) == 3
