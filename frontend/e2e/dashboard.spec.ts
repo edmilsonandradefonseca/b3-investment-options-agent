@@ -112,3 +112,12 @@ test("reconciliation view reads structured runtime reconciliation", async ({ pag
   await expect(page.getByText("Options Transactions XLSX", { exact: true })).toBeVisible();
   await expect(page.getByText("PERIOD_ONLY", { exact: true }).first()).toBeVisible();
 });
+
+test("opportunities view consumes structured OpportunitySet contract", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /Opportunities/ }).click();
+
+  await expect(page.getByRole("heading", { name: "Opportunities" })).toBeVisible();
+  await expect(page.getByText("OpportunitySet", { exact: true })).toBeVisible();
+  await expect(page.getByText("Nenhum OpportunitySet disponível", { exact: true })).toBeVisible();
+});
