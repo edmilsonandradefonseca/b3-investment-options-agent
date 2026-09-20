@@ -50,7 +50,7 @@ Structured response
 React Dashboard
 ```
 
-Uploads are separate ingestion endpoints. They update/stage the runtime data source and are subsequently consumed by the Orchestrator.
+Uploads are separate ingestion endpoints. Portfolio/options Excel files replace the active snapshots. Brokerage-note PDFs are parsed into the persistent option ledger and source manifest; the runtime subsequently reconciles that ledger with the active options snapshot.
 
 ## Data quality principle
 
@@ -62,7 +62,7 @@ The Dashboard must distinguish:
 
 ## Current limitations
 
-- Brokerage-note PDFs are currently staged; parsing into the option ledger is a separate contract.
+- Brokerage-note PDFs are parsed into the option ledger. Runtime reconciliation exposes `RECONCILED`, `POTENTIAL_DUPLICATE`, `EXCEL_ONLY` and `BROKERAGE_ONLY` relationships without feeding both sources into P&L.
 - Opportunities UI is not yet implemented.
 - Dashboard validation is still in progress.
 
