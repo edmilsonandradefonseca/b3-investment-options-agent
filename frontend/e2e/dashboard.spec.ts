@@ -30,7 +30,7 @@ test("dashboard upload buttons use orchestrator contracts", async ({ page }) => 
 
   const noteInput = page.locator('input[type="file"][accept=".pdf"]');
   await noteInput.setInputFiles(path.resolve("..", ".ci-data", "nota-corretagem.pdf"));
-  await expect(page.getByText("nota(s) recebida(s) e armazenada(s) para processamento", { exact: false })).toBeVisible();
+  await expect(page.getByText("nota(s) processada(s)", { exact: false })).toBeVisible();
 });
 
 test("Copilot exposes all golden conversational cases and calls the orchestrator", async ({ page }) => {
