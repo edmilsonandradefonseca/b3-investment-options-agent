@@ -1,12 +1,13 @@
 import { FormEvent, useEffect, useState, type ReactNode } from "react";
 
-type Page = "Portfolio" | "Options" | "Opportunities" | "Portfolio Intelligence" | "Knowledge";
+type Page = "Portfolio" | "Options" | "Opportunities" | "Portfolio Intelligence" | "Knowledge" | "Copilot";
 const nav: Array<{id: Page; icon: string; subtitle: string}> = [
   { id: "Portfolio", icon: "▣", subtitle: "Visão geral" },
   { id: "Options", icon: "◇", subtitle: "Opções & P&L" },
   { id: "Opportunities", icon: "✦", subtitle: "Oportunidades" },
   { id: "Portfolio Intelligence", icon: "◈", subtitle: "Exposição & risco" },
   { id: "Knowledge", icon: "◉", subtitle: "Conhecimento" },
+  { id: "Copilot", icon: "✧", subtitle: "Pergunte ao Orchestrator" },
 ];
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
@@ -61,6 +62,18 @@ function Copilot({setPage}:{setPage:(p:Page)=>void}) {
     <small className="disclaimer">Sem execução de ordens. Análises informativas.</small>
   </aside>;
 }
+
+type GoldenCase = { id:string; title:string; family:string; question:string; purpose:string };
+const GOLDEN_CASES: GoldenCase[] = [
+  {id:"GC-C01",title:"Opportunity Discovery",family:"Capital",question:"Tenho R$ 80 mil disponíveis. Existe alguma boa oportunidade?",purpose:"Cruza o capital informado com o OpportunitySet determinístico e o contexto da carteira."},
+  {id:"GC-C02",title:"Capital Insufficient",family:"Capital",question:"Tenho R$ 20 mil. Essa PUT cabe na minha carteira?",purpose:"Verifica o requisito de capital e o contexto de carteira antes da análise."},
+  {id:"GC-C03",title:"Diversification",family:"Portfolio",question:"Tenho essa carteira. Existe alguma oportunidade que melhore minha diversificação?",purpose:"Considera exposição existente e oportunidades determinísticas."},
+  {id:"GC-C04",title:"Position vs Opportunity",family:"Portfolio",question:"Vale a pena analisar uma nova oportunidade em vez de manter essa posição?",purpose:"Compara posição existente, oportunidade relativa e custo de oportunidade quando disponíveis."},
+  {id:"GC-C05",title:"BUY vs SELL PUT",family:"Comparison",question:"É melhor comprar PETR4 ou vender uma PUT de PETR4?",purpose:"Compara caminhos determinísticos preservando evidência e contexto da carteira."},
+  {id:"GC-C06",title:"Valuation",family:"Valuation",question:"PETR4 está barata?",purpose:"Explica o valuation determinístico disponível sem recalcular valuation no LLM."},
+  {id:"GC-C07",title:"Existing PUT",family:"Options",question:"Como está minha PUT e existe alguma alternativa que eu deveria analisar?",purpose:"Combina posição, lifecycle de opções e oportunidades disponíveis sem execução."},
+  {id:"GC-C08",title:"Insufficient Evidence",family:"Governance",question:"Qual a melhor coisa para eu fazer agora?",purpose:"Quando faltarem evidências, explicita o que é conhecido e o que precisa de análise adicional."},
+];
 
 function Portfolio() {
   type PortfolioData = {
@@ -255,8 +268,67 @@ function PortfolioIntelligence(){
   </main>;
 }
 
+function CopilotPage(){
+  const [question,setQuestion]=useState("");
+  const [selected,setSelected]=useState("GC-C01");
+  const [loading,setLoading]=useState(false);
+  const [response,setResponse]=useState<any>(null);
+  const [error,setError]=useState("");
+  const selectedCase=GOLDEN_CASES.find(x=>x.id===selected)??GOLDEN_CASES[0];
+
+  async function ask(nextQuestion=question){
+    const q=nextQuestion.trim();
+    if(!q||loading)return;
+    setQuestion(q); setLoading(true); setError("");
+    try{
+      const r=await fetch(API_BASE+"/orchestrate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({task:q,context:{client:"react-dashboard-copilot",surface:"copilot",use_case_id:selectedCase.id}})});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.detail??d.error??"Falha ao consultar o orquestrador");
+      setResponse(d);
+    }catch(err){setResponse(null);setError(err instanceof Error?err.message:"Falha ao consultar o orquestrador");}
+    finally{setLoading(false);}
+  }
+
+  const result=response?.result??{};
+  const synthesis=result.synthesis??{};
+  const proposal=result.decision_proposal??result.proposal??{};
+  const risk=result.risk_validation??{};
+  const deterministic=result.deterministic_context??{};
+  const opportunitySet=deterministic.opportunity_set??{};
+  const opportunities=opportunitySet.ranked_opportunities??[];
+  const evidence=result.evidence??[];
+  const sources=response?.sources??[];
+  const asOf=proposal.as_of??opportunitySet.as_of??result.as_of??result.portfolio_context?.as_of??null;
+  const quality=result.portfolio_context?.quality_status??opportunitySet.quality_status??"Não informado";
+
+  return <main className="workspace copilot-page">
+    <div className="workspace-head"><div><h1>Conversational Investment Copilot</h1><p>Entrada conversacional para o mesmo B3 Orchestrator e LangGraph usados pelo Dashboard.</p></div><span className="updated">{loading?"Consultando Orchestrator…":response?"Resposta estruturada recebida":"Pronto"}</span></div>
+    <section className="copilot-contract"><strong>Contrato</strong><span>Pergunta → OrchestratorRequest → contexto determinístico → especialistas → síntese → proposta → Risk Validation → resposta.</span><small>Sem execução de ordens. A decisão final permanece humana.</small></section>
+    <div className="copilot-layout">
+      <section className="copilot-main">
+        <Card title="Golden Conversational Cases"><div className="golden-grid">{GOLDEN_CASES.map(item=><button key={item.id} className={"golden-card "+(selected===item.id?"selected":"")} onClick={()=>{setSelected(item.id);setQuestion(item.question);}}><span>{item.id} · {item.family}</span><strong>{item.title}</strong><small>{item.question}</small></button>)}</div></Card>
+        <Card title="Pergunta ao Orchestrator">
+          <div className="copilot-question"><textarea aria-label="Pergunta ao Orchestrator" value={question} onChange={e=>setQuestion(e.target.value)} placeholder="Ex.: Tenho R$ 80 mil disponíveis. Existe alguma boa oportunidade?" rows={4}/><div><button className="primary-btn" disabled={loading||!question.trim()} onClick={()=>void ask()}>{loading?"Consultando…":"Enviar ao Orchestrator"}</button><span>{selectedCase.purpose}</span></div></div>
+        </Card>
+        {error&&<div className="analytics-summary copilot-error"><strong>Orchestrator indisponível</strong><span>{error}</span></div>}
+        {response&&<>
+          <Card title="Resposta / Decision Support"><div className="copilot-answer"><div><label>Questão entendida</label><p>{question}</p></div><div><label>Síntese</label><p>{synthesis.summary??"O workflow retornou uma resposta estruturada, mas não forneceu síntese textual."}</p></div><div><label>Proposta de decisão</label><p>{proposal.thesis??"Não há proposta suficiente para exibir."}</p><small>{proposal.rationale??""}</small></div><div><label>Incertezas</label><ul>{(synthesis.uncertainties??[]).map((x:string)=><li key={x}>{x}</li>)}{!(synthesis.uncertainties??[]).length&&<li>Nenhuma incerteza adicional retornada.</li>}</ul></div></div></Card>
+          <section className="cards copilot-metrics">
+            <Metric title="Risk Validation" value={risk.status??"N/D"} detail={(risk.reasons??[]).join(" · ")||"Resultado do validador downstream"} icon="✓"/>
+            <Metric title="Oportunidades" value={String(opportunities.length)} detail={opportunitySet.ranking_policy_version?"Ranking determinístico":"Nenhum OpportunitySet disponível"} icon="✦"/>
+            <Metric title="Data quality" value={String(quality)} detail={asOf?"as_of "+String(asOf):"as_of não informado"} icon="◉"/>
+            <Metric title="Human review" value="REQUIRED" detail="Copilot não executa ordens" icon="⌁"/>
+          </section>
+          <Card title="Proveniência e auditoria"><div className="provenance-grid"><div><label>Sources</label><p>{sources.length?sources.join(" · "):"Nenhuma fonte explícita retornada."}</p></div><div><label>Evidence</label><p>{evidence.length?String(evidence.length)+" evidências recuperadas":"Nenhuma evidência recuperada."}</p></div><div><label>Decision proposal</label><p>{proposal.action??"N/D"}{proposal.subject_id?" · "+proposal.subject_id:""}</p></div><div><label>Risk reasons</label><p>{(risk.reasons??[]).join(" · ")||"Nenhum motivo adicional."}</p></div></div><details><summary>Ver resposta estruturada completa</summary><pre className="answer">{JSON.stringify(response,null,2)}</pre></details></Card>
+        </>}
+      </section>
+      <aside className="copilot-sidebar"><Card title="Regras do Copilot"><ul><li>Não cria oportunidades.</li><li>Não altera ranking determinístico.</li><li>Não recalcula valuation silenciosamente.</li><li>Não ignora restrições da carteira.</li><li>Não executa ordens.</li><li>Se faltar evidência, declara a lacuna.</li></ul></Card><Card title="Arquitetura"><div className="journey"><div className="journey-step"><b>1</b><span>Contexto</span></div><div className="journey-line"/><div className="journey-step"><b>2</b><span>Agents</span></div><div className="journey-line"/><div className="journey-step"><b>3</b><span>Risk</span></div></div></Card></aside>
+    </div>
+  </main>;
+}
+
 function Card({title,action,children}:{title:string;action?:ReactNode;children:ReactNode}){return <div className="panel"><div className="panel-title"><h2>{title}</h2>{action}</div>{children}</div>}
 
-function App(){const [page,setPage]=useState<Page>("Portfolio"); return <div className="app-shell"><header className="topbar"><div className="brand"><span className="brand-mark">▮▮▮</span><div><strong>B3 Investment Copilot</strong><small>Seu copiloto de investimentos com IA</small></div></div><div className="search">⌕ <span>Buscar ativos, estratégias ou fazer uma pergunta...</span><kbd>Ctrl K</kbd></div><div className="market"><span>Mercado <b>via Orchestrator</b></span><span className="bell">♧</span><span className="avatar">EF</span><b>Edmilson⌄</b></div></header><div className="body"><Sidebar page={page} setPage={setPage}/><div>{page==="Portfolio"?<Portfolio/>:page==="Options"?<Options/>:page==="Portfolio Intelligence"?<PortfolioIntelligence/>:<main className="workspace"><div className="workspace-head"><div><h1>{page}</h1><p>Workspace React preparado para o próximo módulo.</p></div></div><div className="panel placeholder"><h2>{page}</h2><p>Este módulo será conectado aos engines Python existentes sem duplicar a lógica de negócio.</p></div></main>}</div><Copilot setPage={setPage}/></div></div>}
+function App(){const [page,setPage]=useState<Page>("Portfolio"); return <div className="app-shell"><header className="topbar"><div className="brand"><span className="brand-mark">▮▮▮</span><div><strong>B3 Investment Copilot</strong><small>Seu copiloto de investimentos com IA</small></div></div><div className="search">⌕ <span>Buscar ativos, estratégias ou fazer uma pergunta...</span><kbd>Ctrl K</kbd></div><div className="market"><span>Mercado <b>via Orchestrator</b></span><span className="bell">♧</span><span className="avatar">EF</span><b>Edmilson⌄</b></div></header><div className="body"><Sidebar page={page} setPage={setPage}/><div>{page==="Portfolio"?<Portfolio/>:page==="Options"?<Options/>:page==="Portfolio Intelligence"?<PortfolioIntelligence/>:page==="Copilot"?<CopilotPage/>:<main className="workspace"><div className="workspace-head"><div><h1>{page}</h1><p>Workspace React preparado para o próximo módulo.</p></div></div><div className="panel placeholder"><h2>{page}</h2><p>Este módulo será conectado aos engines Python existentes sem duplicar a lógica de negócio.</p></div></main>}</div><Copilot setPage={setPage}/></div></div>}
 
 export default App;
