@@ -60,6 +60,7 @@ class OpportunityPipeline:
         diversification: dict[str, str] | None = None,
         relative_assessment: dict[str, str] | None = None,
         source_refs: tuple[str, ...] = (),
+        available_capital: float | None = None,
     ) -> OpportunitySet:
         """Return the deterministic convergence result for supplied opportunities."""
         normalized = tuple(opportunities)
@@ -71,6 +72,7 @@ class OpportunityPipeline:
             capital_efficiency=capital_efficiency,
             diversification=diversification,
             relative_assessment=relative_assessment,
+            available_capital=available_capital,
         )
         return self._with_snapshot(result, as_of=as_of, source_refs=source_refs)
 
@@ -87,6 +89,7 @@ class OpportunityPipeline:
         diversification: dict[str, str] | None = None,
         relative_assessment: dict[str, str] | None = None,
         source_refs: tuple[str, ...] = (),
+        available_capital: float | None = None,
     ) -> OpportunitySet:
         """Produce canonical opportunities from deterministic analytical inputs."""
         opportunities: list[Opportunity] = []
@@ -122,6 +125,7 @@ class OpportunityPipeline:
             diversification=diversification,
             relative_assessment=relative_assessment,
             source_refs=source_refs,
+            available_capital=available_capital,
         )
 
     @staticmethod
