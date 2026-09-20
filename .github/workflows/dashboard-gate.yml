@@ -75,6 +75,14 @@ jobs:
         run: |
           python -m uvicorn b3_agent.server:app --host 127.0.0.1 --port 8000 > /tmp/b3-orchestrator.log 2>&1 &
           echo $! > /tmp/b3-orchestrator.pid
+      - name: Wait for orchestrator
+        run: |
+          for i in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8000/health >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/b3-orchestrator.log
+          exit 1
       - name: Run dashboard E2E
         working-directory: frontend
         run: npm run e2e
