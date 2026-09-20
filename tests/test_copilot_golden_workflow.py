@@ -5,14 +5,12 @@ from datetime import date
 import pytest
 
 from b3_agent.agents.risk_validator import RiskValidator
-from b3_agent.agents.specialist import MarketAnalysisAgent, OptionsAnalysisAgent, PortfolioAnalysisAgent
-from b3_agent.agents.synthesis import SynthesisAgent
-from b3_agent.agents.reasoning import InvestmentReasoningAgent
 from b3_agent.agents.context import AgentContext
 from b3_agent.schemas.opportunity import (
     ActionCandidate,
     Opportunity,
     OpportunitySet,
+    OpportunityAssessment,
 )
 from b3_agent.schemas.position import PortfolioContext, Position
 from b3_agent.orchestration.workflow import build_workflow
@@ -132,7 +130,7 @@ def _opportunity_set(capital: float = 3000.0) -> OpportunitySet:
     return OpportunitySet(
         as_of=date(2026, 9, 18),
         ranked_opportunities=(
-            __import__("b3_agent.schemas.opportunity", fromlist=["OpportunityAssessment"]).OpportunityAssessment(
+            OpportunityAssessment(
                 opportunity_id=opportunity.opportunity_id,
                 eligible=True,
                 ticker=opportunity.ticker,
