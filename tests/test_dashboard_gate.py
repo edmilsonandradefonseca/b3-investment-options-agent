@@ -61,6 +61,47 @@ def test_dashboard_contract_uses_btg_loader_and_orchestrator(tmp_path, monkeypat
     assert snapshot["opportunity_set"] is None
 
 
+def test_dashboard_opportunity_set_is_serialized_when_supplied(tmp_path, monkeypatch) -> None:
+    from datetime import date
+    from b3_agent.schemas.opportunity import OpportunityAssessment, OpportunitySet
+
+    data_dir = tmp_path / "data"
+    (data_dir / "imports").mkdir(parents=True)
+    make_btg_portfolio(data_dir / "imports" / "portfolio.xlsx")
+    make_options_transactions(data_dir / "imports" / "options_transactions.xlsx")
+    _patch_data_dir(monkeypatch, data_dir)
+    server._configure_runtime.cache_clear()
+    runtime.configure_dashboard_workflow()
+
+    opportunity_set = OpportunitySet(
+        as_of=date(2026, 9, 18),
+        ranked_opportunities=(
+            OpportunityAssessment(
+                opportunity_id="OPP-1",
+                eligible=True,
+                ticker="PETR4",
+                instrument_type="STOCK",
+                action="BUY",
+                as_of=date(2026, 9, 18),
+                expected_return=0.12,
+                evidence_refs=("evidence:OPP-1",),
+                source_refs=("test-market",),
+            ),
+        ),
+        rejected_opportunities=(),
+        quality_status="VALIDATED",
+        ranking_policy_version="1.0",
+    )
+
+    response = b3_orchestrator(
+        task="Carregar oportunidades do Dashboard",
+        context={"dashboard_view": "opportunities", "opportunity_set": opportunity_set},
+    )
+
+    snapshot = response.result["dashboard_snapshot"]
+    assert snapshot["opportunity_set"]["quality_status"] == "VALIDATED"
+    assert snapshot["opportunity_set"]["ranked_opportunities"][0]["ticker"] == "PETR4"
+
 def test_dashboard_upload_contracts(tmp_path, monkeypatch) -> None:
     data_dir = tmp_path / "data"
     imports = data_dir / "imports"
