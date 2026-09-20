@@ -142,7 +142,7 @@ test("knowledge view consumes bounded knowledge query contract", async ({ page }
   });
   await page.goto("/");
   await page.getByRole("button", { name: /Knowledge/ }).click();
-  await expect(page.getByRole("heading", { name: "Knowledge" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Knowledge", exact: true })).toBeVisible();
   await expect(page.getByText("Evidências RAG", { exact: true })).toBeVisible();
   await expect(page.getByText("PETR4.md", { exact: true })).toBeVisible();
   await expect(page.getByText("stock", { exact: true })).toBeVisible();
