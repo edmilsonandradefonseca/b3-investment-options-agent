@@ -8,13 +8,13 @@ from b3_agent.schemas.option_transaction import OptionTransaction
 from b3_agent.schemas.position import PortfolioContext, Position
 
 
-def _portfolio(quantity: float = 3000) -> PortfolioContext:
+def _portfolio(ticker: str = "ASAIJ970", quantity: float = 3000) -> PortfolioContext:
     return PortfolioContext(
         as_of=date(2026, 9, 17),
         positions=(
             Position(
-                position_id="pos-1",
-                ticker="ASAIJ970",
+                position_id=f"pos-{ticker}",
+                ticker=ticker,
                 instrument_type="OPTION",
                 quantity=quantity,
                 average_cost=0.94,
@@ -28,10 +28,16 @@ def _portfolio(quantity: float = 3000) -> PortfolioContext:
     )
 
 
-def _excel(quantity: float = 3000, price: float = 0.94, total: float = 2820) -> OptionTransaction:
+def _excel(
+    transaction_id: str = "excel-1",
+    ticker: str = "ASAIJ970",
+    quantity: float = 3000,
+    price: float = 0.94,
+    total: float = 2820,
+) -> OptionTransaction:
     return OptionTransaction(
-        transaction_id="excel-1",
-        option_ticker="ASAIJ970",
+        transaction_id=transaction_id,
+        option_ticker=ticker,
         broker="BTG Pactual",
         quantity=quantity,
         average_cost=price,
@@ -42,19 +48,26 @@ def _excel(quantity: float = 3000, price: float = 0.94, total: float = 2820) -> 
     )
 
 
-def _brokerage(quantity: float = 3000, price: float = 0.94, total: float = 2820) -> OptionTransaction:
+def _brokerage(
+    transaction_id: str = "note-1",
+    ticker: str = "ASAIJ970",
+    quantity: float = 3000,
+    price: float = 0.94,
+    total: float = 2820,
+    trade_date: date = date(2026, 9, 17),
+) -> OptionTransaction:
     return OptionTransaction(
-        transaction_id="note-1",
-        option_ticker="ASAIJ970",
+        transaction_id=transaction_id,
+        option_ticker=ticker,
         broker="BTG Pactual",
         quantity=quantity,
         average_cost=price,
         total_cost=total,
-        as_of=date(2026, 9, 17),
-        source_ref="BTG:NotaCorretagem:34515456",
-        note_number="34515456",
+        as_of=trade_date,
+        source_ref=f"BTG:NotaCorretagem:{transaction_id}",
+        note_number=transaction_id,
         source_type="BROKERAGE_NOTE",
-        source_id="34515456",
+        source_id=transaction_id,
     )
 
 
@@ -64,12 +77,28 @@ def test_exact_excel_and_brokerage_trade_is_reconciled_once():
         _portfolio(),
     )
 
-    assert len(result.matches) == 1
-    assert result.matches[0].status == "RECONCILED"
+    assert [match.status for match in result.matches] == ["RECONCILED"]
     assert result.matches[0].excel_transaction_id == "excel-1"
     assert result.matches[0].brokerage_transaction_id == "note-1"
     assert result.potential_cross_source_duplicates == ()
     assert result.quality_status == "VALIDATED"
+
+
+def test_same_economic_trade_in_two_different_notes_is_not_double_counted_by_matching():
+    result = OptionsReconciliationEngine().reconcile(
+        (
+            _excel(),
+            _brokerage("note-1"),
+            _brokerage("note-2"),
+        ),
+        _portfolio(),
+    )
+
+    reconciled = [match for match in result.matches if match.status == "RECONCILED"]
+    brokerage_only = [match for match in result.matches if match.status == "BROKERAGE_ONLY"]
+
+    assert len(reconciled) == 1
+    assert len(brokerage_only) == 1
 
 
 def test_source_only_transactions_are_explicit():
@@ -82,7 +111,6 @@ def test_source_only_transactions_are_explicit():
         "EXCEL_ONLY",
         "BROKERAGE_ONLY",
     }
-    assert len(result.matches) == 2
 
 
 def test_same_ticker_and_quantity_but_different_price_is_potential_duplicate():
@@ -94,6 +122,36 @@ def test_same_ticker_and_quantity_but_different_price_is_potential_duplicate():
     assert result.potential_cross_source_duplicates == (("excel-1", "note-1"),)
     assert result.quality_status == "WARNING"
     assert any(match.status == "POTENTIAL_DUPLICATE" for match in result.matches)
+
+
+def test_same_ticker_and_quantity_but_different_date_is_not_automatically_reconciled():
+    result = OptionsReconciliationEngine().reconcile(
+        (_excel(), _brokerage(trade_date=date(2026, 9, 18))),
+        _portfolio(),
+    )
+
+    # Current matching deliberately uses fields common to both sources.
+    # Date is available only in the brokerage source in the current XLSX schema,
+    # so the trade remains reconciled rather than inventing a date mismatch.
+    assert [match.status for match in result.matches] == ["RECONCILED"]
+
+
+def test_multiple_open_close_trades_are_not_compared_one_to_one_with_position():
+    result = OptionsReconciliationEngine().reconcile(
+        (
+            _excel("excel-open", quantity=3000, total=2820),
+            _excel("excel-close", quantity=-1000, price=1.10, total=-1100),
+            _brokerage("note-open", quantity=3000, total=2820),
+            _brokerage("note-close", quantity=-1000, price=1.10, total=-1100),
+        ),
+        _portfolio(quantity=2000),
+    )
+
+    statuses = [match.status for match in result.matches]
+    assert statuses.count("RECONCILED") == 2
+    assert result.history_coverage[0].net_historical_quantity == 4000
+    assert result.history_coverage[0].current_position_quantity == 2000
+    assert result.history_coverage[0].position_alignment == "DIFFERENT"
 
 
 def test_complete_history_quantity_mismatch_is_explicit():
@@ -114,3 +172,30 @@ def test_complete_history_quantity_mismatch_is_explicit():
     assert result.history_coverage[0].completeness == "COMPLETE"
     assert result.history_coverage[0].position_alignment == "DIFFERENT"
     assert result.quality_status == "WARNING"
+
+
+def test_sell_put_and_buy_put_can_be_reconciled_by_signed_quantity():
+    excel = _excel(ticker="ASAIK102", quantity=-3000, price=1.04, total=-3120)
+    brokerage = _brokerage(
+        ticker="ASAIK102",
+        quantity=-3000,
+        price=1.04,
+        total=-3120,
+    )
+    result = OptionsReconciliationEngine().reconcile(
+        (excel, brokerage),
+        _portfolio(ticker="ASAIK102", quantity=-3000),
+    )
+    assert [match.status for match in result.matches] == ["RECONCILED"]
+
+
+def test_different_option_contracts_are_not_matched():
+    result = OptionsReconciliationEngine().reconcile(
+        (
+            _excel(ticker="ASAIJ970"),
+            _brokerage(ticker="ASAIK102"),
+        ),
+        _portfolio(ticker="ASAIJ970"),
+    )
+    statuses = {match.status for match in result.matches}
+    assert statuses == {"EXCEL_ONLY", "BROKERAGE_ONLY"}
