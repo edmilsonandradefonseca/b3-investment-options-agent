@@ -1,33 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState, type ReactNode } from "react";
 
 type Page = "Portfolio" | "Options" | "Opportunities" | "Portfolio Intelligence" | "Knowledge";
-type Position = { ticker:string; qty:string; avg:number; price:number; value:number; pnl:number; pct:number };
-
-const API_BASE = import.meta.env.VITE_ORCHESTRATOR_URL ?? "http://127.0.0.1:8000";
-
-const nav: { id: Page; icon: string; subtitle: string }[] = [
-  { id:"Portfolio", icon:"▥", subtitle:"Posições e visão geral" },
-  { id:"Options", icon:"◈", subtitle:"Greeks, risco e operações" },
-  { id:"Opportunities", icon:"◎", subtitle:"Ideias e sinais" },
-  { id:"Portfolio Intelligence", icon:"◇", subtitle:"Análises e recomendações" },
-  { id:"Knowledge", icon:"▱", subtitle:"Pesquisa e contexto" },
-];
-
-const positions: Position[] = [
-  {ticker:"PETR4",qty:"2.000",avg:34.10,price:37.20,value:74400,pnl:6200,pct:9.1},
-  {ticker:"VALE3",qty:"1.000",avg:55.80,price:62.15,value:62150,pnl:6350,pct:11.4},
-  {ticker:"ITUB4",qty:"800",avg:54.20,price:60.40,value:48320,pnl:4960,pct:11.4},
-  {ticker:"BBDC4",qty:"2.000",avg:13.80,price:14.45,value:28910,pnl:1300,pct:4.7},
-  {ticker:"BBAS3",qty:"1.000",avg:24.50,price:24.56,value:24560,pnl:60,pct:.2},
-];
-
-const history = [321800,326900,333800,337200,334900,342500,346900,351200,348800,355100,361400,372480];
-const allocation = [
-  {label:"Ações",value:82,color:"#1684ff"},
-  {label:"Opções (Long)",value:12.5,color:"#19d59a"},
-  {label:"Opções (Short)",value:5.5,color:"#ff9d4d"},
-];
-
 function infer_b3_option_type(ticker:string){const s=ticker.replace(/\s+/g,"").toUpperCase(); const m=s.match(/[A-Z]$/); if(!m)return null; return "ABCDEFGHIJKL".includes(m[0])?"CALL":"MNOPQRSTUVWX".includes(m[0])?"PUT":null;} function pct(v:number){return (v.toFixed(1).replace(".",",")+"%")} function money(v:number){ return new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0}).format(v); }
 
 function Metric({title,value,detail,icon}:{title:string;value:string;detail:string;icon:string}) {
@@ -39,12 +12,12 @@ function Sidebar({page,setPage}:{page:Page;setPage:(p:Page)=>void}) {
     <div className="brand"><span className="brand-mark">▮▮▮</span><div><strong>B3 Investment Copilot</strong><small>Seu copiloto de investimentos com IA</small></div></div>
     <nav>{nav.map(n=><button key={n.id} className={"nav-item "+(page===n.id?"active":"")} onClick={()=>setPage(n.id)}><span className="nav-icon">{n.icon}</span><span><strong>{n.id}</strong><small>{n.subtitle}</small></span></button>)}</nav>
     <section className="connections"><label>DADOS & CONEXÕES</label>
-      <div className="connection"><b>BTG Portfolio</b><span className="status">● Carregado</span><small>Snapshot persistido</small></div>
-      <div className="connection"><b>Options Transactions</b><span className="status">● Carregado</span><small>Histórico persistido</small></div>
-      <div className="connection"><b>Reconciliação</b><span className="status">● OK</span><small>Sem divergências críticas</small></div>
+      <div className="connection"><b>BTG Portfolio</b><span className="status">● Orchestrator</span><small>Snapshot via workflow</small></div>
+      <div className="connection"><b>Options Transactions</b><span className="status">● Orchestrator</span><small>Ledger via workflow</small></div>
+      <div className="connection"><b>Reconciliação</b><span className="status">● Disponível</span><small>Engine no backend</small></div>
       <label className="load">↥ &nbsp; Carregar arquivos Excel<input type="file" accept=".xlsx,.xlsm" hidden /></label>
     </section>
-    <section className="knowledge-status"><label>BASE DE CONHECIMENTO</label><span>◈ Obsidian <i>Conectado</i></span><span>◉ RAG (Qdrant) <i>Conectado</i></span><span>● Neo4j <i>Conectado</i></span></section>
+    <section className="knowledge-status"><label>BASE DE CONHECIMENTO</label><span>◈ Obsidian <i>Backend</i></span><span>◉ RAG <i>Backend</i></span><span>● Knowledge Graph <i>Backend</i></span></section>
     <footer>v1.0 React · B3 Investment Copilot</footer>
   </aside>;
 }
@@ -194,11 +167,26 @@ function Options() {
       source_id:x.source_id??null,
       note_number:x.note_number??null
     }));
+    const performance=d.result?.dashboard_snapshot?.options_performance??{lifecycles:[],by_underlying:[]};
+    const lifecycles=performance.lifecycles??[];
+    const realized=lifecycles.reduce((sum:any,x:any)=>sum+(x.realized_pnl??0),0);
+    const received=lifecycles.reduce((sum:any,x:any)=>sum+(x.premium_received??0),0);
+    const paid=lifecycles.reduce((sum:any,x:any)=>sum+(x.premium_paid??0),0);
+    const profitable=lifecycles.filter((x:any)=>(x.realized_pnl??0)>0).length;
+    const losing=lifecycles.filter((x:any)=>(x.realized_pnl??0)<0).length;
     setData({
-      summary:{realized_pnl:0,premium_received:0,premium_paid:0,return_pct:null,lifecycle_count:0,profitable_lifecycles:0,losing_lifecycles:0},
-      lifecycles:[],
+      summary:{
+        realized_pnl:realized,
+        premium_received:received,
+        premium_paid:paid,
+        return_pct:null,
+        lifecycle_count:lifecycles.length,
+        profitable_lifecycles:profitable,
+        losing_lifecycles:losing
+      },
+      lifecycles,
       transactions,
-      data_quality:{status:"SNAPSHOT_VIA_ORCHESTRATOR",transactions_included:transactions.length,note:"Snapshot bruto carregado pelo workflow determinístico. Lifecycle/P&L de opções será conectado ao engine de performance no próximo passo."}
+      data_quality:{status:"DETERMINISTIC_VIA_ORCHESTRATOR",transactions_included:transactions.length,note:"Lifecycle e P&L calculados pelo OptionPerformanceEngine no backend."}
     });
     setStatus("Dados reais carregados via orquestrador");
   } catch(err) { setStatus("Erro: "+(err instanceof Error?err.message:"falha")); setData(null); } }
@@ -216,6 +204,6 @@ function Options() {
 
 function Card({title,action,children}:{title:string;action?:ReactNode;children:ReactNode}){return <div className="panel"><div className="panel-title"><h2>{title}</h2>{action}</div>{children}</div>}
 
-function App(){const [page,setPage]=useState<Page>("Portfolio"); return <div className="app-shell"><header className="topbar"><div className="brand"><span className="brand-mark">▮▮▮</span><div><strong>B3 Investment Copilot</strong><small>Seu copiloto de investimentos com IA</small></div></div><div className="search">⌕ <span>Buscar ativos, estratégias ou fazer uma pergunta...</span><kbd>Ctrl K</kbd></div><div className="market"><span>IBOV <b>134.521</b> <i>+1,2%</i></span><span>DÓLAR <b>4,92</b> <em>-0,3%</em></span><span>PETR4 <b>37,20</b> <i>+2,1%</i></span><span className="bell">♧</span><span className="avatar">EF</span><b>Edmilson⌄</b></div></header><div className="body"><Sidebar page={page} setPage={setPage}/><div>{page==="Portfolio"?<Portfolio/>:page==="Options"?<Options/>:<main className="workspace"><div className="workspace-head"><div><h1>{page}</h1><p>Workspace React preparado para o próximo módulo.</p></div></div><div className="panel placeholder"><h2>{page}</h2><p>O shell React já está pronto. Este módulo será conectado aos engines Python existentes sem duplicar a lógica de negócio.</p></div></main>}</div><Copilot setPage={setPage}/></div></div>}
+function App(){const [page,setPage]=useState<Page>("Portfolio"); return <div className="app-shell"><header className="topbar"><div className="brand"><span className="brand-mark">▮▮▮</span><div><strong>B3 Investment Copilot</strong><small>Seu copiloto de investimentos com IA</small></div></div><div className="search">⌕ <span>Buscar ativos, estratégias ou fazer uma pergunta...</span><kbd>Ctrl K</kbd></div><div className="market"><span>Mercado <b>via Orchestrator</b></span><span className="bell">♧</span><span className="avatar">EF</span><b>Edmilson⌄</b></div></header><div className="body"><Sidebar page={page} setPage={setPage}/><div>{page==="Portfolio"?<Portfolio/>:page==="Options"?<Options/>:<main className="workspace"><div className="workspace-head"><div><h1>{page}</h1><p>Workspace React preparado para o próximo módulo.</p></div></div><div className="panel placeholder"><h2>{page}</h2><p>O shell React já está pronto. Este módulo será conectado aos engines Python existentes sem duplicar a lógica de negócio.</p></div></main>}</div><Copilot setPage={setPage}/></div></div>}
 
 export default App;
