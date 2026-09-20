@@ -51,6 +51,7 @@ def test_dashboard_contract_uses_btg_loader_and_orchestrator(tmp_path, monkeypat
         "options_transactions",
         "options_performance",
         "options_reconciliation",
+        "opportunity_set",
     }
     assert snapshot["portfolio_context"].quality_status == "VALIDATED"
     assert len(snapshot["portfolio_context"].positions) == 3
