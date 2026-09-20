@@ -73,7 +73,7 @@ def _workflow(tmp_path: Path, llm: FakeLLM):
     vault = tmp_path / "vault"
     vault.mkdir()
     (vault / "copilot-golden.md").write_text(
-        "# Copilot Golden Evidence\nDeterministic evidence fixture.",
+        "# Copilot Golden Evidence\nPETR4 PUT carteira oportunidade diversificação posição comprar vender barata alternativa melhor decisão.\nDeterministic evidence fixture.",
         encoding="utf-8",
     )
 
