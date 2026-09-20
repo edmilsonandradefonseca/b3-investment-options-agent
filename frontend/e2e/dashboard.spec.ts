@@ -100,3 +100,15 @@ test("Copilot exposes all golden conversational cases and calls the orchestrator
   expect(receivedBody.context.surface).toBe("copilot");
   expect(receivedBody.context.use_case_id).toBe("GC-C01");
 });
+
+
+test("reconciliation view reads structured runtime reconciliation", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /Reconciliation/ }).click();
+
+  await expect(page.getByRole("heading", { name: "Reconciliação" })).toBeVisible();
+  await expect(page.getByText("Qualidade", { exact: true })).toBeVisible();
+  await expect(page.getByText("EXCEL_ONLY", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Options Transactions XLSX", { exact: true })).toBeVisible();
+  await expect(page.getByText("PERIOD_ONLY", { exact: true }).first()).toBeVisible();
+});
