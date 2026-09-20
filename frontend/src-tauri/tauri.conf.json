@@ -31,8 +31,8 @@
     "targets": [
       "nsis"
     ],
-    "resources": [
-      "binaries/orchestrator.exe"
+    "externalBin": [
+      "binaries/orchestrator"
     ]
   }
 }
