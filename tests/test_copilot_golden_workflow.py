@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from pathlib import Path
-
 import pytest
 
 from b3_agent.agents.risk_validator import RiskValidator
@@ -49,8 +47,9 @@ class GoldenSynthesis:
 
 
 class GoldenReasoning:
-    def __init__(self, action: str = "HUMAN_REVIEW"):
+    def __init__(self, action: str = "HUMAN_REVIEW", evidence_refs=("golden:evidence",)):
         self.action = action
+        self.evidence_refs = evidence_refs
 
     def decide(self, context: AgentContext):
         from b3_agent.schemas.decision import DecisionProposal
@@ -59,7 +58,7 @@ class GoldenReasoning:
             subject_id="PORTFOLIO",
             thesis="Golden workflow proposal requires human review.",
             rationale="The proposal was produced after deterministic context, specialists and synthesis.",
-            evidence_refs=("golden:evidence",),
+            evidence_refs=self.evidence_refs,
             risks=("Fixture risk.",),
             opportunity_cost="Review alternatives.",
             capital_impact="No order executed.",
@@ -124,6 +123,8 @@ def _opportunity_set(capital: float = 3000.0) -> OpportunitySet:
         as_of=date(2026, 9, 18),
         expected_return=0.12,
         capital_requirement=capital,
+        valuation_range_ref="valuation:PETR4",
+        options_analysis_ref="options:PETRV300",
         evidence_refs=("golden:evidence",),
         source_refs=("golden:fixture",),
         rationale="Golden deterministic option opportunity.",
@@ -163,7 +164,7 @@ def _opportunity_set(capital: float = 3000.0) -> OpportunitySet:
     )
 
 
-def _workflow():
+def _workflow(*, reasoning=None):
     return build_workflow(
         retriever=GoldenRetriever(),
         knowledge_context_builder=GoldenKnowledgeBuilder(),
@@ -172,7 +173,7 @@ def _workflow():
         portfolio_agent=GoldenSpecialist("portfolio_analysis"),
         options_agent=GoldenSpecialist("options_analysis"),
         synthesis_agent=GoldenSynthesis(),
-        reasoning_agent=GoldenReasoning(),
+        reasoning_agent=reasoning or GoldenReasoning(),
         risk_validator=RiskValidator(),
     )
 
@@ -185,27 +186,45 @@ GOLDEN_CASES = {
     "C05": ("É melhor comprar PETR4 ou vender uma PUT de PETR4?", 80000.0, "PASS"),
     "C06": ("PETR4 está barata?", 80000.0, "PASS"),
     "C07": ("Como está minha PUT e existe alguma alternativa que eu deveria analisar?", 80000.0, "PASS"),
-    "C08": ("Qual a melhor coisa para eu fazer agora?", 80000.0, "PASS"),
+    "C08": ("Qual a melhor coisa para eu fazer agora?", 80000.0, "REJECT"),
 }
 
 
 @pytest.mark.parametrize("case_id", GOLDEN_CASES)
 def test_golden_cases_execute_real_langgraph_workflow(case_id: str) -> None:
-    request, cash, expected_status = GOLDEN_CASES[case_id]
-    opportunity_set = _opportunity_set()
-    workflow = _workflow()
+    from b3_agent.orchestration.runtime import _apply_portfolio_capital_constraint
 
-    state = workflow.invoke({
+    request, cash, expected_status = GOLDEN_CASES[case_id]
+    opportunity_set = _opportunity_set(30000.0 if case_id == "C02" else 3000.0)
+    defaults = {"portfolio_context": _portfolio(cash), "opportunity_set": opportunity_set}
+    defaults = _apply_portfolio_capital_constraint(defaults)
+
+    reasoning = GoldenReasoning(
+        evidence_refs=() if case_id == "C08" else ("golden:evidence",)
+    )
+    state = _workflow(reasoning=reasoning).invoke({
         "user_question": request,
         "ticker": "PETR4",
         "as_of": date(2026, 9, 18),
-        "portfolio_context": _portfolio(cash),
-        "opportunity_set": opportunity_set,
+        **defaults,
     })
 
     assert state["status"] == expected_status
-    assert state["deterministic_context"]["opportunity_set"]["ranked_opportunities"][0]["opportunity_id"] == "SELL_PUT:PETRV300"
+    assert state["deterministic_context"]["opportunity_set"]["source_refs"] == ["golden:fixture"]
     assert state["synthesis"]["summary"] == "Golden workflow synthesis."
     assert state["decision_proposal"]["subject_id"] == "PORTFOLIO"
-    assert state["risk_validation"]["status"] == "PASS"
-    assert state["audit"] == []
+
+    if case_id == "C01":
+        assert state["deterministic_context"]["opportunity_set"]["ranked_opportunities"]
+        assert state["risk_validation"]["status"] == "PASS"
+    elif case_id == "C02":
+        assert state["deterministic_context"]["opportunity_set"]["ranked_opportunities"] == []
+        reasons = state["deterministic_context"]["opportunity_set"]["rejected_opportunities"][0]["rejection_reasons"]
+        assert "capital_requirement=30000.0 exceeds available_capital=20000.0" in reasons
+        assert state["risk_validation"]["status"] == "PASS"
+    elif case_id == "C08":
+        assert state["risk_validation"]["status"] == "REJECT"
+        assert "missing_evidence_refs" in state["risk_validation"]["reasons"]
+    else:
+        assert state["deterministic_context"]["opportunity_set"]["ranked_opportunities"]
+        assert state["risk_validation"]["status"] == "PASS"
