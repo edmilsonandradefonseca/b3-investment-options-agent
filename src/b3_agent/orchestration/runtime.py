@@ -18,10 +18,44 @@ from b3_agent.llm.client import OpenAIResponsesClient
 from b3_agent.schemas.position import PortfolioContext
 from b3_agent.schemas.opportunity import OpportunitySet
 from b3_agent.portfolio.snapshot import load_active_snapshots
+from langgraph.graph import END, START, StateGraph
 
+from .contracts import B3State
 from .orchestrator import configure_workflow
 from .workflow import build_workflow
 
+
+def configure_dashboard_workflow() -> None:
+    """Compose the deterministic Dashboard path without requiring LLM/Obsidian."""
+    snapshots = load_active_snapshots(settings.data_dir)
+
+    def retrieve(state: B3State) -> dict[str, Any]:
+        task = state.get("user_question") or state.get("request")
+        if not task:
+            raise ValueError("dashboard workflow requires user_question or request")
+        return {"user_question": task}
+
+    def snapshot(state: B3State) -> dict[str, Any]:
+        return {
+            "dashboard_snapshot": {
+                "portfolio_context": state.get("portfolio_context"),
+                "options_transactions": list(state.get("options_transactions", ())),
+            },
+            "status": "COMPLETED",
+        }
+
+    graph = StateGraph(B3State)
+    graph.add_node("retrieve", retrieve)
+    graph.add_node("dashboard_snapshot", snapshot)
+    graph.add_edge(START, "retrieve")
+    graph.add_edge("retrieve", "dashboard_snapshot")
+    graph.add_edge("dashboard_snapshot", END)
+    workflow = graph.compile()
+
+    def invoke(state: B3State) -> dict[str, Any]:
+        return workflow.invoke({**snapshots, **state})
+
+    configure_workflow(invoke)
 
 def configure_default_workflow(*, vault_path: Path | None = None,
                                 portfolio_context: PortfolioContext | dict[str, Any] | None = None,
