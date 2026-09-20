@@ -10,7 +10,7 @@ Dashboard documentation, validation and incremental completion of the React Dash
 - Active development branch: `feature/mcp-mvp`
 - Pull request: #6 — Dashboard gate: React + Orchestrator + BTG E2E
 - Software source of truth: GitHub repository
-- Current development head: `b7fe968`
+- Current development head: `c528d79`
 
 ## Dashboard status
 
@@ -97,11 +97,25 @@ Implemented the Opportunities Dashboard view against the existing `OpportunitySe
 - No ranking, valuation, capital or risk logic was duplicated in TypeScript.
 - Playwright covers the empty OpportunitySet contract path.
 - The current Dashboard runtime does not fabricate opportunities when upstream market inputs are unavailable; production population of `OpportunitySet` remains the next backend integration step.
+## Phase 6 — Copilot Golden Cases
+
+Implemented and validated the eight Golden Cases through the real LangGraph workflow in commit `590a445` and cleanup/docs commits `06abb4c` and `c528d79`.
+
+- C01–C08 are parameterized as scenario-specific workflow tests.
+- The test exercises the real LangGraph graph, deterministic context propagation, capital governance, synthesis boundary, decision schema and `RiskValidator`.
+- C02 verifies the authoritative capital constraint moves an unaffordable opportunity to `rejected_opportunities` with the explicit capital reason.
+- C08 verifies missing evidence is rejected by the real risk validator.
+- Deterministic doubles are used for specialist/knowledge/reasoning components so CI is reproducible and does not require external LLM credentials.
+- CI #660: SUCCESS.
+- Dashboard + Copilot Gate #145: SUCCESS.
+
+This closes the workflow-integration portion of Phase 6. It does not claim production acceptance with an external LLM; that remains a separate validation layer.
+
 ## Current next steps
 
 1. Validate the Reconciliation Dashboard view in CI and manually.
 2. Integrate production generation/population of OpportunitySet into the Dashboard deterministic snapshot when authoritative market inputs are available.
-3. Validate C01–C08 against the real workflow, not only mocked E2E responses.
+3. **Phase 6 complete:** C01–C08 now execute through the real LangGraph workflow in deterministic CI; the React E2E remains the UI boundary test.
 5. Implement/validate the Knowledge view when the underlying knowledge layer is ready.
 6. Keep documentation synchronized with code and tests.
 
