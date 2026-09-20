@@ -24,7 +24,9 @@ Provides an auditable Excel × brokerage-note view using the runtime reconciliat
 
 ### Opportunities
 
-Navigation entry exists, but the current React page is still a placeholder. The next implementation must consume the existing OpportunitySet/Opportunity Intelligence backend rather than reimplementing business rules in TypeScript.
+The React Opportunities view consumes the structured `dashboard_snapshot.opportunity_set` contract returned by the Orchestrator. It presents eligible opportunities, action candidates, rejected opportunities, quality and provenance metadata without recalculating ranking, valuation, capital or risk in TypeScript.
+
+The current Dashboard deterministic snapshot does not itself manufacture market opportunities: when no `OpportunitySet` is supplied by the upstream workflow, the UI explicitly shows that no OpportunitySet is available. This keeps the UI honest and avoids inventing investment opportunities from incomplete market inputs.
 
 ### Copilot
 
@@ -67,7 +69,7 @@ The Dashboard must distinguish:
 ## Current limitations
 
 - Brokerage-note PDFs are parsed into the option ledger. Runtime reconciliation exposes `RECONCILED`, `POTENTIAL_DUPLICATE`, `EXCEL_ONLY` and `BROKERAGE_ONLY` relationships without feeding both sources into P&L.
-- Opportunities UI is not yet implemented.
+- Opportunities UI is implemented against the OpportunitySet contract; upstream production of a populated OpportunitySet for the Dashboard remains a separate integration step.
 - Dashboard validation is still in progress.
 
 ## Source of truth
