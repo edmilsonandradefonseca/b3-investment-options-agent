@@ -29,7 +29,7 @@ jobs:
           python -m pip install . pyinstaller
           pyinstaller --onefile --name orchestrator --paths src src/b3_agent/desktop_server.py
           New-Item -ItemType Directory -Force -Path frontend/src-tauri/binaries | Out-Null
-          Copy-Item dist/orchestrator.exe frontend/src-tauri/binaries/orchestrator.exe
+          Copy-Item dist/orchestrator.exe frontend/src-tauri/binaries/orchestrator-x86_64-pc-windows-msvc.exe
 
       - name: Smoke test bundled orchestrator
         working-directory: .
