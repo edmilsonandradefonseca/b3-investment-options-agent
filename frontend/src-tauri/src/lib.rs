@@ -1,3 +1,4 @@
+use tauri::Manager;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::process::{Child, Command};
