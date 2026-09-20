@@ -15,3 +15,5 @@ jobs:
   dashboard-tests:
     name: Dashboard Test Engine
     uses: ./.github/workflows/dashboard-tests.yml
+    with:
+      ref: ${{ github.head_ref || github.ref_name }}
