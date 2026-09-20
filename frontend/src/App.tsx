@@ -164,7 +164,7 @@ function Portfolio() {
   const optionPct=total?((summary?.option_value??0)/total*100):0;
 
   return <main className="workspace">
-    <div className="workspace-head"><div><h1>Olá, Edmilson! 👋</h1><p>Visão real da carteira carregada do BTG.</p></div><span className="updated">{loading?"Carregando…":(data?.as_of?"Snapshot em "+data.as_of:"Sem snapshot")}</span></div>
+    <PageHeader title="Olá, Edmilson! 👋" subtitle="Visão real da carteira carregada do BTG." status={loading?"Carregando…":(data?.as_of?"Snapshot em "+data.as_of:"Sem snapshot")}/>
     {error&&<div className="analytics-summary"><strong>Dados do Portfolio</strong><span>{data?.message??error}</span></div>}
     <section className="cards">
       <Metric title="Valor Total" value={summary?money(total):"—"} detail={summary?String(summary.position_count)+" posições":"Sem dados"} icon="↗"/>
@@ -255,7 +255,7 @@ function Options() {
   const s=data?.summary;
   const optionTypeByTicker=new Map((data?.lifecycles??[]).map((x:any)=>[x.option_ticker,x.option_type]));
   return <main className="workspace options-page">
-    <div className="workspace-head"><div><h1>Options Intelligence</h1><p>Resultado acumulado, rolagens e drill-down por papel.</p></div><span className="updated">{status}</span></div>
+    <PageHeader title="Options Intelligence" subtitle="Resultado acumulado, rolagens e drill-down por papel." status={status}/>
     <section className="filters"><label>Ativo<select value={underlying} onChange={e=>setUnderlying(e.target.value)}><option>Todos</option><option>PETR4</option><option>VALE3</option><option>ITUB4</option></select></label><label>Tipo<select value={type} onChange={e=>setType(e.target.value)}><option>Todas</option><option>CALL</option><option>PUT</option></select></label><label>Início<input type="date" value={start} onChange={e=>setStart(e.target.value)}/></label><label>Fim<input type="date" value={end} onChange={e=>setEnd(e.target.value)}/></label><button className="primary-btn" onClick={refresh}>Atualizar análise</button></section>
     <section className="cards"><Metric title="P&L realizado acumulado" value={s?money(s.realized_pnl):"—"} detail={s?s.lifecycle_count+" lifecycles confirmados":"Sem consulta"} icon="Σ"/><Metric title="Prêmios recebidos" value={s?money(s.premium_received):"—"} detail={s?s.profitable_lifecycles+" positivos · "+s.losing_lifecycles+" negativos":"Sem consulta"} icon="↓"/><Metric title="Lifecycles" value={s?String(s.lifecycle_count):"—"} detail={data?.data_quality?.transactions_included?data.data_quality.transactions_included+" transações":"Sem consulta"} icon="↻"/><Metric title="Resultado %" value={s?.return_pct!=null?pct(s.return_pct):"—"} detail="Sobre a base de capital disponível" icon="%"/></section>
     <section className="grid-two"><Card title="P&L acumulado"><div className="analytics-summary"><strong>{s?money(s.realized_pnl):"—"}</strong><span>resultado realizado no período selecionado</span><small>{data?.data_quality?.warning??"Os dados são provenientes do ledger persistido."}</small></div></Card><Card title="Qualidade dos dados"><div className="analytics-summary"><strong>{data?.data_quality?.transactions_included??"—"}</strong><span>transações incluídas</span><small>{data?.data_quality?.status??"Ainda não consultado"}</small></div></Card></section>
@@ -287,7 +287,7 @@ function Opportunities(){
   const rejected=data?.rejected_opportunities??[];
   const actionCandidates=data?.action_candidates??[];
   return <main className="workspace opportunities-page">
-    <div className="workspace-head"><div><h1>Opportunities</h1><p>Oportunidades produzidas pelo OpportunitySet determinístico e filtradas pelas regras de governança.</p></div><span className="updated">{loading?"Consultando…":data?"Dados reais via Orchestrator":"Sem OpportunitySet"}</span></div>
+    <PageHeader title="Opportunities" subtitle="Oportunidades produzidas pelo OpportunitySet determinístico e filtradas pelas regras de governança." status={loading?"Consultando…":data?"Dados reais via Orchestrator":"Sem OpportunitySet"}/>
     {error&&<div className="analytics-summary copilot-error"><strong>Oportunidades indisponíveis</strong><span>{error}</span></div>}
     {data&&<section className="cards">
       <Metric title="Qualidade" value={data.quality_status??"—"} detail={data.ranking_policy_version?"Policy "+data.ranking_policy_version:"Engine determinístico"} icon="✦"/>
@@ -340,7 +340,7 @@ function Reconciliation(){
   const matches=data?.matches??[];
   const count=(status:string)=>matches.filter(x=>x.status===status).length;
   return <main className="workspace reconciliation-page">
-    <div className="workspace-head"><div><h1>Reconciliação</h1><p>Confronto auditável entre transações do Excel e notas de corretagem, sem alterar o P&L.</p></div><span className="updated">{loading?"Consultando…":data?"Dados reais via Orchestrator":"Sem dados"}</span></div>
+    <PageHeader title="Reconciliação" subtitle="Confronto auditável entre transações do Excel e notas de corretagem, sem alterar o P&L." status={loading?"Consultando…":data?"Dados reais via Orchestrator":"Sem dados"}/>
     {error&&<div className="analytics-summary copilot-error"><strong>Reconciliação indisponível</strong><span>{error}</span></div>}
     {data&&<section className="cards">
       <Metric title="Qualidade" value={data.quality_status} detail="Status do engine de reconciliação" icon="✓"/>
@@ -385,7 +385,7 @@ function Knowledge(){
   }
   useEffect(()=>{void search();},[]);
   return <main className="workspace knowledge-page">
-    <div className="workspace-head"><div><h1>Knowledge</h1><p>Exploração governada de Obsidian, RAG e Knowledge Graph, sem geração de decisão de investimento.</p></div><span className="updated">{loading?"Consultando…":data?"Dados reais via Knowledge Service":"Pronto"}</span></div>
+    <PageHeader title="Knowledge" subtitle="Exploração governada de Obsidian, RAG e Knowledge Graph, sem geração de decisão de investimento." status={loading?"Consultando…":data?"Dados reais via Knowledge Service":"Pronto"}/>
     <Card title="Pesquisa de conhecimento"><div className="copilot-question"><input aria-label="Consulta de conhecimento" value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")void search();}} placeholder="Ex.: PETR4, risco de assignment, estratégia..." /><button className="primary-btn" disabled={loading||!query.trim()} onClick={()=>void search()}>{loading?"Consultando…":"Pesquisar"}</button></div></Card>
     {error&&<div className="analytics-summary copilot-error"><strong>Knowledge indisponível</strong><span>{error}</span></div>}
     {data&&<>
@@ -421,7 +421,7 @@ function PortfolioIntelligence(){
   },[]);
   const risk=data?.capital_risk;
   return <main className="workspace">
-    <div className="workspace-head"><div><h1>Portfolio Intelligence</h1><p>Exposição, cobertura e risco de capital calculados pelos engines determinísticos.</p></div><span className="updated">{data?"Dados reais via Orchestrator":"Carregando…"}</span></div>
+    <PageHeader title="Portfolio Intelligence" subtitle="Exposição, cobertura e risco de capital calculados pelos engines determinísticos." status={data?"Dados reais via Orchestrator":"Carregando…"}/>
     {error&&<div className="analytics-summary"><strong>Erro</strong><span>{error}</span></div>}
     {risk&&<section className="cards">
       <Metric title="Capital para assignment" value={money(risk.assignment_capital)} detail="Short puts" icon="⌂"/>
@@ -467,7 +467,7 @@ function CopilotPage(){
   const quality=result.portfolio_context?.quality_status??opportunitySet.quality_status??"Não informado";
 
   return <main className="workspace copilot-page">
-    <div className="workspace-head"><div><h1>Conversational Investment Copilot</h1><p>Entrada conversacional para o mesmo B3 Orchestrator e LangGraph usados pelo Dashboard.</p></div><span className="updated">{loading?"Consultando Orchestrator…":response?"Resposta estruturada recebida":"Pronto"}</span></div>
+    <PageHeader title="Conversational Investment Copilot" subtitle="Entrada conversacional para o mesmo B3 Orchestrator e LangGraph usados pelo Dashboard." status={loading?"Consultando Orchestrator…":response?"Resposta estruturada recebida":"Pronto"}/>
     <section className="copilot-contract"><strong>Contrato</strong><span>Pergunta → OrchestratorRequest → contexto determinístico → especialistas → síntese → proposta → Risk Validation → resposta.</span><small>Sem execução de ordens. A decisão final permanece humana.</small></section>
     <div className="copilot-layout">
       <section className="copilot-main">
@@ -499,6 +499,6 @@ function ProvenanceBlock({source,asOf,quality}:{source?:string;asOf?:string;qual
 function WarningCallout({title,children}:{title:string;children:ReactNode}){return <div className="warning-callout"><strong>{title}</strong><span>{children}</span></div>}
 function StatePanel({title,message}:{title:string;message:string}){return <div className="state-panel"><strong>{title}</strong><span>{message}</span></div>}
 
-function App(){const [page,setPage]=useState<Page>("Portfolio"); return <div className="app-shell"><header className="topbar"><div className="brand"><span className="brand-mark">▮▮▮</span><div><strong>B3 Investment Copilot</strong><small>Seu copiloto de investimentos com IA</small></div></div><div className="search">⌕ <span>Buscar ativos, estratégias ou fazer uma pergunta...</span><kbd>Ctrl K</kbd></div><div className="market"><span>Mercado <b>via Orchestrator</b></span><span className="bell">♧</span><span className="avatar">EF</span><b>Edmilson⌄</b></div></header><div className="body"><Sidebar page={page} setPage={setPage}/><div>{page==="Portfolio"?<Portfolio/>:page==="Options"?<Options/>:page==="Reconciliation"?<Reconciliation/>:page==="Opportunities"?<Opportunities/>:page==="Portfolio Intelligence"?<PortfolioIntelligence/>:page==="Knowledge"?<Knowledge/>:page==="Copilot"?<CopilotPage/>:<main className="workspace"><div className="workspace-head"><div><h1>{page}</h1><p>Workspace React preparado para o próximo módulo.</p></div></div><div className="panel placeholder"><h2>{page}</h2><p>Este módulo será conectado aos engines Python existentes sem duplicar a lógica de negócio.</p></div></main>}</div><Copilot setPage={setPage}/></div></div>}
+function App(){const [page,setPage]=useState<Page>("Portfolio"); return <div className="app-shell"><header className="topbar"><div className="brand"><span className="brand-mark">▮▮▮</span><div><strong>B3 Investment Copilot</strong><small>Seu copiloto de investimentos com IA</small></div></div><div className="search">⌕ <span>Buscar ativos, estratégias ou fazer uma pergunta...</span><kbd>Ctrl K</kbd></div><div className="market"><span>Mercado <b>via Orchestrator</b></span><span className="bell">♧</span><span className="avatar">EF</span><b>Edmilson⌄</b></div></header><div className="body"><Sidebar page={page} setPage={setPage}/><div>{page==="Portfolio"?<Portfolio/>:page==="Options"?<Options/>:page==="Reconciliation"?<Reconciliation/>:page==="Opportunities"?<Opportunities/>:page==="Portfolio Intelligence"?<PortfolioIntelligence/>:page==="Knowledge"?<Knowledge/>:page==="Copilot"?<CopilotPage/>:<main className="workspace"><PageHeader title={page} subtitle="Workspace React preparado para o próximo módulo."/><div className="panel placeholder"><h2>{page}</h2><p>Este módulo será conectado aos engines Python existentes sem duplicar a lógica de negócio.</p></div></main>}</div><Copilot setPage={setPage}/></div></div>}
 
 export default App;
