@@ -56,7 +56,11 @@ def test_brokerage_upload_endpoint_parses_and_persists_note(monkeypatch, tmp_pat
     from b3_agent import server
 
     transactions = BrokerageNoteParser().parse_text(NOTE_TEXT, source_file="nota.pdf")
-    monkeypatch.setattr(server.settings, "data_dir", tmp_path)
+    monkeypatch.setattr(
+        server,
+        "settings",
+        type("TestSettings", (), {"data_dir": tmp_path})(),
+    )
     monkeypatch.setattr(
         server.BrokerageNoteParser,
         "parse",
