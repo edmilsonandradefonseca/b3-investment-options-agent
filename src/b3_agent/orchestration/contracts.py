@@ -34,6 +34,7 @@ class B3State(TypedDict, total=False):
     as_of: AS_OF
     deterministic_context: dict[str, Any]
     portfolio_context: Any
+    portfolio_intelligence: Any
     options_transactions: list[dict[str, Any]]
     opportunity_set: Any
     knowledge_context: dict[str, Any]
