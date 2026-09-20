@@ -62,11 +62,14 @@ def b3_orchestrator(
 def _response_from_state(state: dict[str, Any]) -> OrchestratorResponse:
     sources = tuple(state.get("sources", ()))
     audit = tuple(state.get("audit", ()))
-    result = {
-        key: value
-        for key, value in state.items()
-        if key not in {"sources", "audit", "status"}
-    }
+    if "dashboard_snapshot" in state:
+        result = {"dashboard_snapshot": state["dashboard_snapshot"]}
+    else:
+        result = {
+            key: value
+            for key, value in state.items()
+            if key not in {"sources", "audit", "status"}
+        }
     return OrchestratorResponse(
         status=str(state.get("status", "COMPLETED")),
         result=result,
