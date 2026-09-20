@@ -18,6 +18,7 @@ from b3_agent.llm.client import OpenAIResponsesClient
 from b3_agent.schemas.position import PortfolioContext
 from b3_agent.schemas.opportunity import OpportunitySet
 from b3_agent.portfolio.snapshot import load_active_snapshots
+from b3_agent.portfolio.context import PortfolioIntelligenceEngine
 from langgraph.graph import END, START, StateGraph
 
 from .contracts import B3State
@@ -53,7 +54,11 @@ def configure_dashboard_workflow() -> None:
     workflow = graph.compile()
 
     def invoke(state: B3State) -> dict[str, Any]:
-        return workflow.invoke({**snapshots, **state})
+        initial = {**snapshots, **state}
+        portfolio = initial.get("portfolio_context")
+        if portfolio is not None:
+            initial["portfolio_intelligence"] = PortfolioIntelligenceEngine().build(portfolio)
+        return workflow.invoke(initial)
 
     configure_workflow(invoke)
 
