@@ -120,12 +120,17 @@ def configure_default_workflow(*, vault_path: Path | None = None,
         deterministic_defaults["opportunity_set"] = opportunity_set
 
     active_portfolio = deterministic_defaults.get("portfolio_context")
-    if active_portfolio is not None:
+    if isinstance(active_portfolio, PortfolioContext):
         deterministic_defaults["portfolio_intelligence"] = asdict(
             PortfolioIntelligenceEngine().build(active_portfolio)
         )
-        if getattr(active_portfolio, "as_of", None) is not None:
+        if active_portfolio.as_of is not None:
             deterministic_defaults["as_of"] = active_portfolio.as_of
+    elif isinstance(active_portfolio, dict):
+        deterministic_defaults.setdefault(
+            "portfolio_intelligence",
+            active_portfolio.get("portfolio_intelligence", {}),
+        )
 
     raw_transactions = deterministic_defaults.get("options_transactions", ())
     if raw_transactions:
