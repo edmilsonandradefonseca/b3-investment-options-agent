@@ -30,6 +30,9 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
+      - name: Generate Tauri application icons
+        run: npm run tauri -- icon src-tauri/icons/icon.svg
+
       - name: Build Tauri Windows bundle
         run: npm run tauri -- build
 
