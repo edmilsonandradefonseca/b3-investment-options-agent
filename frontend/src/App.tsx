@@ -342,7 +342,7 @@ function Reconciliation(){
   return <main className="workspace reconciliation-page">
     <PageHeader title="Reconciliação" subtitle="Confronto auditável entre transações do Excel e notas de corretagem, sem alterar o P&L." status={loading?"Consultando…":data?"Dados reais via Orchestrator":"Sem dados"}/>
     {error&&<div className="analytics-summary copilot-error"><strong>Reconciliação indisponível</strong><span>{error}</span></div>}
-    {data&&<>{data&&<ProvenanceBlock source={(data.source_refs??[]).join(" · ")||"Excel × Notas de corretagem"} asOf={data.as_of??undefined} quality={data.quality_status}/>}</><section className="cards">
+    {data&&<><ProvenanceBlock source={(data.source_refs??[]).join(" · ")||"Excel × Notas de corretagem"} asOf={data.as_of??undefined} quality={data.quality_status}/><section className="cards">
       <Metric title="Qualidade" value={data.quality_status} detail="Status do engine de reconciliação" icon="✓"/>
       <Metric title="Reconciliadas" value={String(count("RECONCILED"))} detail="Excel ↔ Nota" icon="⇄"/>
       <Metric title="Possíveis duplicidades" value={String(count("POTENTIAL_DUPLICATE"))} detail="Requer revisão" icon="!"/>
