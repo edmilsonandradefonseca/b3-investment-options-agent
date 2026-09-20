@@ -109,11 +109,43 @@ def configure_default_workflow(*, vault_path: Path | None = None,
         risk_validator=RiskValidator(),
     )
 
+    # The conversational client must receive the same deterministic portfolio/options
+    # facts as the Dashboard before any specialist/LLM reasoning. This keeps the
+    # Copilot as a client of the existing intelligence workflow rather than a second
+    # calculation engine.
     deterministic_defaults: dict[str, Any] = load_active_snapshots(settings.data_dir)
     if portfolio_context is not None:
         deterministic_defaults["portfolio_context"] = portfolio_context
     if opportunity_set is not None:
         deterministic_defaults["opportunity_set"] = opportunity_set
+
+    active_portfolio = deterministic_defaults.get("portfolio_context")
+    if active_portfolio is not None:
+        deterministic_defaults["portfolio_intelligence"] = asdict(
+            PortfolioIntelligenceEngine().build(active_portfolio)
+        )
+        if getattr(active_portfolio, "as_of", None) is not None:
+            deterministic_defaults["as_of"] = active_portfolio.as_of
+
+    raw_transactions = deterministic_defaults.get("options_transactions", ())
+    if raw_transactions:
+        transactions = tuple(
+            OptionTransaction(**item) if isinstance(item, dict) else item
+            for item in raw_transactions
+        )
+        performances = OptionPerformanceEngine().build(transactions)
+        deterministic_defaults["options_performance"] = {
+            "lifecycles": [asdict(item) for item in performances],
+            "by_underlying": [
+                asdict(item)
+                for item in OptionPerformanceEngine().aggregate_by_underlying(performances)
+            ],
+        }
+    else:
+        deterministic_defaults["options_performance"] = {
+            "lifecycles": [],
+            "by_underlying": [],
+        }
 
     if deterministic_defaults:
         def invoke_with_deterministic_context(state):
