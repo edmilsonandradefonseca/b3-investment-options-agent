@@ -104,6 +104,7 @@ def test_capability_contract_exposes_v31_tools_and_memory_write():
         "persist_decision",
         "search_memory",
         "read_memory",
+        "write_memory",
     ]
     assert result["governance"]["orders_supported"] is False
 
@@ -155,6 +156,34 @@ def test_memory_tools_reject_empty_arguments():
         server.search_memory("   ")
     with pytest.raises(ValueError, match="path must not be empty"):
         server.read_memory("   ")
+    with pytest.raises(ValueError, match="path must not be empty"):
+        server.write_memory("   ", "content")
+    with pytest.raises(ValueError, match="content must not be empty"):
+        server.write_memory("note.md", "   ")
+
+def test_write_memory_writes_note_to_obsidian(tmp_path):
+    from b3_agent.knowledge.memory import ObsidianMemoryManager
+    from b3_agent.knowledge.obsidian import ObsidianKnowledgeStore
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    store = ObsidianKnowledgeStore(vault)
+    server.configure_mcp_sources(memory_manager=ObsidianMemoryManager(store))
+
+    result = server.write_memory(
+        "00_System/DAILY_INITIALIZATION_v2.0.md",
+        "# DAILY INITIALIZATION v2.0\n\nGitHub + Obsidian bridge is active.",
+    )
+
+    assert result == {
+        "status": "written",
+        "path": "00_System/DAILY_INITIALIZATION_v2.0.md",
+    }
+    assert (
+        store.read_note("00_System/DAILY_INITIALIZATION_v2.0.md")
+        == "# DAILY INITIALIZATION v2.0\n\nGitHub + Obsidian bridge is active."
+    )
+
 
 
 def test_portfolio_context_and_intelligence_use_injected_domain_source():
