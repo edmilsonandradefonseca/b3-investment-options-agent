@@ -61,13 +61,15 @@ def get_system_capabilities() -> dict[str, object]:
         "compare_position_opportunity",
         "persist_insight",
         "persist_decision",
+        "search_memory",
+        "read_memory",
     ]
     return {
         "server": "B3 Investment Intelligence",
         "version": "0.5.0",
         "mode": "controlled_write",
         "tools": tools,
-        "capabilities": [*tools, "orchestrated_analysis", "memory_write"],
+        "capabilities": [*tools, "orchestrated_analysis", "memory_read", "memory_write"],
         "governance": {
             "deterministic_first": True,
             "llm_executes_trades": False,
@@ -90,6 +92,25 @@ def analyze_portfolio(
 def get_portfolio_context() -> dict[str, Any]:
     """Return the current point-in-time portfolio snapshot from the configured source."""
     return _serialize(_load_portfolio_context())
+
+
+@mcp.tool()
+def search_memory(query: str) -> dict[str, Any]:
+    """Search the configured Obsidian vault and return matching note paths."""
+    if not query.strip():
+        raise ValueError("query must not be empty")
+    manager = _load_memory_manager()
+    matches = manager.store.search(query)
+    return {"query": query, "matches": [path.as_posix() for path in matches]}
+
+
+@mcp.tool()
+def read_memory(path: str) -> dict[str, str]:
+    """Read one Markdown note from the configured Obsidian vault."""
+    if not path.strip():
+        raise ValueError("path must not be empty")
+    manager = _load_memory_manager()
+    return {"path": path, "content": manager.store.read_note(path)}
 
 
 @mcp.tool()
