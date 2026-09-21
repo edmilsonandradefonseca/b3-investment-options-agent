@@ -118,9 +118,7 @@ def test_search_memory_reads_existing_obsidian_notes(tmp_path):
     store = ObsidianKnowledgeStore(vault)
     store.write_note(
         "00_System/PROJECT_STATE.md",
-        "# Project State
-
-MCP bridge is active.",
+        "# Project State\n\nMCP bridge is active.",
     )
     server.configure_mcp_sources(memory_manager=ObsidianMemoryManager(store))
 
