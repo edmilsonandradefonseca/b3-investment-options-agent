@@ -63,6 +63,7 @@ def get_system_capabilities() -> dict[str, object]:
         "persist_decision",
         "search_memory",
         "read_memory",
+        "write_memory",
     ]
     return {
         "server": "B3 Investment Intelligence",
@@ -111,6 +112,18 @@ def read_memory(path: str) -> dict[str, str]:
         raise ValueError("path must not be empty")
     manager = _load_memory_manager()
     return {"path": path, "content": manager.store.read_note(path)}
+
+
+@mcp.tool()
+def write_memory(path: str, content: str) -> dict[str, str]:
+    """Write one Markdown note to the configured Obsidian vault."""
+    if not path.strip():
+        raise ValueError("path must not be empty")
+    if not content.strip():
+        raise ValueError("content must not be empty")
+    manager = _load_memory_manager()
+    manager.store.write_note(path, content)
+    return {"status": "written", "path": path}
 
 
 @mcp.tool()
