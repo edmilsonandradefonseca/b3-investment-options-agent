@@ -102,8 +102,59 @@ def test_capability_contract_exposes_v31_tools_and_memory_write():
         "compare_position_opportunity",
         "persist_insight",
         "persist_decision",
+        "search_memory",
+        "read_memory",
     ]
     assert result["governance"]["orders_supported"] is False
+
+
+def test_search_memory_reads_existing_obsidian_notes(tmp_path):
+    from b3_agent.knowledge.memory import ObsidianMemoryManager
+    from b3_agent.knowledge.obsidian import ObsidianKnowledgeStore
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    store = ObsidianKnowledgeStore(vault)
+    store.write_note(
+        "00_System/PROJECT_STATE.md",
+        "# Project State
+
+MCP bridge is active.",
+    )
+    server.configure_mcp_sources(memory_manager=ObsidianMemoryManager(store))
+
+    result = server.search_memory("MCP bridge")
+
+    assert result["query"] == "MCP bridge"
+    assert result["matches"] == ["00_System/PROJECT_STATE.md"]
+
+
+def test_read_memory_returns_existing_obsidian_note(tmp_path):
+    from b3_agent.knowledge.memory import ObsidianMemoryManager
+    from b3_agent.knowledge.obsidian import ObsidianKnowledgeStore
+
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    store = ObsidianKnowledgeStore(vault)
+    store.write_note(
+        "00_System/PROJECT_STATE.md",
+        "# Project State
+
+MCP bridge is active.",
+    )
+    server.configure_mcp_sources(memory_manager=ObsidianMemoryManager(store))
+
+    result = server.read_memory("00_System/PROJECT_STATE.md")
+
+    assert result["path"] == "00_System/PROJECT_STATE.md"
+    assert "MCP bridge is active." in result["content"]
+
+
+def test_memory_tools_reject_empty_arguments():
+    with pytest.raises(ValueError, match="query must not be empty"):
+        server.search_memory("   ")
+    with pytest.raises(ValueError, match="path must not be empty"):
+        server.read_memory("   ")
 
 
 def test_portfolio_context_and_intelligence_use_injected_domain_source():
@@ -129,7 +180,9 @@ def test_analyze_position_delegates_to_existing_deterministic_engine():
 
 
 def test_valuation_exposes_precomputed_deterministic_range():
-    server.configure_mcp_sources(valuation_loader=lambda ticker: _valuation() if ticker == "PETR4" else None)
+    server.configure_mcp_sources(
+        valuation_loader=lambda ticker: _valuation() if ticker == "PETR4" else None
+    )
 
     result = server.get_valuation("petr4")
 
