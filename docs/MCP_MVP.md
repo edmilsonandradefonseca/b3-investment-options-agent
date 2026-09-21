@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Expose the B3 Investment Intelligence domain to MCP-compatible AI clients through a governed, read-only tool boundary.
+Expose the B3 Investment Intelligence domain to MCP-compatible AI clients through a governed tool boundary. Domain analysis remains read-only; Obsidian memory uses controlled writes.
 
 ## Architecture
 
@@ -19,11 +19,12 @@ Deterministic B3 Domain Engines
     +-- Valuation
     +-- Opportunity Intelligence
     +-- Market Context
+    +-- Obsidian Memory (controlled write)
 ```
 
 ## Governance principles
 
-- MCP tools are read-only.
+- Domain intelligence tools are read-only; memory tools are controlled-write operations.
 - MCP does not place or construct executable orders.
 - Deterministic calculations remain authoritative.
 - LLM reasoning consumes structured domain outputs; it does not replace upstream calculations.
@@ -40,5 +41,8 @@ Deterministic B3 Domain Engines
 - `get_opportunities`
 - `compare_position_opportunity`
 - `get_market_context`
+- `search_memory`
+- `read_memory`
+- `write_memory`
 
 The first implementation establishes the MCP boundary and governance contract. Domain-specific tools are added incrementally behind this boundary without changing the deterministic core.
