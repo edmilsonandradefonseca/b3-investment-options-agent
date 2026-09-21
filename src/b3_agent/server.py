@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 import hashlib
 from datetime import datetime, timezone
@@ -12,6 +13,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
 
+from b3_agent.runtime.manager import RuntimeManager
 from b3_agent.config import settings
 from b3_agent.options.transactions import OptionsTransactionLoader
 from b3_agent.options.brokerage_notes import BrokerageNoteIngestionError, BrokerageNoteParser
@@ -27,11 +29,6 @@ from b3_agent.knowledge.in_memory_graph import InMemoryKnowledgeGraphStore
 from b3_agent.knowledge.indexer import KnowledgeIndexer
 from b3_agent.knowledge.obsidian import ObsidianKnowledgeStore
 from b3_agent.knowledge.retrieval import ObsidianRetriever
-from b3_agent.mcp.server import (
-    read_memory as mcp_read_memory,
-    search_memory as mcp_search_memory,
-    write_memory as mcp_write_memory,
-)
 
 
 class KnowledgeQueryRequest(BaseModel):
@@ -52,31 +49,6 @@ class OrchestrateRequest(BaseModel):
     task: str = Field(min_length=1)
     ticker: str | None = None
     context: dict[str, Any] = Field(default_factory=dict)
-
-
-class MemoryWriteRequest(BaseModel):
-    """Transport contract for controlled Obsidian memory writes."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    path: str = Field(min_length=1)
-    content: str = Field(min_length=1)
-
-
-class MemorySearchRequest(BaseModel):
-    """Transport contract for bounded Obsidian memory search."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    query: str = Field(min_length=1)
-
-
-class MemoryReadRequest(BaseModel):
-    """Transport contract for reading one Obsidian memory note."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    path: str = Field(min_length=1)
 
 
 class TransactionRequest(BaseModel):
@@ -356,31 +328,21 @@ def _response_to_model(response: OrchestratorResponse) -> OrchestrateResponse:
     )
 
 
-@app.post("/memory/write")
-def memory_write(request: MemoryWriteRequest) -> dict[str, str]:
-    """Delegate a controlled memory write to the B3 MCP memory tool."""
-    try:
-        return mcp_write_memory(path=request.path, content=request.content)
-    except (RuntimeError, ValueError) as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+@app.get("/runtime/status")
+def runtime_status() -> dict:
+    runtime_root = Path(
+        os.getenv("B3_RUNTIME_ROOT", "/opt/b3-runtime")
+    ).expanduser()
 
+    manager = RuntimeManager(runtime_root)
+    status = manager.status()
 
-@app.post("/memory/search")
-def memory_search(request: MemorySearchRequest) -> dict[str, Any]:
-    """Delegate bounded memory search to the B3 MCP memory tool."""
-    try:
-        return mcp_search_memory(query=request.query)
-    except (RuntimeError, ValueError) as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-
-@app.post("/memory/read")
-def memory_read(request: MemoryReadRequest) -> dict[str, str]:
-    """Delegate one memory read to the B3 MCP memory tool."""
-    try:
-        return mcp_read_memory(path=request.path)
-    except (RuntimeError, ValueError) as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {
+        "runtime": status["runtime"],
+        "resources": status["resources"],
+        "services": status["services"],
+        "process": status["process"],
+    }
 
 
 @app.get("/health")
@@ -464,11 +426,4 @@ def orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
-__all__ = [
-    "MemoryReadRequest",
-    "MemorySearchRequest",
-    "MemoryWriteRequest",
-    "OrchestrateRequest",
-    "OrchestrateResponse",
-    "app",
-]
+__all__ = ["OrchestrateRequest", "OrchestrateResponse", "app"]
