@@ -15,6 +15,7 @@ class RuntimeManager:
         self.runtime_root = Path(runtime_root).expanduser().resolve()
         self.pid_file = self.runtime_root / "runtime.pid"
         self._process: Any | None = None
+        self._embedding_process: Any | None = None
 
     def _orchestrator_command(self) -> list[str]:
         return [
@@ -30,19 +31,40 @@ class RuntimeManager:
         if self._process_running():
             return self.status()
 
+        embedding_process = self._launch_embedding_service()
+        self._embedding_process = embedding_process
+
         process = self._launch_orchestrator()
         self._process = process
         self.pid_file.write_text(str(process.pid))
 
+        if not self._wait_for_embedding_health():
+            self._terminate_process(embedding_process.pid)
+            self._embedding_process = None
+            self._terminate_process(process.pid)
+            self._process = None
+            self.pid_file.unlink(missing_ok=True)
+            raise RuntimeError("Embedding service failed health check")
+
         if not self._wait_for_health():
             self._terminate_process(process.pid)
             self._process = None
+            self._terminate_process(embedding_process.pid)
+            self._embedding_process = None
             self.pid_file.unlink(missing_ok=True)
             raise RuntimeError("B3 Orchestrator failed health check")
 
         return self.status()
 
     def stop(self) -> dict[str, Any]:
+        if self._embedding_process is not None:
+            try:
+                if self._embedding_process.poll() is None:
+                    self._terminate_process(self._embedding_process.pid)
+            except Exception:
+                pass
+            self._embedding_process = None
+
         if self.pid_file.is_file():
             try:
                 pid = int(self.pid_file.read_text().strip())
@@ -56,6 +78,22 @@ class RuntimeManager:
             self.pid_file.unlink(missing_ok=True)
 
         return self.status()
+
+    def _launch_embedding_service(self) -> Any:
+        import subprocess
+
+        return subprocess.Popen(
+            [
+                "/opt/joao-runtime/embeddings/.venv/bin/uvicorn",
+                "embedding_api:app",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8093",
+            ],
+            cwd="/opt/joao-runtime/embeddings",
+            env=self._environment(),
+        )
 
     def _launch_orchestrator(self) -> Any:
         import subprocess
@@ -152,9 +190,19 @@ class RuntimeManager:
 
     def service_status(self) -> dict[str, str]:
         return {
-            "qdrant": "disabled",
-            "neo4j": "disabled",
+            "qdrant": "running" if self._tcp_service_available("127.0.0.1", 6333) else "stopped",
+            "neo4j": "running" if self._tcp_service_available("127.0.0.1", 7687) else "stopped",
+            "embedding": "running" if self._embedding_service_available() else "stopped",
         }
+
+    def _tcp_service_available(self, host: str, port: int) -> bool:
+        import socket
+
+        try:
+            with socket.create_connection((host, port), timeout=1.0):
+                return True
+        except OSError:
+            return False
 
 
     def doctor(self) -> dict[str, Any]:
@@ -205,6 +253,31 @@ class RuntimeManager:
             "status": "ok" if available else "error",
             "runtime_root": str(self.runtime_root),
         }
+
+    def _embedding_service_available(self) -> bool:
+        import urllib.error
+        import urllib.request
+
+        try:
+            with urllib.request.urlopen(
+                "http://127.0.0.1:8093/health",
+                timeout=1.0,
+            ) as response:
+                return response.status == 200
+        except (OSError, urllib.error.URLError):
+            return False
+
+    def _wait_for_embedding_health(self) -> bool:
+        import time
+
+        deadline = time.monotonic() + 30.0
+
+        while time.monotonic() < deadline:
+            if self._embedding_service_available():
+                return True
+            time.sleep(0.25)
+
+        return False
 
     def _wait_for_health(self) -> bool:
         import time

@@ -155,6 +155,8 @@ def add_transaction(request: TransactionRequest) -> TransactionResponse:
         )
         return _transaction_response(_transaction_repository().add(transaction))
     except ValueError as exc:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 

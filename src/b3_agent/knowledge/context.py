@@ -6,7 +6,7 @@ from typing import Any
 
 from .graph_schema import EntityType, GraphEntity, GraphRelation, RelationType
 from .graph_store import KnowledgeGraphStore
-from .retrieval import ObsidianRetriever, RetrievedEvidence
+from .b3_retriever import B3Retriever, RetrievedEvidence
 
 
 @dataclass(frozen=True)
@@ -56,7 +56,7 @@ class KnowledgeContext:
 class KnowledgeContextBuilder:
     """Combine bounded RAG, PIT-valid KG traversal and deterministic context."""
 
-    def __init__(self, retriever: ObsidianRetriever, graph: KnowledgeGraphStore) -> None:
+    def __init__(self, retriever: B3Retriever, graph: KnowledgeGraphStore) -> None:
         self.retriever = retriever
         self.graph = graph
 

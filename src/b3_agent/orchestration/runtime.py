@@ -10,10 +10,10 @@ from b3_agent.agents.specialist import MarketAnalysisAgent, OptionsAnalysisAgent
 from b3_agent.agents.synthesis import SynthesisAgent
 from b3_agent.config import settings
 from b3_agent.knowledge.context import KnowledgeContextBuilder
-from b3_agent.knowledge.in_memory_graph import InMemoryKnowledgeGraphStore
-from b3_agent.knowledge.indexer import KnowledgeIndexer
-from b3_agent.knowledge.memory import ObsidianMemoryManager
-from b3_agent.knowledge.obsidian import ObsidianKnowledgeStore
+from b3_agent.knowledge.b3_memory import B3MemoryManager
+from b3_agent.knowledge.b3_retriever import B3Retriever
+from b3_agent.knowledge.neo4j_store import Neo4jKnowledgeGraphStore
+from b3_agent.knowledge.sqlite_store import B3KnowledgeStore
 from b3_agent.knowledge.retrieval import ObsidianRetriever
 from b3_agent.llm.client import OpenAIResponsesClient
 from b3_agent.schemas.position import PortfolioContext
@@ -223,21 +223,38 @@ def configure_default_workflow(*, vault_path: Path | None = None,
                                 portfolio_context: PortfolioContext | dict[str, Any] | None = None,
                                 opportunity_set: OpportunitySet | None = None) -> None:
     """Compose and register the production V3.1 workflow."""
-    resolved_vault = Path(vault_path).expanduser().resolve() if vault_path is not None else settings.obsidian_vault
-    if resolved_vault is None:
-        raise RuntimeError("B3_AGENT_OBSIDIAN_VAULT is not configured; cannot compose the workflow")
-    if not resolved_vault.is_dir():
-        raise FileNotFoundError(f"Obsidian vault does not exist: {resolved_vault}")
     if not settings.llm_enabled:
         raise RuntimeError("B3_AGENT_LLM_ENABLED is false; cannot compose the reasoning workflow")
 
     llm = OpenAIResponsesClient(model=settings.llm_model)
-    store = ObsidianKnowledgeStore(resolved_vault)
-    retriever = ObsidianRetriever(store)
-    graph = InMemoryKnowledgeGraphStore()
-    KnowledgeIndexer(store, graph).index_all()
-    knowledge_context_builder = KnowledgeContextBuilder(retriever, graph)
-    memory_manager = ObsidianMemoryManager(store, retriever, graph)
+
+    knowledge_store = B3KnowledgeStore(
+        "/opt/b3-runtime/data/b3_knowledge.db"
+    )
+
+    retriever = B3Retriever(
+        store=knowledge_store,
+    )
+
+    import os
+
+    graph = Neo4jKnowledgeGraphStore(
+        uri=os.getenv("B3_NEO4J_URI", "bolt://127.0.0.1:7687"),
+        username=os.getenv("B3_NEO4J_USERNAME", "neo4j"),
+        password=os.getenv("B3_NEO4J_PASSWORD"),
+        database=os.getenv("B3_NEO4J_DATABASE", "neo4j"),
+    )
+
+    knowledge_context_builder = KnowledgeContextBuilder(
+        retriever,
+        graph,
+    )
+
+    memory_manager = B3MemoryManager(
+        knowledge_store,
+        retriever,
+        graph,
+    )
     workflow = build_workflow(
         retriever=retriever,
         knowledge_context_builder=knowledge_context_builder,

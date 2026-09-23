@@ -136,11 +136,11 @@ def build_workflow(*, retriever: ObsidianRetriever, reasoning_agent: InvestmentR
             entity = ticker or "PORTFOLIO"
             timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
             path = memory_manager.persist_insight({"insight_id": f"INS-{entity}-{timestamp}", "entity": entity, "type": "assessment", "title": f"Investment assessment — {entity}", "statement": synthesis_result["summary"], "evidence_refs": synthesis_result.get("evidence_refs", []), "source": "Investment Synthesis Agent", "confidence": state.get("decision_proposal", {}).get("confidence")})
-            persisted.append(path.as_posix())
+            persisted.append(path.as_posix() if hasattr(path, "as_posix") else str(path))
         proposal = state.get("decision_proposal")
         if isinstance(proposal, dict):
             path = memory_manager.persist_decision(proposal, request=state["user_question"], ticker=ticker)
-            persisted.append(path.as_posix())
+            persisted.append(path.as_posix() if hasattr(path, "as_posix") else str(path))
         return {"audit": [{"event": "memory_persisted", "paths": persisted}]}
 
     graph = StateGraph(B3State)
