@@ -51,10 +51,15 @@ def b3_orchestrator(
         **request.context,
     }
 
-    if hasattr(workflow, "invoke"):
-        final_state = workflow.invoke(initial_state)
-    else:
-        final_state = workflow(initial_state)
+    try:
+        if hasattr(workflow, "invoke"):
+            final_state = workflow.invoke(initial_state)
+        else:
+            final_state = workflow(initial_state)
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        raise
 
     return _response_from_state(final_state)
 
@@ -62,11 +67,16 @@ def b3_orchestrator(
 def _response_from_state(state: dict[str, Any]) -> OrchestratorResponse:
     sources = tuple(state.get("sources", ()))
     audit = tuple(state.get("audit", ()))
-    result = {
-        key: value
-        for key, value in state.items()
-        if key not in {"sources", "audit", "status"}
-    }
+    print("DEBUG AUDIT TYPE:", type(audit).__name__, flush=True)
+    print("DEBUG AUDIT ITEMS:", [(type(item).__name__, repr(item)[:500]) for item in audit], flush=True)
+    if "dashboard_snapshot" in state:
+        result = {"dashboard_snapshot": state["dashboard_snapshot"]}
+    else:
+        result = {
+            key: value
+            for key, value in state.items()
+            if key not in {"sources", "audit", "status"}
+        }
     return OrchestratorResponse(
         status=str(state.get("status", "COMPLETED")),
         result=result,

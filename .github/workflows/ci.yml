@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feature/mcp-mvp
   pull_request:
     branches:
       - main

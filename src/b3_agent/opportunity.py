@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from .schemas.opportunity import (
     ActionCandidate,
     Opportunity,
+    Evidence,
     OpportunityAssessment,
     OpportunitySet,
 )
@@ -60,6 +61,8 @@ class OpportunityIntelligenceEngine:
         capital_efficiency: dict[str, str] | None = None,
         diversification: dict[str, str] | None = None,
         relative_assessment: dict[str, str] | None = None,
+        available_capital: float | None = None,
+        evidence_registry: tuple[Evidence, ...] | None = None,
     ) -> OpportunitySet:
         portfolio_fit = portfolio_fit or {}
         risk = risk or {}
@@ -76,8 +79,40 @@ class OpportunityIntelligenceEngine:
                 reasons.append("quality_status=REJECTED")
             elif opportunity.quality_status not in self.policy.quality_order:
                 reasons.append(f"unsupported quality_status={opportunity.quality_status}")
+            if not opportunity.evidence_refs:
+                reasons.append("evidence_refs=EMPTY")
+            elif evidence_registry is not None:
+                evidence_by_id = {item.evidence_id: item for item in evidence_registry}
+                for evidence_ref in opportunity.evidence_refs:
+                    evidence = evidence_by_id.get(evidence_ref)
+                    if evidence is None:
+                        reasons.append(f"evidence_ref_missing={evidence_ref}")
+                    elif evidence.quality_status == "REJECTED":
+                        reasons.append(f"evidence_quality=REJECTED:{evidence_ref}")
+                    elif evidence.quality_status not in {"VALIDATED", "WARNING"}:
+                        reasons.append(
+                            f"evidence_quality_unsupported={evidence.quality_status}:{evidence_ref}"
+                        )
+                    if evidence is not None:
+                        if not evidence.subject_id:
+                            reasons.append(f"evidence_subject_empty={evidence_ref}")
+                        if evidence.as_of > opportunity.as_of:
+                            reasons.append(
+                                f"evidence_as_of_after_opportunity={evidence_ref}"
+                            )
+                        if not evidence.source_refs:
+                            reasons.append(f"evidence_source_refs=EMPTY:{evidence_ref}")
             if opportunity.action not in {"BUY", "ACCUMULATE", "SELL_PUT", "SELL_CALL"}:
                 reasons.append(f"unsupported action={opportunity.action}")
+            if (
+                available_capital is not None
+                and opportunity.capital_requirement is not None
+                and opportunity.capital_requirement > available_capital
+            ):
+                reasons.append(
+                    f"capital_requirement={opportunity.capital_requirement} exceeds "
+                    f"available_capital={available_capital}"
+                )
 
             fit = portfolio_fit.get(opportunity.opportunity_id, "UNKNOWN").upper()
             risk_value = risk.get(opportunity.opportunity_id, "UNKNOWN").upper()

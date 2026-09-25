@@ -33,6 +33,26 @@ def build_workflow(*, retriever: ObsidianRetriever, reasoning_agent: InvestmentR
             raise ValueError("workflow requires user_question or request")
         return {"user_question": request}
 
+    def dashboard_snapshot(state: B3State) -> dict[str, Any]:
+        """Return deterministic dashboard data without invoking reasoning agents.
+
+        The Dashboard is a client of the orchestrator contract. Snapshot reads
+        are deliberately short-circuited before knowledge/LLM reasoning so a
+        UI refresh cannot create an investment decision or memory side effect.
+        """
+        portfolio = state.get("portfolio_context")
+        options = state.get("options_transactions", ())
+        return {
+            "dashboard_snapshot": {
+                "portfolio_context": portfolio,
+                "options_transactions": list(options),
+            },
+            "status": "COMPLETED",
+        }
+
+    def route_after_retrieve(state: B3State) -> str:
+        return "dashboard_snapshot" if state.get("dashboard_view") else "deterministic_context"
+
     def deterministic_context(state: B3State) -> dict[str, Any]:
         opportunity_set = state.get("opportunity_set")
         if opportunity_set is None:
@@ -73,7 +93,7 @@ def build_workflow(*, retriever: ObsidianRetriever, reasoning_agent: InvestmentR
         return {"evidence": evidence}
 
     def _agent_context(state: B3State) -> AgentContext:
-        keys = ("portfolio_context", "options_transactions", "signals", "threats", "opportunities", "action_candidates", "fundamental_analysis", "market_analysis", "options_analysis", "risk_analysis", "market_agent_analysis", "portfolio_agent_analysis", "options_agent_analysis", "synthesis", "knowledge_context", "memory_context", "rag_context", "graph_context")
+        keys = ("as_of", "portfolio_context", "portfolio_intelligence", "options_transactions", "options_performance", "signals", "threats", "opportunities", "action_candidates", "fundamental_analysis", "market_analysis", "options_analysis", "risk_analysis", "market_agent_analysis", "portfolio_agent_analysis", "options_agent_analysis", "synthesis", "knowledge_context", "memory_context", "rag_context", "graph_context")
         facts = {key: state[key] for key in keys if key in state}
         legacy = state.get("deterministic_context")
         if isinstance(legacy, dict): facts = {**legacy, **facts}
@@ -116,11 +136,11 @@ def build_workflow(*, retriever: ObsidianRetriever, reasoning_agent: InvestmentR
             entity = ticker or "PORTFOLIO"
             timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
             path = memory_manager.persist_insight({"insight_id": f"INS-{entity}-{timestamp}", "entity": entity, "type": "assessment", "title": f"Investment assessment — {entity}", "statement": synthesis_result["summary"], "evidence_refs": synthesis_result.get("evidence_refs", []), "source": "Investment Synthesis Agent", "confidence": state.get("decision_proposal", {}).get("confidence")})
-            persisted.append(path.as_posix())
+            persisted.append(path.as_posix() if hasattr(path, "as_posix") else str(path))
         proposal = state.get("decision_proposal")
         if isinstance(proposal, dict):
             path = memory_manager.persist_decision(proposal, request=state["user_question"], ticker=ticker)
-            persisted.append(path.as_posix())
+            persisted.append(path.as_posix() if hasattr(path, "as_posix") else str(path))
         return {"audit": [{"event": "memory_persisted", "paths": persisted}]}
 
     graph = StateGraph(B3State)
@@ -135,8 +155,17 @@ def build_workflow(*, retriever: ObsidianRetriever, reasoning_agent: InvestmentR
     if memory_manager is not None: graph.add_node("persist_memory", persist_memory)
     if synthesis_agent is not None: graph.add_node("synthesis", synthesis)
 
+    graph.add_node("dashboard_snapshot", dashboard_snapshot)
     graph.add_edge(START, "retrieve")
-    graph.add_edge("retrieve", "deterministic_context")
+    graph.add_conditional_edges(
+        "retrieve",
+        route_after_retrieve,
+        {
+            "dashboard_snapshot": "dashboard_snapshot",
+            "deterministic_context": "deterministic_context",
+        },
+    )
+    graph.add_edge("dashboard_snapshot", END)
     graph.add_edge("deterministic_context", "knowledge_context")
     graph.add_edge("knowledge_context", "market_analysis")
     graph.add_edge("knowledge_context", "portfolio_analysis")

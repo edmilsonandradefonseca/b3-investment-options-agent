@@ -1,0 +1,19 @@
+name: Dashboard + Copilot Gate
+
+on:
+  push:
+    branches: ["feature/mcp-mvp", "main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+concurrency:
+  group: dashboard-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dashboard-tests:
+    name: Dashboard Test Engine
+    uses: ./.github/workflows/dashboard-tests.yml
+    with:
+      ref: ${{ github.head_ref || github.ref_name }}

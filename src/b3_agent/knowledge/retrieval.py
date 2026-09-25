@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -33,7 +34,7 @@ class ObsidianRetriever:
         if top_k < 1:
             raise ValueError("top_k must be positive")
 
-        terms = tuple(dict.fromkeys(query.casefold().split()))
+        terms = tuple(dict.fromkeys(_query_terms(query)))
         scored: list[RetrievedEvidence] = []
 
         for relative_path in self.store.list_notes():
@@ -56,6 +57,19 @@ class ObsidianRetriever:
         scored.sort(key=lambda item: (-item.score, item.relative_path))
         return tuple(scored[:top_k])
 
+
+def _query_terms(query: str) -> tuple[str, ...]:
+    """Tokenize queries independently of punctuation and case.
+
+    Natural-language dashboard questions commonly contain punctuation such as
+    ``oportunidade?`` or currency notation such as ``R$``. Splitting only on
+    whitespace makes those tokens impossible to match against clean note text.
+    """
+    return tuple(
+        term
+        for term in dict.fromkeys(re.findall(r"\w+", query.casefold()))
+        if len(term) > 1
+    )
 
 def _bounded_snippet(content: str, terms: tuple[str, ...], limit: int = 800) -> str:
     lines = content.splitlines()

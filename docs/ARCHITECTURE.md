@@ -1,270 +1,152 @@
-# Architecture — B3 Investment & Options Agent
+# Architecture Governance — B3 Investment & Options Agent
 
-## 1. Purpose and architectural principle
+## 1. Architectural baseline
 
-The B3 Investment & Options Agent is a postgraduate research project at PUC-Rio exploring an enterprise-oriented Agentic AI architecture for context-aware investment decision support.
+This repository implements a personal investment decision-support system for B3. It is **not** an autonomous trading system.
 
-The approved principle is:
+The approved architectural principle is:
 
-> **Deterministic first, knowledge/context aware, LLM-for-reasoning, risk-validated.**
+> **Python-first, local-first, LLM-for-reasoning.**
 
-Deterministic computation must not be delegated to an LLM when reliable code can perform it. LLM calls are controlled by explicit gates and operate on prepared context.
+Deterministic computation must not be delegated to an LLM when it can be performed reliably by code.
 
-## 2. High-level architecture
+## 2. Approved high-level architecture
 
-```text
-                 Dashboard
-                     │
-                     ▼
-               Orchestrator
-                     │
-                     ▼
-                 LangGraph
-                     │
-       ┌─────────────┼─────────────┐
-       ▼             ▼             ▼
- Deterministic   Knowledge      Agents
-    Engine        Context
-       │             │             │
- Quant/Valuation  Qdrant/KG     Reasoning
- Options/Portfolio Obsidian     Synthesis
-       │             │             │
-       └─────────────┼─────────────┘
-                     ▼
-                    Risk
-                     │
-                     ▼
-                  Decision
-```
+B3 Market/Data Sources
+→ Data Quality & Point-in-Time Layer
+→ Quant Engine
+→ Stock Valuation / PUT / CALL / Portfolio Engines
+→ Opportunity Ranker
+→ Local Obsidian RAG
+→ LLM Gate
+→ Investment Committee / Analyst LLM
+→ Risk Validation
+→ Structured Decision
+→ SQLite/Parquet + Obsidian Memory
 
-The architecture separates four concerns:
+LangGraph is the orchestration/state-machine layer. It does not imply that every node must be an LLM agent.
 
-1. **Deterministic computation** — numerical analytics, valuation, options and portfolio intelligence.
-2. **Knowledge and context** — structured evidence, semantic knowledge and relationship-oriented context.
-3. **Agentic reasoning** — specialized analysis, synthesis and controlled LLM reasoning.
-4. **Governance and validation** — risk rules, provenance, point-in-time correctness and auditable decisions.
+## 3. Component responsibilities
 
-## 3. Current implementation status
+### Data Engine
+Provides market prices, B3 stocks, options chains, fundamentals, corporate actions/dividends, implied volatility, Greeks, open interest, volume/liquidity, macro and permitted news/sentiment data.
 
-The current repository contains implemented components for:
+### Point-in-Time Layer
+Prevents look-ahead bias and data leakage. Historical decisions must use information actually available at the decision timestamp.
 
-- market-data provider adapters;
-- point-in-time and data-quality contracts;
-- quantitative analysis;
-- stock valuation;
-- PUT/CALL analysis;
-- portfolio capital/risk and portfolio intelligence;
-- opportunity intelligence;
-- MCP portfolio context;
-- LangGraph workflow orchestration;
-- Qdrant vector-store foundation and retrieval contracts;
-- Knowledge Graph contracts and in-memory implementation;
-- Obsidian integration;
-- LLM Gate and model abstraction;
-- automated tests and CI;
-- Streamlit MVP and a React/Tauri desktop frontend foundation.
+### Quant Engine
+Computes indicators, statistics, liquidity filters, scoring, risk metrics and other deterministic analytics.
 
-### Important implementation boundary
+### Stock Valuation Engine
+Produces valuation ranges and scenarios (Bear/Base/Bull), fair-value ranges, accumulation zones, reduce zones and sell zones. A single fair value is not treated as ground truth.
 
-**Qdrant is implemented as a local vector-store foundation.** Production semantic embeddings, hybrid retrieval, reranking and broader retrieval optimization remain research/MVP work.
+### PUT Opportunity Engine
+Evaluates cash-secured PUT opportunities using strike, premium, effective acquisition price, liquidity, IV, Greeks, event risk, distance to valuation and margin of safety.
 
-**Knowledge Graph support currently provides backend-neutral contracts and an in-memory implementation.** A concrete Neo4j persistence adapter is a subsequent implementation step; the architecture must not imply that Neo4j persistence is already operational.
+### Covered CALL Engine
+Evaluates covered CALL opportunities using strike, premium, IV, Greeks, liquidity, potential stock appreciation, total return if exercised and opportunity cost.
 
-This distinction between implemented, foundation and planned capabilities is part of the project's research transparency.
+### Portfolio Context Engine
+Evaluates holdings, average cost, weights, concentration, cash, open PUT/CALL obligations, potential assignment capital and portfolio-level risk.
 
-## 4. LangGraph orchestration
+### Opportunity Ranker
+Compares alternative actions: BUY/ACCUMULATE, SELL PUT, HOLD/WAIT, SELL CALL, REDUCE and SELL. It must consider opportunity cost rather than optimizing each instrument independently.
 
-The orchestration layer models the workflow as explicit state transitions rather than assuming every node is an LLM agent.
+### Obsidian / RAG
+Human-editable semantic memory containing investment policy, theses, valuation assumptions, strategy rules, research and investment lessons. Retrieval is selective; the complete vault is never sent to an LLM by default.
 
-Conceptually:
+### LLM Gate
+Determines whether an LLM call is materially justified. No LLM call is required merely because a pipeline run occurred.
 
-```text
-Data / Snapshot
-      │
-      ▼
-Data Quality & PIT
-      │
-      ▼
-Deterministic Context
-      │
-      ├──────────────┐
-      ▼              ▼
-Knowledge        Specialist
-Context            Agents
-      │              │
-      └──────┬───────┘
-             ▼
-          Synthesis
-             │
-             ▼
-        LLM Reasoning
-             │
-             ▼
-       Risk Validation
-             │
-             ▼
-          Decision
-             │
-             ▼
-        Persistence
-```
+### Investment Committee / Analyst LLM
+Provides reasoning, synthesis, contradiction analysis and qualitative judgment only after deterministic evidence has been prepared.
 
-The implemented workflow includes retrieval, deterministic context preparation, knowledge context, specialist analysis, synthesis/reasoning, validation and optional persistence.
+### Risk Validation
+Checks decision consistency against hard risk rules, portfolio constraints and strategy policy before a decision is persisted.
 
-## 5. Deterministic engines
+### Decision / Memory
+Every decision must be structured and auditable and may include action, confidence, thesis, evidence, risks, opportunity cost, invalidation conditions, timestamp, model, prompt version and cost metadata.
 
-Deterministic engines remain the numerical source of truth.
+## 4. LangGraph approved flow
 
-### Quantitative analysis
+`load_snapshot → validate_data → compute_quant → value_stock → analyze_options → load_portfolio → rank_opportunities → retrieve_memory → llm_gate → investment_committee → risk_validation → persist_decision → update_memory`
 
-Computes indicators, statistics, liquidity filters, scoring and risk metrics.
+Nodes may be deterministic, retrieval-based or LLM-based. The LLM Gate controls expensive reasoning stages.
 
-### Valuation
+## 5. Investment decision space
 
-Produces valuation scenarios and ranges rather than treating a single fair value as ground truth.
+The system must support at minimum:
 
-### Options
+- BUY / ACCUMULATE
+- HOLD
+- WAIT
+- SELL PUT
+- SELL COVERED CALL
+- REDUCE
+- SELL
+- AVOID
 
-Evaluates PUT and covered CALL opportunities using strike, premium, effective acquisition/exercise economics, liquidity, IV, Greeks, event risk and portfolio context.
+For options, the decision unit is instrument + underlying + position/context + strike + expiration + premium + relevant option metrics.
 
-### Portfolio intelligence
+## 6. Change control
 
-Combines holdings, average cost, weights, cash, option obligations, assignment capital and portfolio-level risk.
+Every change is classified:
 
-## 6. Knowledge Context
+- **C1 — Correction:** typo, documentation or non-functional correction.
+- **C2 — Implementation:** implementation of already-approved design.
+- **C3 — Configuration:** model, threshold, parameter or environment configuration.
+- **C4 — Internal component:** change inside a component without changing its public responsibility.
+- **C5 — Interface:** change to a contract, schema or dependency between components.
+- **C6 — Flow/LangGraph:** change to orchestration, state or node sequencing.
+- **C7 — Architecture:** change to component boundaries, responsibilities, data flow or fundamental design principles.
 
-Knowledge is treated as a first-class architectural layer.
+### Mandatory impact review
 
-The target context model combines:
+Before implementing C4–C7 changes, answer:
 
-```text
-Structured Facts
-      +
-Semantic Evidence
-      +
-Relationships
-      +
-Prior Decisions / Memory
-      +
-Point-in-Time Metadata
-      │
-      ▼
-Knowledge Context
-```
-
-The design goal is to give agents the **right context**, not the maximum amount of context.
-
-Key requirements:
-
-- provenance;
-- temporal validity;
-- source attribution;
-- relevance;
-- confidence;
-- lifecycle/version metadata;
-- controlled context size.
-
-## 7. Agentic AI
-
-The project explores reusable agent patterns rather than a single monolithic prompt.
-
-Agents may specialize in:
-
-- market analysis;
-- portfolio analysis;
-- options analysis;
-- synthesis;
-- risk-oriented validation.
-
-The orchestrator determines when components execute and what context they receive.
-
-The LLM is used for reasoning, synthesis and qualitative interpretation after deterministic evidence is prepared.
-
-## 8. MCP boundary
-
-MCP provides a controlled interface for exposing selected application capabilities to external agents.
-
-Current principles:
-
-- read-only boundary;
-- explicit contracts;
-- no fabricated portfolio data;
-- no broker execution;
-- deterministic calculations remain in the B3 domain layer;
-- invalid or missing source data fails explicitly.
-
-## 9. Risk, governance and auditability
-
-Risk validation occurs after reasoning and before a decision is persisted.
-
-A structured decision should be traceable to:
-
-- source data;
-- retrieved knowledge/context;
-- deterministic calculations;
-- strategy/policy context;
-- reasoning/model metadata;
-- validation results;
-- timestamp;
-- applicable prompt/version metadata where relevant.
-
-The architecture explicitly avoids autonomous execution in the initial scope.
-
-## 10. Data and privacy
-
-No API credentials belong in the repository.
-
-Personal portfolio/account information remains local and outside the public repository.
-
-Historical analysis must respect point-in-time correctness and avoid look-ahead bias.
-
-## 11. Change control
-
-Changes are classified as:
-
-- **C1 — Correction**
-- **C2 — Implementation**
-- **C3 — Configuration**
-- **C4 — Internal component**
-- **C5 — Interface**
-- **C6 — Flow/LangGraph**
-- **C7 — Architecture**
+1. Does component responsibility change?
+2. Does LangGraph flow/state change?
+3. Does any interface or schema change?
+4. Is a new data source introduced?
+5. Is a new LLM call introduced?
+6. Can look-ahead bias or data leakage be introduced?
+7. Can an investment decision regress?
 
 C7 changes require an ADR. C5/C6 changes require explicit interface/flow review. Decision-changing changes require regression tests and golden cases.
 
-Before C4–C7 changes, review:
-
-1. component responsibility;
-2. LangGraph flow/state;
-3. interfaces/schemas;
-4. data sources;
-5. LLM calls;
-6. look-ahead/data leakage risk;
-7. decision regression risk.
-
-## 12. Engineering rules
+## 7. Non-negotiable engineering rules
 
 1. No LLM for deterministic mathematics when reliable code can perform it.
 2. No whole-Obsidian-vault prompt by default.
 3. No live execution in the initial implementation.
 4. No historical backtest using future information.
-5. No hidden architecture changes inside implementation work.
-6. Prompts are versioned because prompts are part of system behavior.
-7. Model changes require benchmark validation.
-8. Investment-policy changes must be traceable and reviewable.
-9. Every material phase follows **Implement → Test → Validate → Freeze → Next phase**.
-10. Experimental capabilities must be clearly separated from production-ready capabilities.
+5. No architecture changes hidden inside implementation work.
+6. Prompts are versioned because prompts are part of the system behavior.
+7. Model changes are configuration changes but require benchmark validation.
+8. Investment-policy changes in Obsidian must be traceable and reviewable.
+9. Every phase ends with **Implement → Test → Validate → Freeze → Next phase**.
+10. Ideas for later phases are recorded but not implemented early.
 
-## 13. Next architectural evolution
+## 8. Roadmap baseline
 
-The next MVP evolution should focus on:
+0. BASELINE
+1. ENVIRONMENT
+2. DATA
+3. QUANT
+4. VALUATION
+5. OPTIONS
+6. PORTFOLIO
+7. OPPORTUNITY RANKER
+8. OBSIDIAN/RAG
+9. LLM GATE
+10. INVESTMENT COMMITTEE
+11. RISK
+12. DECISION
+13. MEMORY
+14. BACKTEST
+15. WALK-FORWARD
+16. PAPER
+17. LIVE COPILOT
+18. EXECUTION — FUTURE
 
-1. completing the end-to-end dashboard experience;
-2. integrating Qdrant retrieval into the Knowledge Context path;
-3. implementing and evaluating production embedding/retrieval strategies;
-4. adding a concrete Neo4j adapter when the graph use cases justify persistence;
-5. strengthening agent evaluation and feedback loops;
-6. adding end-to-end observability;
-7. measuring context quality, reuse, latency, cost and decision traceability.
-
-The architecture should evolve through measured use cases rather than adding infrastructure without a demonstrated need.
+The order is normative unless changed through governance.

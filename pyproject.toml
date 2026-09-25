@@ -14,10 +14,12 @@ authors = [
 ]
 dependencies = [
     "openpyxl>=3.1,<4",
+    "pypdf>=6,<7",
     "pyarrow>=22,<26",
     "mcp>=1.28,<2",
     "pandas>=2.2,<3",
     "streamlit>=1.40,<2",
+    "plotly>=6,<7",
     "langgraph>=0.6,<2",
     "openai>=2,<3",
     "fastapi>=0.115,<1",
@@ -40,3 +42,7 @@ where = ["src"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = "-q"
+
+[project.scripts]
+b3-runtime = "b3_agent.runtime.cli:main"
+

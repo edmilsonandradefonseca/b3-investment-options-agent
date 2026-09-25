@@ -131,7 +131,26 @@ The repository currently contains dedicated components for:
 
 The project has progressed beyond the initial governance baseline and now includes implemented data, quantitative, valuation, options and portfolio capabilities, together with automated tests, CI and architecture governance.
 
-The next evolution is focused on completing the end-to-end MVP experience, including the knowledge/context layer, agent orchestration and executive dashboards, followed by systematic evaluation.
+### Current Dashboard phase
+
+Dashboard development is active on `feature/mcp-mvp`.
+
+Current state:
+- Portfolio: implemented; automated E2E and manual validation completed.
+- Options Intelligence: implemented; automated E2E and manual validation completed.
+- Portfolio Intelligence: implemented; automated E2E and manual validation completed.
+- Opportunities: placeholder.
+- Copilot: implemented; Golden Cases C01–C08 are exposed and covered by automated UI/contract tests.
+- Portfolio and options Excel ingestion: validated snapshot workflows.
+- Brokerage-note PDF ingestion: implemented with parser, SQLite option ledger, source manifest and idempotent persistence.
+- Reconciliation engine: available in backend; dedicated Dashboard UI is not yet implemented.
+- Knowledge/RAG/Knowledge Graph: architectural direction/backend indicators; not yet a complete Dashboard experience.
+
+The current Dashboard + Copilot Gate is green on commit `8634847` (CI #606 and Dashboard Gate #91).
+
+See `docs/dashboard/` for the canonical Dashboard documentation, including architecture, use cases, testing and operations.
+
+The next evolution is intentionally incremental: reconcile brokerage ledger data with the existing options snapshot without double counting, then implement the missing Dashboard modules and real workflow validation.
 
 ## Repository structure
 

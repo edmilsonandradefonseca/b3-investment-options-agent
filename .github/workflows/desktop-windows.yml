@@ -1,0 +1,107 @@
+name: Desktop Windows Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/mcp-mvp
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install backend package and PyInstaller
+        working-directory: .
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install . pyinstaller
+          pyinstaller --onefile --name orchestrator --paths src src/b3_agent/desktop_server.py
+          New-Item -ItemType Directory -Force -Path frontend/src-tauri/binaries | Out-Null
+          Copy-Item dist/orchestrator.exe frontend/src-tauri/binaries/orchestrator-x86_64-pc-windows-msvc.exe
+
+      - name: Smoke test bundled orchestrator
+        working-directory: .
+        shell: pwsh
+        run: |
+          $dataDir = Join-Path $env:RUNNER_TEMP "b3-agent-data"
+          $logsDir = Join-Path $env:RUNNER_TEMP "b3-agent-logs"
+          $stdout = Join-Path $env:RUNNER_TEMP "orchestrator.stdout.log"
+          $stderr = Join-Path $env:RUNNER_TEMP "orchestrator.stderr.log"
+          New-Item -ItemType Directory -Force -Path $dataDir, $logsDir | Out-Null
+
+          $env:B3_AGENT_ENV = "desktop-smoke"
+          $env:B3_AGENT_DATA_DIR = $dataDir
+          $env:B3_AGENT_LOGS_DIR = $logsDir
+          $env:B3_AGENT_LLM_ENABLED = "false"
+          $env:B3_AGENT_HOST = "127.0.0.1"
+          $env:B3_AGENT_PORT = "8000"
+          $env:B3_AGENT_LOG_LEVEL = "info"
+
+          $process = Start-Process -FilePath "dist\orchestrator.exe" -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+          try {
+            $healthy = $false
+            for ($i = 0; $i -lt 30; $i++) {
+              Start-Sleep -Seconds 1
+              if ($process.HasExited) {
+                $stdoutText = if (Test-Path $stdout) { Get-Content $stdout -Raw } else { "" }
+                $stderrText = if (Test-Path $stderr) { Get-Content $stderr -Raw } else { "" }
+                throw "orchestrator.exe exited before /health became available (exit code $($process.ExitCode)). STDOUT: $stdoutText STDERR: $stderrText"
+              }
+              try {
+                $response = Invoke-RestMethod "http://127.0.0.1:8000/health" -TimeoutSec 2
+                if ($response.status -eq "ok" -and $response.service -eq "b3-orchestrator-server") {
+                  $healthy = $true
+                  break
+                }
+              } catch {}
+            }
+
+            if (-not $healthy) {
+              $stdoutText = if (Test-Path $stdout) { Get-Content $stdout -Raw } else { "" }
+              $stderrText = if (Test-Path $stderr) { Get-Content $stderr -Raw } else { "" }
+              throw "orchestrator.exe did not become healthy within 30 seconds. STDOUT: $stdoutText STDERR: $stderrText"
+            }
+          } finally {
+            if (-not $process.HasExited) {
+              Stop-Process -Id $process.Id -Force
+            }
+            Wait-Process -Id $process.Id -Timeout 10 -ErrorAction SilentlyContinue
+          }
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Generate Tauri application icons
+        run: npm run tauri -- icon src-tauri/icons/icon.svg
+
+      - name: Build Tauri Windows bundle
+        run: npm run tauri -- build
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: b3-investment-copilot-windows
+          path: frontend/src-tauri/target/release/bundle/nsis/*.exe
+          if-no-files-found: error

@@ -31,10 +31,17 @@ class B3State(TypedDict, total=False):
     user_question: str
     ticker: str | None
     request: str
+    client: str
+    surface: str
+    use_case_id: str
     as_of: AS_OF
     deterministic_context: dict[str, Any]
     portfolio_context: Any
+    portfolio_intelligence: Any
     options_transactions: list[dict[str, Any]]
+    options_performance: dict[str, Any]
+    options_reconciliation: dict[str, Any] | None
+    dashboard_snapshot: dict[str, Any]
     opportunity_set: Any
     knowledge_context: dict[str, Any]
     memory_context: list[dict[str, Any]]

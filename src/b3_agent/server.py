@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 from functools import lru_cache
+import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -11,13 +13,32 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
 
+from b3_agent.runtime.manager import RuntimeManager
 from b3_agent.config import settings
 from b3_agent.options.transactions import OptionsTransactionLoader
+from b3_agent.options.brokerage_notes import BrokerageNoteIngestionError, BrokerageNoteParser
 from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
 from b3_agent.repositories.transaction import TransactionRepository
+from b3_agent.repositories.option_ledger import OptionTransactionLedger
+from b3_agent.repositories.source_manifest import SourceManifestRecord, SourceManifestRepository
 from b3_agent.schemas.transaction import Transaction
 from b3_agent.storage.sqlite import SQLiteStore
-from b3_agent.orchestration import OrchestratorRequest, OrchestratorResponse, b3_orchestrator, configure_default_workflow
+from b3_agent.orchestration import OrchestratorRequest, OrchestratorResponse, b3_orchestrator, configure_default_workflow, configure_dashboard_workflow
+from b3_agent.knowledge.context import KnowledgeContextBuilder
+from b3_agent.knowledge.in_memory_graph import InMemoryKnowledgeGraphStore
+from b3_agent.knowledge.indexer import KnowledgeIndexer
+from b3_agent.knowledge.obsidian import ObsidianKnowledgeStore
+from b3_agent.knowledge.retrieval import ObsidianRetriever
+
+
+class KnowledgeQueryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    query: str = Field(min_length=1)
+    as_of: datetime | None = None
+    rag_top_k: int = Field(default=5, ge=1, le=20)
+    graph_top_k: int = Field(default=20, ge=1, le=100)
+    neighbor_depth: int = Field(default=1, ge=0, le=2)
 
 
 class OrchestrateRequest(BaseModel):
@@ -77,6 +98,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
+        "http://127.0.0.1:5173",
         "http://tauri.localhost",
         "tauri://localhost",
     ],
@@ -87,9 +109,12 @@ app.add_middleware(
 
 
 @lru_cache(maxsize=1)
-def _configure_runtime() -> None:
-    """Compose the production workflow once, on first orchestration request."""
-    configure_default_workflow()
+def _configure_runtime(*, dashboard: bool = False) -> None:
+    """Compose the workflow required by the request type."""
+    if dashboard:
+        configure_dashboard_workflow()
+    else:
+        configure_default_workflow()
 
 
 def _transaction_repository() -> TransactionRepository:
@@ -130,6 +155,8 @@ def add_transaction(request: TransactionRequest) -> TransactionResponse:
         )
         return _transaction_response(_transaction_repository().add(transaction))
     except ValueError as exc:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -209,6 +236,90 @@ def import_options(file: UploadFile = File(...)) -> dict[str, Any]:
     return result
 
 
+def _store_brokerage_note(upload: UploadFile) -> dict[str, Any]:
+    """Validate and stage a brokerage-note PDF behind the orchestrator boundary."""
+    if not upload.filename or not upload.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="nota de corretagem deve ser PDF (.pdf)")
+
+    notes_dir = _import_dir() / "brokerage_notes"
+    notes_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = Path(upload.filename).name
+    target = notes_dir / safe_name
+    temp_path: Path | None = None
+    try:
+        with NamedTemporaryFile(
+            prefix=f".{safe_name}.",
+            suffix=".pdf",
+            dir=notes_dir,
+            delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            while True:
+                chunk = upload.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                handle.write(chunk)
+
+        if temp_path.stat().st_size < 5:
+            raise ValueError("PDF vazio ou inválido")
+
+        parser = BrokerageNoteParser()
+        transactions = parser.parse(temp_path)
+
+        target_bytes = temp_path.read_bytes()
+        source_fingerprint = hashlib.sha256(target_bytes).hexdigest()
+        temp_path.replace(target)
+
+        ledger = OptionTransactionLedger(_import_dir().parent / "options.sqlite3")
+        inserted_count = ledger.append(transactions)
+
+        note_number = transactions[0].note_number
+        source_ref = transactions[0].source_ref.split(f":{safe_name}")[0]
+        trade_dates = [item.as_of for item in transactions if item.as_of is not None]
+        coverage_start = min(trade_dates) if trade_dates else None
+        coverage_end = max(trade_dates) if trade_dates else None
+        SourceManifestRepository(_import_dir().parent / "source_manifest.sqlite3").upsert(
+            SourceManifestRecord(
+                source_fingerprint=source_fingerprint,
+                source_type="BROKERAGE_NOTE",
+                source_id=note_number or source_fingerprint,
+                source_ref=source_ref,
+                file_name=safe_name,
+                imported_at=datetime.now(timezone.utc),
+                record_count=len(transactions),
+                coverage_start=coverage_start,
+                coverage_end=coverage_end,
+                scope="PERIOD_ONLY",
+                completeness="UNKNOWN",
+            )
+        )
+
+        return {
+            "status": "processed",
+            "file": upload.filename,
+            "active_file": str(target),
+            "note_number": note_number,
+            "trade_date": coverage_start.isoformat() if coverage_start == coverage_end and coverage_start else None,
+            "parsed_count": len(transactions),
+            "inserted_count": inserted_count,
+            "transaction_ids": [item.transaction_id for item in transactions],
+            "message": "nota de corretagem processada e registrada no ledger",
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"nota de corretagem inválida: {exc}") from exc
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink(missing_ok=True)
+
+
+@app.post("/imports/brokerage-notes")
+def import_brokerage_note(file: UploadFile = File(...)) -> dict[str, Any]:
+    """Stage a brokerage-note PDF without bypassing the orchestrator boundary."""
+    return _store_brokerage_note(file)
+
+
 def _response_to_model(response: OrchestratorResponse) -> OrchestrateResponse:
     return OrchestrateResponse(
         status=response.status,
@@ -217,6 +328,23 @@ def _response_to_model(response: OrchestratorResponse) -> OrchestrateResponse:
         audit=list(response.audit),
         error=response.error,
     )
+
+
+@app.get("/runtime/status")
+def runtime_status() -> dict:
+    runtime_root = Path(
+        os.getenv("B3_RUNTIME_ROOT", "/opt/b3-runtime")
+    ).expanduser()
+
+    manager = RuntimeManager(runtime_root)
+    status = manager.status()
+
+    return {
+        "runtime": status["runtime"],
+        "resources": status["resources"],
+        "services": status["services"],
+        "process": status["process"],
+    }
 
 
 @app.get("/health")
@@ -236,6 +364,44 @@ def version() -> dict[str, str]:
     return {"service": "b3-orchestrator-server", "version": app.version}
 
 
+
+
+def _knowledge_query(request: KnowledgeQueryRequest) -> dict[str, Any]:
+    """Run bounded, deterministic Obsidian + KG retrieval for the Knowledge UI."""
+    if settings.obsidian_vault is None:
+        raise HTTPException(status_code=503, detail="B3_AGENT_OBSIDIAN_VAULT is not configured")
+    vault = ObsidianKnowledgeStore(settings.obsidian_vault)
+    graph = InMemoryKnowledgeGraphStore()
+    index_result = KnowledgeIndexer(vault, graph).index_all()
+    context = KnowledgeContextBuilder(ObsidianRetriever(vault), graph).build(
+        request.query,
+        rag_top_k=request.rag_top_k,
+        graph_top_k=request.graph_top_k,
+        neighbor_depth=request.neighbor_depth,
+        as_of=request.as_of,
+    )
+    payload = context.as_dict()
+    payload["metadata"] = {
+        **payload.get("metadata", {}),
+        "notes_scanned": index_result.notes_scanned,
+        "notes_changed": index_result.notes_changed,
+        "notes_unchanged": index_result.notes_unchanged,
+        "entities_indexed": index_result.entities_indexed,
+        "relations_indexed": index_result.relations_indexed,
+    }
+    return payload
+
+
+@app.post("/knowledge/query")
+def query_knowledge(request: KnowledgeQueryRequest) -> dict[str, Any]:
+    """Return bounded knowledge evidence and graph context without LLM reasoning."""
+    try:
+        return _knowledge_query(request)
+    except HTTPException:
+        raise
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
 @app.post("/orchestrate", response_model=OrchestrateResponse)
 def orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
     """Translate HTTP input to the transport-agnostic ``b3_orchestrator`` contract."""
@@ -245,7 +411,11 @@ def orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
             ticker=request.ticker,
             context=request.context,
         )
-        _configure_runtime()
+        dashboard_view = bool(normalized.context.get("dashboard_view"))
+        if dashboard_view:
+            _configure_runtime(dashboard=True)
+        else:
+            _configure_runtime()
         response = b3_orchestrator(
             task=normalized.task,
             ticker=normalized.ticker,

@@ -6,6 +6,7 @@ from typing import Any
 from b3_agent.opportunity_pipeline import OpportunityPipeline, StockOpportunityInput
 from b3_agent.options.analysis import OptionsAnalysis
 from b3_agent.schemas.opportunity import OpportunitySet
+from b3_agent.schemas.position import PortfolioContext
 
 AS_OF = date | datetime
 
@@ -16,6 +17,7 @@ def build_opportunity_set(
     pipeline: OpportunityPipeline | None = None,
     stock_inputs: tuple[StockOpportunityInput, ...] = (),
     options_analyses: tuple[OptionsAnalysis, ...] = (),
+    portfolio_context: PortfolioContext | None = None,
     portfolio_fit: dict[str, str] | None = None,
     risk: dict[str, str] | None = None,
     valuation: dict[str, str] | None = None,
@@ -23,14 +25,14 @@ def build_opportunity_set(
     diversification: dict[str, str] | None = None,
     relative_assessment: dict[str, str] | None = None,
     source_refs: tuple[str, ...] = (),
+    available_capital: float | None = None,
 ) -> OpportunitySet:
-    """Build the deterministic OpportunitySet consumed by the V3.1 graph.
-
-    Provider adapters are intentionally absent here: BRAPI/OpLab outputs must
-    first pass their adapters and point-in-time validation, then arrive as typed
-    analytical inputs. This function only composes deterministic producers.
-    """
     producer = pipeline or OpportunityPipeline()
+    effective_capital = (
+        available_capital
+        if available_capital is not None
+        else portfolio_context.cash if portfolio_context is not None else None
+    )
     return producer.build_from_inputs(
         as_of=as_of,
         stock_inputs=stock_inputs,
@@ -42,9 +44,9 @@ def build_opportunity_set(
         diversification=diversification,
         relative_assessment=relative_assessment,
         source_refs=source_refs,
+        available_capital=effective_capital,
     )
 
 
 def opportunity_set_state(opportunity_set: OpportunitySet) -> dict[str, Any]:
-    """Return the minimal V3.1 state payload for deterministic opportunities."""
     return {"opportunity_set": opportunity_set}

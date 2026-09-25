@@ -27,6 +27,12 @@
     }
   },
   "bundle": {
-    "active": false
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "externalBin": [
+      "binaries/orchestrator"
+    ]
   }
 }

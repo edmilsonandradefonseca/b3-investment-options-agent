@@ -99,3 +99,84 @@ def test_replace_validated_upload_preserves_excel_extension(monkeypatch, tmp_pat
     assert seen == {"suffix": ".xlsx", "content": "excel-bytes"}
     assert result["status"] == "replaced"
     assert (tmp_path / "portfolio.xlsx").read_bytes() == b"excel-bytes"
+
+
+def test_memory_write_delegates_to_mcp(monkeypatch) -> None:
+    calls: dict[str, object] = {}
+
+    def fake_write(*, path: str, content: str) -> dict[str, str]:
+        calls["args"] = {"path": path, "content": content}
+        return {"status": "written", "path": path}
+
+    monkeypatch.setattr(server, "mcp_write_memory", fake_write)
+
+    response = client.post(
+        "/memory/write",
+        json={"path": "00_System/CHATGPT_MEMORY_TEST.md", "content": "# Test\n\nhello"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "written",
+        "path": "00_System/CHATGPT_MEMORY_TEST.md",
+    }
+    assert calls["args"] == {
+        "path": "00_System/CHATGPT_MEMORY_TEST.md",
+        "content": "# Test\n\nhello",
+    }
+
+
+def test_memory_search_delegates_to_mcp(monkeypatch) -> None:
+    monkeypatch.setattr(
+        server,
+        "mcp_search_memory",
+        lambda *, query: {"query": query, "matches": ["00_System/CHATGPT_MEMORY_TEST.md"]},
+    )
+
+    response = client.post("/memory/search", json={"query": "CHATGPT_MEMORY_TEST"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "query": "CHATGPT_MEMORY_TEST",
+        "matches": ["00_System/CHATGPT_MEMORY_TEST.md"],
+    }
+
+
+def test_memory_read_delegates_to_mcp(monkeypatch) -> None:
+    monkeypatch.setattr(
+        server,
+        "mcp_read_memory",
+        lambda *, path: {"path": path, "content": "# Test\n\nhello"},
+    )
+
+    response = client.post(
+        "/memory/read",
+        json={"path": "00_System/CHATGPT_MEMORY_TEST.md"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "path": "00_System/CHATGPT_MEMORY_TEST.md",
+        "content": "# Test\n\nhello",
+    }
+
+
+def test_memory_write_rejects_unknown_fields() -> None:
+    response = client.post(
+        "/memory/write",
+        json={"path": "test.md", "content": "hello", "unknown": True},
+    )
+
+    assert response.status_code == 422
+
+
+def test_memory_search_rejects_empty_query() -> None:
+    response = client.post("/memory/search", json={"query": ""})
+
+    assert response.status_code == 422
+
+
+def test_memory_read_rejects_empty_path() -> None:
+    response = client.post("/memory/read", json={"path": ""})
+
+    assert response.status_code == 422
