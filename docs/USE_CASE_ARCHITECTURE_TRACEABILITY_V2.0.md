@@ -928,7 +928,7 @@ The use cases imply the following missing or expanded services.
 | Qdrant semantic retrieval | retrieve semantic evidence | **EXISTS/PARTIAL** |
 | Knowledge Context Builder | bounded RAG + KG + deterministic context | **EXISTS** |
 | Persistent Neo4j adapter | durable relationship memory | **MISSING** |
-| Obsidian human-readable memory | rationale / knowledge | **EXISTS/PARTIAL** |
+| Human-readable presentation | generated from canonical memory via Dashboard/Copilot | **PARTIAL** |
 
 ---
 
@@ -986,7 +986,7 @@ Learning Memory Bridge
       ├── SQLite/Parquet
       ├── Qdrant
       ├── Neo4j
-      └── Obsidian when human-readable persistence is warranted
+      └── Dashboard/Copilot projection when human-readable presentation is warranted
 ```
 
 Learning should not depend on a user asking a new question.
@@ -1041,17 +1041,13 @@ and relations equivalent to:
 
 Exact names are contract-design decisions.
 
-## Obsidian
+## Human-readable presentation
 
-Remains the human-readable durable layer for:
+Obsidian is removed from the target V4.0 runtime architecture.
 
-- important learnings;
-- decisions;
-- theses;
-- rationale;
-- research summaries.
+Human-readable learnings, decisions, theses, rationale and research summaries are generated from canonical structured memory plus Qdrant/Neo4j context and presented through Dashboard/Copilot surfaces.
 
-Not every raw operation or numerical feature should become an Obsidian note.
+Project documentation remains in Git/GitHub. Existing Obsidian integration is legacy compatibility and is not a dependency for new learning workflows.
 
 ---
 
@@ -1160,7 +1156,7 @@ Before drafting the new Architecture document, freeze the following conceptual c
 5. `Learning`
 6. `LearningLifecycle`
 7. `ExperienceRetrievalResult`
-8. roles of SQLite/Parquet, Qdrant, Neo4j and Obsidian
+8. roles of SQLite/Parquet, Qdrant and Neo4j
 9. PRE-ANALYSIS retrieval hook
 10. POST-OUTCOME learning hook
 
