@@ -66,9 +66,13 @@ class ExperienceRanker:
         semantic_by_reference: dict[str, float] = {}
         semantic_sources: dict[str, str] = {}
         for result in semantic_results:
+            extra = result.metadata.get("extra")
+            extra = extra if isinstance(extra, dict) else {}
             reference = str(
                 result.metadata.get("canonical_id")
                 or result.metadata.get("learning_id")
+                or extra.get("canonical_id")
+                or extra.get("learning_id")
                 or result.evidence_id
             )
             semantic_by_reference[reference] = max(
