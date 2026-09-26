@@ -2,10 +2,10 @@
 # Use Case → Architecture Traceability Matrix V2.0
 
 **Version:** 2.0  
-**Status:** ARCHITECTURE GATE — DRAFT FOR REVIEW  
+**Status:** ARCHITECTURE GATE — PASSED / CLOSED  
 **Date:** 2026-09-26  
 **Functional baseline:** `docs/USE_CASES_INVESTMENT_OPTIONS_V2.0.md`  
-**Current architecture baseline:** V3.1  
+**Current architecture baseline:** V4.0 — APPROVED / FROZEN  
 **Purpose:** map the 12 approved use cases to current capabilities and identify the minimum architectural evolution required before defining the next architecture version.
 
 ---
@@ -1184,4 +1184,4 @@ After these concepts are approved, produce the C7 ADR and the next architecture 
 **Rewrite required:** NO  
 **C7 review required:** YES  
 
-**NEXT:** review and approve the canonical learning-domain concepts before drafting the new architecture revision.
+**RESULT:** Architecture V4.0 passed the final UC-01…UC-12 review and is APPROVED / FROZEN. Next work is contract-first implementation according to the V3.1 → V4.0 migration plan.
