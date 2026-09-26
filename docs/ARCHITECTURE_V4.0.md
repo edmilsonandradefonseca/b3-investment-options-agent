@@ -713,6 +713,17 @@ Authoritative for:
 
 ## 13.2 Qdrant — semantic memory
 
+V4.0 standardizes the semantic embedding architecture on:
+
+```text
+Model: sentence-transformers/paraphrase-multilingual-mpnet-base-v2
+Dimension: 768
+Target B3 collection: b3_memory_768
+Distance: cosine
+```
+
+This supersedes the earlier 384-dimensional embedding direction for the target V4.0 runtime.
+
 Optimized for semantic retrieval of:
 
 - learnings;
@@ -1171,7 +1182,7 @@ Human decision remains mandatory.
 | Opportunity pipeline | EXISTS |
 | Market Intelligence research | EXISTS |
 | PIT semantics | EXISTS |
-| Qdrant adapter | EXISTS |
+| Qdrant adapter | EXISTS; target V4 semantic runtime standardized on 768d |
 | RAG / Knowledge Context | EXISTS / PARTIAL |
 | KG contracts | EXISTS |
 | Neo4j persistent adapter | MISSING |
@@ -1297,7 +1308,7 @@ The following are frozen V4.0 invariants if this architecture is approved:
 6. Learning must preserve supporting and contradicting evidence.
 7. Learning confidence evolves over time.
 8. Recency and regime similarity are separate signals.
-9. Qdrant is semantic retrieval, not truth.
+9. Qdrant is semantic retrieval, not truth; V4.0 standardizes B3 semantic memory on 768-dimensional multilingual embeddings.
 10. Neo4j is relational memory, not workflow orchestration.
 11. SQLite/Parquet remain structured numerical truth.
 12. Human-readable knowledge is generated as a view from canonical runtime memory; Obsidian is not a required V4.0 backend.
