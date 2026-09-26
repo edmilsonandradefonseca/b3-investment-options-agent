@@ -49,8 +49,8 @@ V4.0 does not introduce autonomous trading.
 4. **Learning is explicit.**  
    A reusable Learning is a first-class domain object, not merely a note or LLM summary.
 
-5. **Memory is multi-modal.**  
-   Structured, semantic, relational and human-readable memories have distinct responsibilities.
+5. **Memory is hybrid and minimal.**  
+   Structured, semantic and relational memories have distinct responsibilities. V4.0 follows the João Resolve direction of using SQLite/Parquet + Qdrant + Neo4j as the runtime memory architecture; Obsidian is not part of the target runtime architecture.
 
 6. **Recency matters, but regime matters too.**  
    Newer evidence receives temporal relevance, while older evidence may regain relevance when similar market regimes recur.
@@ -117,11 +117,11 @@ The architecture is considered valid only if these use cases can be traced to ex
 Deterministic /        Domain Agents         Knowledge /
 Statistical Engines                         Experience
       │                     │                     │
-      │                     │          ┌──────────┼──────────┐
-      │                     │          ▼          ▼          ▼
-      │                     │       Qdrant      Neo4j     Obsidian
-      │                     │          │          │          │
-      └──────────────┬──────┴──────────┴──────────┴──────────┘
+      │                     │          ┌──────────┴──────────┐
+      │                     │          ▼                     ▼
+      │                     │       Qdrant                 Neo4j
+      │                     │          │                     │
+      └──────────────┬──────┴──────────┴─────────────────────┘
                      ▼
                  SYNTHESIS
                      │
@@ -694,7 +694,7 @@ Qdrant retrieves candidates; it does not determine truth or final relevance alon
 
 # 13. Knowledge and memory architecture
 
-V4.0 formalizes four complementary memories.
+V4.0 formalizes three complementary runtime memories.
 
 ## 13.1 SQLite / Parquet — structured memory
 
@@ -774,18 +774,15 @@ Relations should preserve provenance and temporal validity where applicable.
 
 The current backend-neutral graph contracts remain valid and gain a concrete Neo4j persistence adapter.
 
-## 13.4 Obsidian — human-readable knowledge
+## 13.4 Human-readable presentation is a view, not a memory backend
 
-Stores material:
+V4.0 removes Obsidian from the target runtime architecture.
 
-- learnings;
-- theses;
-- decisions;
-- rationale;
-- research summaries;
-- project/session knowledge.
+Human-readable learnings, theses, decisions, rationale and research summaries are rendered on demand by the Dashboard/Copilot from canonical structured data, semantic retrieval and graph context.
 
-Raw numerical snapshots should not be duplicated into Obsidian by default.
+Existing Obsidian integration is treated as legacy compatibility during migration and must not become a required persistence dependency for new V4.0 workflows.
+
+Project documentation remains in Git/GitHub and is separate from runtime investment memory.
 
 ---
 
@@ -814,7 +811,7 @@ KnowledgeContext V4
 
 The context must stay bounded.
 
-The entire Obsidian vault, entire vector collection or unrestricted graph must never be sent to an LLM.
+Entire vector collections, unrestricted graph neighborhoods or unbounded structured history must never be sent to an LLM.
 
 ---
 
@@ -1057,7 +1054,6 @@ LangGraph Runtime
 SQLite / Parquet
 Qdrant
 Neo4j
-Obsidian Bridge
 Dashboard
 Provider Adapters
 ```
@@ -1304,7 +1300,7 @@ The following are frozen V4.0 invariants if this architecture is approved:
 9. Qdrant is semantic retrieval, not truth.
 10. Neo4j is relational memory, not workflow orchestration.
 11. SQLite/Parquet remain structured numerical truth.
-12. Obsidian remains human-readable knowledge.
+12. Human-readable knowledge is generated as a view from canonical runtime memory; Obsidian is not a required V4.0 backend.
 13. PRE-ANALYSIS experience retrieval is mandatory where relevant.
 14. POST-OUTCOME learning is the canonical feedback path.
 15. Risk Validation remains downstream.
