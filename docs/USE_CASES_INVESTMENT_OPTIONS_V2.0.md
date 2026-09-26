@@ -574,7 +574,7 @@ The exact formula and weights are implementation/calibration decisions, not part
 
 # 6. Memory Requirements Derived from the Use Cases
 
-The use cases imply three complementary persistence domains.
+The use cases imply three complementary runtime persistence domains.
 
 ## Structured / analytical memory
 
@@ -639,22 +639,11 @@ Learning → supersedes → Learning
 
 Relationships must support temporal validity where relevant.
 
-## Human-readable knowledge
+## Human-readable presentation
 
-Target:
+Human-readable theses, decisions, learnings, rationale and research summaries are rendered by Dashboard/Copilot from the three canonical runtime memory domains.
 
-```text
-Obsidian
-```
-
-Stores important human-readable:
-
-- theses;
-- decisions;
-- learnings;
-- rationale;
-- research summaries;
-- architectural/session knowledge.
+Obsidian is not a required runtime memory backend in the V4.0 direction. Project architecture and session documentation remain in Git/GitHub.
 
 ---
 
