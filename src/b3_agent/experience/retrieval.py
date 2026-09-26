@@ -10,6 +10,8 @@ from b3_agent.schemas.experience import (
     ExperienceAssessment,
     ExperienceMatch,
     ExperienceRetrievalResult,
+    RetrievalTrace,
+    RetrievalTraceItem,
 )
 from b3_agent.schemas.feature_snapshot import FeatureSnapshot
 from b3_agent.schemas.learning import Learning, LearningStatus
@@ -65,7 +67,8 @@ class ExperienceRanker:
 
         semantic_by_reference: dict[str, float] = {}
         semantic_sources: dict[str, str] = {}
-        for result in semantic_results:
+        initial_rank_by_reference: dict[str, int] = {}
+        for semantic_rank, result in enumerate(semantic_results, start=1):
             extra = result.metadata.get("extra")
             extra = extra if isinstance(extra, dict) else {}
             reference = str(
@@ -80,6 +83,7 @@ class ExperienceRanker:
                 _clamp01(result.score),
             )
             semantic_sources[reference] = result.evidence_id
+            initial_rank_by_reference.setdefault(reference, semantic_rank)
 
         matches: list[ExperienceMatch] = []
         for experience in experiences:
@@ -122,6 +126,8 @@ class ExperienceRanker:
                     regime_score=regime_score,
                     temporal_score=temporal_score,
                     confidence_score=confidence_score,
+                    fusion_score=semantic_score if semantic_score > 0 else None,
+                    initial_rank=initial_rank_by_reference.get(experience.experience_id),
                 )
             )
 
@@ -134,11 +140,63 @@ class ExperienceRanker:
                     reference_type="LEARNING",
                     relevance_score=semantic_score,
                     semantic_score=semantic_score,
+                    fusion_score=semantic_score,
+                    initial_rank=initial_rank_by_reference.get(reference),
                 )
             )
 
         matches.sort(key=lambda item: (-item.relevance_score, item.reference_id))
-        selected = tuple(matches[:top_k])
+        reranked = tuple(
+            ExperienceMatch(
+                reference_id=item.reference_id,
+                reference_type=item.reference_type,
+                relevance_score=item.relevance_score,
+                semantic_score=item.semantic_score,
+                feature_similarity_score=item.feature_similarity_score,
+                regime_score=item.regime_score,
+                temporal_score=item.temporal_score,
+                confidence_score=item.confidence_score,
+                fusion_score=item.fusion_score,
+                initial_rank=item.initial_rank,
+                final_rank=rank,
+            )
+            for rank, item in enumerate(matches, start=1)
+        )
+        selected = reranked[:top_k]
+        trace_id = f"RTR-{current_snapshot.snapshot_id}-{current_regime.regime_id}"
+        trace = RetrievalTrace(
+            trace_id=trace_id,
+            candidate_count=len(reranked),
+            selected_count=len(selected),
+            retrieval_mode=(
+                "structured+hybrid-fusion"
+                if semantic_by_reference
+                else "structured-only"
+            ),
+            fusion_method="RRF" if semantic_by_reference else None,
+            ranker_version="experience-ranker-v2",
+            items=tuple(
+                RetrievalTraceItem(
+                    reference_id=item.reference_id,
+                    reference_type=item.reference_type,
+                    fusion_score=item.fusion_score,
+                    initial_rank=item.initial_rank,
+                    final_rank=item.final_rank,
+                    rerank_components=tuple(
+                        (name, value)
+                        for name, value in (
+                            ("semantic_or_fusion", item.semantic_score),
+                            ("feature", item.feature_similarity_score),
+                            ("regime", item.regime_score),
+                            ("temporal", item.temporal_score),
+                            ("confidence", item.confidence_score),
+                        )
+                        if value is not None
+                    ),
+                )
+                for item in selected
+            ),
+        )
 
         return ExperienceRetrievalResult(
             query_id=f"EXPQ-{current_snapshot.snapshot_id}-{current_regime.regime_id}",
@@ -153,9 +211,13 @@ class ExperienceRanker:
                 if match.reference_id in semantic_sources
             ),
             retrieval_metadata=(
-                ("ranker", "experience-ranker-v1"),
+                ("ranker", "experience-ranker-v2"),
                 ("half_life_days", str(self.policy.half_life_days)),
+                ("candidate_count", str(len(reranked))),
+                ("selected_count", str(len(selected))),
+                ("trace_id", trace_id),
             ),
+            trace=trace,
         )
 
 
