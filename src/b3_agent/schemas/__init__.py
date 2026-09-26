@@ -5,6 +5,7 @@ from .fundamental import StockFundamental
 from .corporate_action import CorporateAction
 from .option import OptionContract, OptionQuote
 from .macro import MacroObservation
+from .operation import Operation, OperationDirection, OperationStatus
 
 __all__ = [
     "DataRecord",
@@ -15,4 +16,7 @@ __all__ = [
     "OptionContract",
     "OptionQuote",
     "MacroObservation",
+    "Operation",
+    "OperationDirection",
+    "OperationStatus",
 ]
