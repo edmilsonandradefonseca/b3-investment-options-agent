@@ -6,7 +6,7 @@
 **Status:** APPROVED FUNCTIONAL BASELINE  
 **Date:** 2026-09-26  
 **Supersedes for forward design:** `USE_CASES_INVESTMENT_OPTIONS_V1.1.md`  
-**Architecture baseline:** V3.1 remains the current frozen implementation architecture until a new architecture revision is formally approved.
+**Architecture baseline:** Architecture V4.0 is the approved/frozen target architecture derived from this functional baseline.
 
 ---
 
@@ -800,4 +800,4 @@ The approved set is:
 
 # 12. Next Step
 
-Create the **Use Case → Architecture Traceability Matrix** and review every current B3 component against these twelve approved use cases before defining the next architecture version.
+Architecture V4.0 has completed the Use Case → Architecture Traceability Gate. The next step is contract-first implementation following the approved V4.0 migration plan.
