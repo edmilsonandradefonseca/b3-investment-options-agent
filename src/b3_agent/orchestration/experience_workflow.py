@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from collections.abc import Callable, Iterable
+from typing import TypedDict
+
+from langgraph.graph import END, START, StateGraph
 
 from b3_agent.experience import ExperienceAssessmentEngine, ExperienceEngine, ExperienceRanker
 from b3_agent.experience.events import OutcomeFinalized
@@ -164,3 +167,39 @@ class PostOutcomeLearningService:
             experience=experience,
             learning_update=update,
         )
+
+
+
+class PostOutcomeState(TypedDict, total=False):
+    event: OutcomeFinalized
+    operation: Operation
+    entry_snapshot: FeatureSnapshot
+    regime: MarketRegime
+    outcome: Outcome
+    exit_snapshot: FeatureSnapshot | None
+    result: PostOutcomeResult
+
+
+def build_post_outcome_workflow(service: PostOutcomeLearningService):
+    """Build the canonical asynchronous V4 POST-OUTCOME LangGraph."""
+
+    def learn_from_outcome(state: PostOutcomeState):
+        required = ("event", "operation", "entry_snapshot", "regime", "outcome")
+        missing = [name for name in required if name not in state]
+        if missing:
+            raise ValueError(f"post-outcome workflow missing: {missing}")
+        result = service.handle(
+            event=state["event"],
+            operation=state["operation"],
+            entry_snapshot=state["entry_snapshot"],
+            regime=state["regime"],
+            outcome=state["outcome"],
+            exit_snapshot=state.get("exit_snapshot"),
+        )
+        return {"result": result}
+
+    graph = StateGraph(PostOutcomeState)
+    graph.add_node("learn_from_outcome", learn_from_outcome)
+    graph.add_edge(START, "learn_from_outcome")
+    graph.add_edge("learn_from_outcome", END)
+    return graph.compile()
