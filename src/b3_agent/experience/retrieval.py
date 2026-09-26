@@ -26,7 +26,7 @@ class ExperienceRankingPolicy:
     regime_weight: float = 0.25
     temporal_weight: float = 0.15
     confidence_weight: float = 0.10
-    experience_half_life_days: float = 180.0
+    half_life_days: float = 180.0
     learning_half_life_days: tuple[tuple[LearningScope, float | None], ...] = (
         (LearningScope.PERSONAL_EXPERIENCE, 365.0),
         (LearningScope.MARKET_OBSERVATION, 90.0),
@@ -47,8 +47,8 @@ class ExperienceRankingPolicy:
             raise ValueError("ranking weights must be non-negative")
         if sum(weights) <= 0:
             raise ValueError("at least one ranking weight must be positive")
-        if self.experience_half_life_days <= 0:
-            raise ValueError("experience_half_life_days must be positive")
+        if self.half_life_days <= 0:
+            raise ValueError("half_life_days must be positive")
         seen_scopes: set[LearningScope] = set()
         for scope, half_life in self.learning_half_life_days:
             if scope in seen_scopes:
@@ -119,7 +119,7 @@ class ExperienceRanker:
             temporal_score = _temporal_score(
                 experience.outcome.finalized_at,
                 as_of=as_of,
-                half_life_days=self.policy.experience_half_life_days,
+                half_life_days=self.policy.half_life_days,
             )
             confidence_score = experience.market_regime.confidence or 0.0
             semantic_score = semantic_by_reference.get(experience.experience_id, 0.0)
@@ -274,7 +274,7 @@ class ExperienceRanker:
             ),
             retrieval_metadata=(
                 ("ranker", "experience-ranker-v2"),
-                ("experience_half_life_days", str(self.policy.experience_half_life_days)),
+                ("half_life_days", str(self.policy.half_life_days)),
                 ("learning_decay_policy", _learning_decay_policy_label(self.policy)),
                 ("candidate_count", str(len(reranked))),
                 ("selected_count", str(len(selected))),
