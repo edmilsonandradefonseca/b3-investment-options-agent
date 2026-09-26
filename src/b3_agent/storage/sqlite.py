@@ -62,6 +62,29 @@ CREATE INDEX IF NOT EXISTS idx_transactions_executed_at
 CREATE INDEX IF NOT EXISTS idx_transactions_ticker
     ON transactions(ticker);
 
+CREATE TABLE IF NOT EXISTS retrieval_traces (
+    trace_id TEXT PRIMARY KEY,
+    query_id TEXT NOT NULL,
+    as_of TEXT NOT NULL,
+    retrieval_mode TEXT NOT NULL,
+    fusion_method TEXT,
+    ranker_version TEXT NOT NULL,
+    candidate_count INTEGER NOT NULL,
+    selected_count INTEGER NOT NULL,
+    subject_ids_json TEXT NOT NULL,
+    current_snapshot_id TEXT,
+    current_regime_id TEXT,
+    retrieval_metadata_json TEXT NOT NULL,
+    trace_items_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_retrieval_traces_as_of
+    ON retrieval_traces(as_of);
+
+CREATE INDEX IF NOT EXISTS idx_retrieval_traces_query_id
+    ON retrieval_traces(query_id);
+
 CREATE TABLE IF NOT EXISTS dataset_references (
     dataset_id TEXT PRIMARY KEY,
     dataset_name TEXT NOT NULL UNIQUE,
