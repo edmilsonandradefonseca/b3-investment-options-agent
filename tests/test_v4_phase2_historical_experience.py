@@ -118,13 +118,13 @@ def test_operation_reconstruction_rejects_unsplit_position_flip():
 def test_feature_snapshot_builder_filters_unavailable_future_market_data():
     records = [
         market_record(day, 30.0 + day * 0.2)
-        for day in range(1, 31)
+        for day in range(1, 30)
     ]
-    records.append(market_record(31, 50.0, available_day=32))
+    records.append(market_record(30, 50.0, available_day=30))
 
     snapshot = FeatureSnapshotBuilder().build(
         subject_id="B3-PETR4",
-        as_of=ts(31, 21),
+        as_of=ts(30, 19),
         market_records=records,
         operation_id="OP-1",
         extra_features=(
@@ -139,10 +139,10 @@ def test_feature_snapshot_builder_filters_unavailable_future_market_data():
     )
 
     values = {feature.name: feature.value for feature in snapshot.features}
-    assert values["close"] == pytest.approx(36.0)
+    assert values["close"] == pytest.approx(35.8)
     assert "sma_20" in values
     assert values["foreign_flow_5d"] == 500.0
-    assert "PETR4:31" not in snapshot.source_refs
+    assert "PETR4:30" not in snapshot.source_refs
 
 
 def test_feature_snapshot_builder_rejects_future_extra_feature():
