@@ -36,6 +36,12 @@ class B3State(TypedDict, total=False):
     portfolio_context: Any
     options_transactions: list[dict[str, Any]]
     opportunity_set: Any
+    feature_snapshot: Any
+    market_regime: Any
+    historical_experiences: list[Any]
+    active_learnings: list[Any]
+    experience_retrieval: Any
+    experience_assessment: Any
     knowledge_context: dict[str, Any]
     memory_context: list[dict[str, Any]]
     rag_context: list[dict[str, Any]]
