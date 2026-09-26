@@ -468,3 +468,151 @@ def test_old_learning_can_remain_relevant_when_regime_matches():
     assert by_id[matching.learning_id].regime_score == 1.0
     assert by_id[mismatching.learning_id].regime_score == 0.0
     assert by_id[matching.learning_id].relevance_score > by_id[mismatching.learning_id].relevance_score
+
+
+def test_drift_reduces_relevance_without_rewriting_confidence():
+    current = snapshot("FS-CURRENT", 20, 40.0, 0.45)
+    current_regime = regime("REG-CURRENT", current)
+    as_of = BASE + timedelta(days=60)
+
+    active = learning(
+        "LRN-ACTIVE",
+        status=LearningStatus.ACTIVE,
+        last_confirmed_at=BASE + timedelta(days=50),
+    )
+    drifted = learning(
+        "LRN-DRIFT",
+        status=LearningStatus.DRIFT_DETECTED,
+        last_confirmed_at=BASE + timedelta(days=50),
+    )
+
+    result = ExperienceRanker().rank(
+        current_snapshot=current,
+        current_regime=current_regime,
+        as_of=as_of,
+        experiences=(),
+        semantic_results=(
+            _semantic_result_for_learning(active.learning_id, 0.8),
+            _semantic_result_for_learning(drifted.learning_id, 0.8),
+        ),
+        learnings=(active, drifted),
+        top_k=2,
+    )
+
+    by_id = {match.reference_id: match for match in result.matches}
+    assert by_id[active.learning_id].confidence_score == pytest.approx(0.70)
+    assert by_id[drifted.learning_id].confidence_score == pytest.approx(0.70)
+    assert by_id[drifted.learning_id].lifecycle_score < by_id[active.learning_id].lifecycle_score
+    assert by_id[drifted.learning_id].relevance_score < by_id[active.learning_id].relevance_score
+
+
+def test_contradictions_reduce_relevance_but_preserve_learning():
+    from b3_agent.schemas.learning import EvidenceDirection, LearningEvidenceLink
+
+    current = snapshot("FS-CURRENT", 20, 40.0, 0.45)
+    current_regime = regime("REG-CURRENT", current)
+    as_of = BASE + timedelta(days=60)
+
+    clean = learning(
+        "LRN-CLEAN",
+        last_confirmed_at=BASE + timedelta(days=50),
+    )
+    contradictory = Learning(
+        learning_id="LRN-CONTRADICTORY",
+        statement=clean.statement,
+        status=LearningStatus.ACTIVE,
+        learning_scope=LearningScope.PERSONAL_EXPERIENCE,
+        first_observed_at=clean.first_observed_at,
+        last_updated_at=clean.last_updated_at,
+        last_confirmed_at=clean.last_confirmed_at,
+        subject_ids=clean.subject_ids,
+        strategy_type=clean.strategy_type,
+        conditions=clean.conditions,
+        evidence_links=(
+            LearningEvidenceLink(
+                evidence_id="EV-SUPPORT",
+                direction=EvidenceDirection.SUPPORTS,
+                observed_at=BASE + timedelta(days=30),
+            ),
+            LearningEvidenceLink(
+                evidence_id="EV-CONTRA-1",
+                direction=EvidenceDirection.CONTRADICTS,
+                observed_at=BASE + timedelta(days=40),
+            ),
+            LearningEvidenceLink(
+                evidence_id="EV-CONTRA-2",
+                direction=EvidenceDirection.CONTRADICTS,
+                observed_at=BASE + timedelta(days=50),
+            ),
+        ),
+        sample_size=12,
+        confidence=0.70,
+        population_scope="user historical PETR4 short-put operations",
+        valid_from=BASE,
+    )
+
+    result = ExperienceRanker().rank(
+        current_snapshot=current,
+        current_regime=current_regime,
+        as_of=as_of,
+        experiences=(),
+        semantic_results=(
+            _semantic_result_for_learning(clean.learning_id, 0.8),
+            _semantic_result_for_learning(contradictory.learning_id, 0.8),
+        ),
+        learnings=(clean, contradictory),
+        top_k=2,
+    )
+
+    by_id = {match.reference_id: match for match in result.matches}
+    assert contradictory.learning_id in by_id
+    assert by_id[contradictory.learning_id].contradiction_score < 1.0
+    assert by_id[contradictory.learning_id].relevance_score < by_id[clean.learning_id].relevance_score
+
+
+def test_historical_usefulness_is_separate_and_opt_in_for_ranking():
+    current = snapshot("FS-CURRENT", 20, 40.0, 0.45)
+    current_regime = regime("REG-CURRENT", current)
+    as_of = BASE + timedelta(days=60)
+    a = learning("LRN-A", last_confirmed_at=BASE + timedelta(days=50))
+    b = learning("LRN-B", last_confirmed_at=BASE + timedelta(days=50))
+
+    neutral_policy = ExperienceRankingPolicy(historical_usefulness_weight=0.0)
+    neutral = ExperienceRanker(neutral_policy).rank(
+        current_snapshot=current,
+        current_regime=current_regime,
+        as_of=as_of,
+        experiences=(),
+        semantic_results=(
+            _semantic_result_for_learning(a.learning_id, 0.8),
+            _semantic_result_for_learning(b.learning_id, 0.8),
+        ),
+        learnings=(a, b),
+        historical_usefulness={a.learning_id: 0.1, b.learning_id: 0.9},
+        top_k=2,
+    )
+
+    weighted_policy = ExperienceRankingPolicy(historical_usefulness_weight=0.20)
+    weighted = ExperienceRanker(weighted_policy).rank(
+        current_snapshot=current,
+        current_regime=current_regime,
+        as_of=as_of,
+        experiences=(),
+        semantic_results=(
+            _semantic_result_for_learning(a.learning_id, 0.8),
+            _semantic_result_for_learning(b.learning_id, 0.8),
+        ),
+        learnings=(a, b),
+        historical_usefulness={a.learning_id: 0.1, b.learning_id: 0.9},
+        top_k=2,
+    )
+
+    neutral_by_id = {match.reference_id: match for match in neutral.matches}
+    weighted_by_id = {match.reference_id: match for match in weighted.matches}
+
+    assert neutral_by_id[a.learning_id].historical_usefulness_score == pytest.approx(0.1)
+    assert neutral_by_id[b.learning_id].historical_usefulness_score == pytest.approx(0.9)
+    assert neutral_by_id[a.learning_id].relevance_score == pytest.approx(
+        neutral_by_id[b.learning_id].relevance_score
+    )
+    assert weighted_by_id[b.learning_id].relevance_score > weighted_by_id[a.learning_id].relevance_score
