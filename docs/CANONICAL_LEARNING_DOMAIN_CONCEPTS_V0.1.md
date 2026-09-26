@@ -1,7 +1,7 @@
 # B3 Investment & Options Agent
 # Canonical Learning-Domain Concepts V0.1
 
-**Status:** PROPOSED FOR APPROVAL  
+**Status:** INCORPORATED INTO ARCHITECTURE V4.0 — REFERENCE  
 **Date:** 2026-09-26  
 **Purpose:** freeze the minimum conceptual contracts required by the approved Use Cases V2.0 before drafting the next architecture revision.  
 **Current architecture:** V3.1 remains frozen until explicitly superseded.
@@ -840,14 +840,14 @@ The following conceptual contracts are proposed for freeze before the C7 archite
 6. **LearningLifecycle**
 7. **ExperienceRetrievalResult**
 
-If approved, the next step is:
+These concepts are incorporated into the approved Architecture V4.0. The implementation sequence is:
 
 ```text
-Approved Concepts
+Architecture V4.0
       ↓
-C7 ADR — Continuous Learning & Experience Memory
+Contract implementation
       ↓
-B3 Architecture next revision
+Unit / integration / golden tests
       ↓
-Implementation dependency plan
+Incremental migration
 ```
