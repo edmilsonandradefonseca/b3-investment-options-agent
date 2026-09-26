@@ -175,7 +175,7 @@ def test_learning_semantic_index_requires_768d_and_uses_b3_collection():
 
     assert store.count() == 1
     assert len(results) == 1
-    assert results[0].metadata["canonical_id"] == "LRN-001"
+    assert results[0].metadata["extra"]["canonical_id"] == "LRN-001"
     assert results[0].metadata["topic"] == "learning"
 
 
