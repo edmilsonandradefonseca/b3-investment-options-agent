@@ -126,6 +126,17 @@ Authoritative structured/numerical storage for:
 
 ### Qdrant
 
+The target V4.0 semantic-memory standard is:
+
+```text
+Model: sentence-transformers/paraphrase-multilingual-mpnet-base-v2
+Dimension: 768
+B3 collection: b3_memory_768
+Distance: cosine
+```
+
+This replaces the previous 384-dimensional embedding direction for new V4.0 semantic-memory data.
+
 Semantic retrieval layer for:
 
 - learnings;
