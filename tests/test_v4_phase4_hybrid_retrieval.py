@@ -304,3 +304,28 @@ def test_qdrant_hybrid_search_combines_dense_and_sparse():
     assert len(results) == 2
     assert {item.evidence_id for item in results} == {"LEXICAL", "SEMANTIC"}
     assert results[0].score >= results[1].score
+
+
+def test_experience_ranker_emits_retrieval_trace():
+    current = snapshot("FS-CURRENT", 20, 40.0, 0.45)
+    current_regime = regime("REG-CURRENT", current)
+    items = (
+        experience(1, day=10, close=39.0, vol=0.44, trend="SIDEWAYS"),
+        experience(2, day=15, close=25.0, vol=0.15, trend="BEAR"),
+    )
+
+    result = ExperienceRanker().rank(
+        current_snapshot=current,
+        current_regime=current_regime,
+        as_of=BASE + timedelta(days=30),
+        experiences=items,
+        top_k=2,
+    )
+
+    assert result.trace is not None
+    assert result.trace.candidate_count == 2
+    assert result.trace.selected_count == 2
+    assert result.trace.ranker_version == "experience-ranker-v2"
+    assert [item.final_rank for item in result.matches] == [1, 2]
+    assert result.trace.items[0].rerank_components
+    assert dict(result.retrieval_metadata)["trace_id"] == result.trace.trace_id
