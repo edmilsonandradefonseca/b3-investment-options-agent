@@ -36,3 +36,6 @@ from .learning_semantic import (
     B3_SEMANTIC_MODEL,
     LearningSemanticIndex,
 )
+
+from .neo4j_store import Neo4jKnowledgeGraphStore
+from .projection import MemoryProjectionBridge, ProjectionStatus, SQLiteProjectionLedger
