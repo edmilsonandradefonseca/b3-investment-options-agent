@@ -102,6 +102,17 @@ It preserves evidence URLs/publication timing and distinguishes research from fi
 
 ## 3.4 Qdrant / RAG
 
+The target V4.0 semantic-memory standard is aligned with João Resolve:
+
+```text
+sentence-transformers/paraphrase-multilingual-mpnet-base-v2
+768 dimensions
+B3 collection: b3_memory_768
+cosine similarity
+```
+
+The earlier 384-dimensional direction is superseded for new V4.0 embeddings.
+
 `knowledge/qdrant_store.py` already provides a Qdrant adapter with:
 
 - cosine retrieval;
@@ -925,7 +936,7 @@ The use cases imply the following missing or expanded services.
 | Drift/Confidence Engine | aging, drift, confidence update | **MISSING** |
 | Experience Similarity Ranker | combine structured/semantic/regime/time relevance | **MISSING** |
 | Scenario/Stress Engine | quantitative what-if/stress | **MISSING** |
-| Qdrant semantic retrieval | retrieve semantic evidence | **EXISTS/PARTIAL** |
+| Qdrant semantic retrieval | retrieve semantic evidence using target 768d multilingual embeddings | **EXISTS/PARTIAL** |
 | Knowledge Context Builder | bounded RAG + KG + deterministic context | **EXISTS** |
 | Persistent Neo4j adapter | durable relationship memory | **MISSING** |
 | Human-readable presentation | generated from canonical memory via Dashboard/Copilot | **PARTIAL** |
