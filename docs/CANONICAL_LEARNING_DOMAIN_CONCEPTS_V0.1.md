@@ -657,17 +657,13 @@ MarketEvent → IMPACTS → Instrument/Sector
 Instrument → EXPOSED_TO → Commodity/Factor
 ```
 
-## Obsidian
+## Human-readable presentation
 
-Human-readable persistence for material:
+Obsidian is not part of the target V4.0 runtime memory architecture.
 
-- Learnings;
-- theses;
-- decisions;
-- rationale;
-- research summaries.
+Material Learnings, theses, decisions, rationale and research summaries are generated as human-readable views from canonical structured data, Qdrant semantic memory and Neo4j relational memory.
 
-Raw FeatureSnapshots and numerical operation rows should not be duplicated into Obsidian by default.
+Existing Obsidian integration is legacy compatibility only. Project documentation remains in Git/GitHub.
 
 ---
 
@@ -812,7 +808,7 @@ These concepts do not require replacing:
 - human decision boundary;
 - current Qdrant adapter;
 - current Knowledge Context Builder;
-- Obsidian;
+- human-readable Dashboard/Copilot projection;
 - existing portfolio/options engines.
 
 They require extending the knowledge/experience and post-outcome paths.
