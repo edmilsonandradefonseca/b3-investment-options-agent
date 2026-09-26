@@ -52,3 +52,5 @@ __all__ = [
 
 from .scenario import PositionStress, ScenarioDefinition, StressResult
 from .strategy_comparison import StrategyAlternative, StrategyComparison
+
+from .analysis_run import AnalysisChange, AnalysisChangeSet, AnalysisRun
