@@ -61,6 +61,9 @@ class ExperienceMatch:
     regime_score: float | None = None
     temporal_score: float | None = None
     confidence_score: float | None = None
+    lifecycle_score: float | None = None
+    contradiction_score: float | None = None
+    historical_usefulness_score: float | None = None
     fusion_score: float | None = None
     initial_rank: int | None = None
     final_rank: int | None = None
@@ -77,6 +80,9 @@ class ExperienceMatch:
             (self.regime_score, "regime_score"),
             (self.temporal_score, "temporal_score"),
             (self.confidence_score, "confidence_score"),
+            (self.lifecycle_score, "lifecycle_score"),
+            (self.contradiction_score, "contradiction_score"),
+            (self.historical_usefulness_score, "historical_usefulness_score"),
             (self.fusion_score, "fusion_score"),
         ):
             if value is not None and not 0.0 <= value <= 1.0:
