@@ -116,7 +116,7 @@ ENTITY_RELATION_RULES: dict[RelationType, tuple[set[EntityType], set[EntityType]
     RelationType.BELONGS_TO: ({EntityType.STOCK, EntityType.COMPANY, EntityType.ETF}, {EntityType.SECTOR}),
     RelationType.HAS_POSITION: ({EntityType.PORTFOLIO}, {EntityType.POSITION}),
     RelationType.INSTRUMENT: ({EntityType.POSITION, EntityType.OPTION, EntityType.STRATEGY}, {EntityType.INSTRUMENT, EntityType.STOCK, EntityType.OPTION}),
-    RelationType.USES: ({EntityType.STRATEGY}, {EntityType.OPTION, EntityType.INSTRUMENT}),
+    RelationType.USES: ({EntityType.STRATEGY, EntityType.OPERATION}, {EntityType.OPTION, EntityType.INSTRUMENT, EntityType.STRATEGY}),
     RelationType.ABOUT: ({EntityType.INSIGHT, EntityType.DECISION, EntityType.RISK, EntityType.SIGNAL, EntityType.OPERATION, EntityType.LEARNING}, {EntityType.INSTRUMENT, EntityType.STOCK, EntityType.COMPANY, EntityType.PORTFOLIO, EntityType.OPTION, EntityType.STRATEGY}),
     RelationType.SUPPORTED_BY: ({EntityType.INSIGHT, EntityType.DECISION, EntityType.LEARNING}, {EntityType.EVIDENCE, EntityType.INSIGHT, EntityType.OPERATION}),
     RelationType.BASED_ON: ({EntityType.DECISION}, {EntityType.INSIGHT, EntityType.SIGNAL, EntityType.EVIDENCE}),
