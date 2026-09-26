@@ -96,6 +96,26 @@ The architecture is considered valid only if these use cases can be traced to ex
 # 4. High-level architecture
 
 ```text
+                    EXTERNAL DATA SOURCES
+     Broker Imports / Market / Options / Macro / Flow /
+             FX / Commodities / News / Research
+                              │
+                              ▼
+                    PROVIDER ADAPTERS
+                              │
+                              ▼
+                 CANONICAL DATA CONTRACTS
+                              │
+                              ▼
+                    PIT / QUALITY GATES
+                              │
+             ┌────────────────┴────────────────┐
+             ▼                                 ▼
+      CURRENT STATE                     HISTORICAL LEDGER
+   replaceable snapshots                   append-only
+             │                                 │
+             └────────────────┬────────────────┘
+                              ▼
                            USER
                             │
                 ┌───────────┴───────────┐
@@ -117,11 +137,11 @@ The architecture is considered valid only if these use cases can be traced to ex
 Deterministic /        Domain Agents         Knowledge /
 Statistical Engines                         Experience
       │                     │                     │
-      │                     │          ┌──────────┴──────────┐
-      │                     │          ▼                     ▼
-      │                     │       Qdrant                 Neo4j
-      │                     │          │                     │
-      └──────────────┬──────┴──────────┴─────────────────────┘
+      └──────────────┬──────┴─────────────────────┘
+                     ▼
+              KNOWLEDGE CONTEXT
+     deterministic + evidence + graph + experience
+                     │
                      ▼
                  SYNTHESIS
                      │
@@ -135,7 +155,22 @@ Statistical Engines                         Experience
                HUMAN DECISION
                      │
                      ▼
-             OPERATION / OUTCOME
+           optional external action
+                     │
+                     ▼
+             BROKER / EXTERNAL WORLD
+                     │
+                     ▼
+             TRANSACTION INGESTION
+                     │
+                     ▼
+                  OPERATION
+                     │
+                     ▼
+                   OUTCOME
+                     │
+                     ▼
+              OutcomeFinalized
                      │
                      ▼
              EXPERIENCE ENGINE
@@ -147,14 +182,70 @@ Statistical Engines                         Experience
        STATISTICAL VALIDATION / DRIFT
                      │
                      ▼
-                HYBRID MEMORY
+              SQLite / Parquet
+             CANONICAL SOURCE OF TRUTH
                      │
-                     └──────────────► NEXT ANALYSIS
+            MEMORY PROJECTION BRIDGE
+              ┌──────┴──────┐
+              ▼             ▼
+           Qdrant          Neo4j
+              └──────┬──────┘
+                     ▼
+               NEXT ANALYSIS
 ```
 
 ---
 
 # 5. Architectural layers
+
+## 5.0 Data source, adapter and persistence-semantics layer
+
+V4.0 separates external acquisition from canonical domain data.
+
+```text
+External Provider / Broker File
+        ↓
+Provider Adapter
+        ↓
+Canonical Contract
+        ↓
+PIT + Quality Validation
+        ↓
+Repository / Structured Persistence
+```
+
+Provider families include:
+
+- broker imports;
+- market-price providers;
+- option-chain/quote providers;
+- macro/rate providers;
+- foreign-flow providers;
+- FX providers;
+- commodity providers;
+- news/research providers.
+
+Provider-specific schemas must not leak into agents, LangGraph or Dashboard logic.
+
+### Current State vs Historical Ledger
+
+V4.0 explicitly separates two persistence semantics:
+
+```text
+CURRENT STATE
+Portfolio / option snapshot
+→ replaceable
+→ latest validated state
+
+HISTORICAL EXPERIENCE
+Transactions / Operations / Outcomes
+→ append-only / versioned
+→ never replaced by a new current-state snapshot
+```
+
+The current BTG/Excel snapshot replacement rule remains valid for current-state ingestion and does not apply to the historical operation ledger.
+
+Historical source corrections create explicit corrected/versioned records and audit links; they do not silently rewrite learning evidence.
 
 ## 5.1 Client layer
 
@@ -231,6 +322,8 @@ Current Market Regime
   ↓
 Prior Experience Retrieval
   ↓
+ExperienceAssessment
+  ↓
 Knowledge Context
   ↓
 Specialist Agents
@@ -239,9 +332,13 @@ Specialist Agents
 ### POST-OUTCOME learning
 
 ```text
+Transaction/Reconciliation update
+   ↓
 Operation Finalized
    ↓
-Outcome Finalized
+Outcome Engine
+   ↓
+OutcomeFinalized domain event
    ↓
 Experience Assembly
    ↓
@@ -254,7 +351,7 @@ Learning / Lifecycle Update
 Hybrid Memory Persistence
 ```
 
-POST-OUTCOME may run asynchronously and does not require a user conversation.
+POST-OUTCOME may run asynchronously and does not require a user conversation. The canonical trigger is the idempotent `OutcomeFinalized` domain event emitted only after the Outcome Engine has enough validated information to finalize an operation result.
 
 ---
 
@@ -333,7 +430,32 @@ Responsibilities:
 
 V4.0 may use prior experience as context but must not allow the LLM to rewrite deterministic opportunity facts.
 
-## 6.6 Scenario / Stress Engine
+## 6.6 Strategy Comparison Engine
+
+New V4.0 composition capability for UC-04.
+
+It reuses Portfolio, Options, Valuation, Opportunity, Experience and Risk engines rather than duplicating them.
+
+Canonical output:
+
+```text
+StrategyComparison
+├── alternative_a
+├── alternative_b
+├── capital_required
+├── payoff
+├── valuation_context
+├── liquidity
+├── portfolio_impact
+├── risk
+├── historical_experience
+├── assumptions
+└── opportunity_cost
+```
+
+The comparison must preserve deterministic facts and expose historical experience separately from forward-looking assumptions.
+
+## 6.7 Scenario / Stress Engine
 
 New V4.0 capability.
 
@@ -344,6 +466,27 @@ Responsibilities:
 - assignment/capital stress;
 - concentration stress;
 - sensitivity analysis.
+
+Canonical contracts:
+
+```text
+ScenarioDefinition
+├── scenario_id
+├── shocks
+├── assumptions
+├── as_of
+└── provenance
+
+StressResult
+├── portfolio_pnl
+├── option_pnl
+├── assignment_capital
+├── cash_after_stress
+├── concentration
+├── liquidity
+├── sensitivities
+└── quality_status
+```
 
 The existing RiskValidator remains a downstream governance gate and is not replaced by stress testing.
 
@@ -435,6 +578,21 @@ Outcome
 ```
 
 It may be implemented as a derived aggregate/view rather than a separate physical table.
+
+## 7.5 Historical retention invariant
+
+Raw source datasets may follow bounded retention policies, but experience-critical derived records must survive those windows.
+
+Persistent/versioned experience records include:
+
+- Operation;
+- operation-linked FeatureSnapshot;
+- Outcome;
+- MarketRegime references used by an Experience;
+- Learning evidence links;
+- learning statistics/version history.
+
+Therefore a 90-day raw options-data retention policy or 360-day raw stock-data retention policy must never delete the compact derived evidence required to reconstruct a Learning.
 
 ---
 
@@ -580,9 +738,28 @@ A Learning may contain:
 - valid_from / valid_to;
 - statistical method;
 - model/version;
+- learning_scope;
+- population_scope;
+- selection_bias_warning where applicable;
 - provenance.
 
 Not every Learning requires every metric.
+
+### Learning scope
+
+Every Learning must state what population its evidence supports.
+
+Canonical scope values:
+
+```text
+PERSONAL_EXPERIENCE
+MARKET_OBSERVATION
+EXTERNAL_RESEARCH
+MODEL_DERIVED
+COMBINED
+```
+
+A pattern learned from the investor's own selected operations must not be silently generalized into a market-wide probability. Personal-operation evidence may contain selection bias because the investor chose which setups to trade. The rationale must preserve that limitation.
 
 ## 10.3 Learning lifecycle
 
@@ -690,6 +867,33 @@ Retrieval components should expose their scores separately:
 
 Qdrant retrieves candidates; it does not determine truth or final relevance alone.
 
+## 12.1 ExperienceAssessment
+
+`ExperienceRetrievalResult` is transformed into a bounded `ExperienceAssessment` before it affects opportunity or strategy reasoning.
+
+```text
+ExperienceAssessment
+├── historical_similarity
+├── supporting_learnings
+├── contradicting_learnings
+├── recent_evidence
+├── long_term_evidence
+├── applicable_regime
+├── confidence
+├── limitations
+└── provenance
+```
+
+The canonical deterministic opportunity score is preserved separately.
+
+```text
+Opportunity
+├── deterministic_score
+└── experience_assessment
+```
+
+Experience may contextualize an opportunity, but it must not silently mutate the deterministic score or ranking.
+
 ---
 
 # 13. Knowledge and memory architecture
@@ -698,7 +902,7 @@ V4.0 formalizes three complementary runtime memories.
 
 ## 13.1 SQLite / Parquet — structured memory
 
-Authoritative for:
+Canonical source of truth for:
 
 - transactions;
 - operations;
@@ -734,6 +938,15 @@ Optimized for semantic retrieval of:
 - semantically similar situations.
 
 All payloads should carry canonical IDs to structured truth.
+
+Qdrant is a reconstructible projection. Semantic records must include at minimum:
+
+- canonical_id;
+- canonical_version;
+- projection_version;
+- idempotency_key where applicable.
+
+A Qdrant write failure must not invalidate the canonical Learning stored in structured memory.
 
 ## 13.3 Neo4j — relational memory
 
@@ -785,6 +998,8 @@ Relations should preserve provenance and temporal validity where applicable.
 
 The current backend-neutral graph contracts remain valid and gain a concrete Neo4j persistence adapter.
 
+Neo4j is a reconstructible relational projection of canonical domain state. A Neo4j projection failure must not invalidate an Operation, Outcome or Learning already committed to structured memory.
+
 ## 13.4 Human-readable presentation is a view, not a memory backend
 
 V4.0 removes Obsidian from the target runtime architecture.
@@ -794,6 +1009,27 @@ Human-readable learnings, theses, decisions, rationale and research summaries ar
 Existing Obsidian integration is treated as legacy compatibility during migration and must not become a required persistence dependency for new V4.0 workflows.
 
 Project documentation remains in Git/GitHub and is separate from runtime investment memory.
+
+## 13.5 Memory Projection Bridge and consistency
+
+Structured memory is committed first.
+
+```text
+SQLite / Parquet canonical commit
+        ↓
+Memory Projection Bridge
+        ├── Qdrant projection
+        └── Neo4j projection
+```
+
+Projection writes must be:
+
+- idempotent;
+- retryable;
+- observable;
+- rebuildable from canonical structured records.
+
+Projection status must be auditable by canonical ID/version. Partial projection failure is a degraded state, not loss of canonical truth.
 
 ---
 
@@ -812,6 +1048,8 @@ KnowledgeContext V4
 ├── feature_snapshot
 ├── market_regime
 ├── experience_context
+│    └── ExperienceRetrievalResult
+│         └── ExperienceAssessment
 ├── active_learnings
 ├── historical_precedents
 ├── freshness
@@ -819,6 +1057,8 @@ KnowledgeContext V4
 ├── sources
 └── metadata
 ```
+
+`ExperienceRetrievalResult` is not a parallel retrieval architecture; it is the canonical experience sub-contract inside `KnowledgeContext`.
 
 The context must stay bounded.
 
@@ -985,6 +1225,27 @@ Evidence Persistence
 
 A news summary alone is not a Learning.
 
+## 19.1 AnalysisRun and change detection
+
+To support questions such as “o que mudou desde ontem?” V4.0 persists a lightweight structured `AnalysisRun` record.
+
+```text
+AnalysisRun
+├── analysis_id
+├── as_of
+├── request_scope
+├── feature_snapshot_id
+├── market_regime_id
+├── relevant_learning_ids
+├── opportunity_refs
+├── risk_refs
+├── rationale_ref
+├── source_refs
+└── quality_status
+```
+
+A deterministic Change Detection service compares compatible AnalysisRuns and exposes material changes in features, regime, opportunities, risks and Learning lifecycle.
+
 ---
 
 # 20. Dashboard V4.0
@@ -1081,7 +1342,8 @@ V4.0 observability must include:
 
 - Orchestrator health;
 - LangGraph runs;
-- provider calls;
+- provider calls and provider-family availability;
+- current-snapshot vs historical-ledger ingestion;
 - PIT validation failures;
 - Qdrant retrieval quality;
 - graph query/relation counts;
@@ -1091,7 +1353,9 @@ V4.0 observability must include:
 - drift detection;
 - supersession;
 - feature snapshot completeness;
-- outcome finalization;
+- outcome finalization / OutcomeFinalized events;
+- memory projection lag/failures/rebuilds;
+- AnalysisRun change detection;
 - retrieval latency;
 - LLM cost/latency;
 - risk validation;
@@ -1180,6 +1444,7 @@ Human decision remains mandatory.
 | Options deterministic engines | EXISTS / PARTIAL |
 | Quant engine | EXISTS |
 | Opportunity pipeline | EXISTS |
+| Strategy Comparison contract/engine | MISSING |
 | Market Intelligence research | EXISTS |
 | PIT semantics | EXISTS |
 | Qdrant adapter | EXISTS; target V4 semantic runtime standardized on 768d |
@@ -1196,7 +1461,11 @@ Human decision remains mandatory.
 | Learning Engine | MISSING |
 | Learning confidence/drift | MISSING |
 | Experience similarity ranker | MISSING |
-| Scenario/Stress Engine | MISSING |
+| ScenarioDefinition / StressResult + Engine | MISSING |
+| AnalysisRun / Change Detection | MISSING |
+| Memory Projection Bridge / rebuild semantics | MISSING |
+| OutcomeFinalized domain event | MISSING |
+| ExperienceAssessment | MISSING |
 | Experience & Learning Dashboard | MISSING |
 | Conversational Copilot | PARTIAL |
 
@@ -1216,16 +1485,24 @@ Create/freeze:
 - MarketRegime;
 - Learning;
 - LearningLifecycle;
-- ExperienceRetrievalResult.
+- ExperienceRetrievalResult;
+- ExperienceAssessment;
+- StrategyComparison;
+- ScenarioDefinition / StressResult;
+- AnalysisRun;
+- OutcomeFinalized event contract.
 
 ## Phase 2 — Historical experience substrate
 
 Implement:
 
+- separate current replaceable snapshots from append-only historical ledger;
 - operation reconstruction;
 - outcome calculation;
 - PIT FeatureSnapshot generation;
-- regime reconstruction.
+- persistent experience-derived snapshots;
+- regime reconstruction;
+- OutcomeFinalized event emission.
 
 ## Phase 3 — Structured learning
 
@@ -1234,7 +1511,8 @@ Implement:
 - Experience Engine;
 - initial statistical Learning Engine;
 - confidence/version lifecycle;
-- supporting/contradicting evidence links.
+- supporting/contradicting evidence links;
+- learning_scope / population_scope / selection-bias metadata.
 
 ## Phase 4 — Hybrid experience retrieval
 
@@ -1244,17 +1522,19 @@ Integrate:
 - structured feature similarity;
 - regime similarity;
 - temporal weighting;
-- deterministic Experience Ranker.
+- deterministic Experience Ranker;
+- ExperienceAssessment integration into KnowledgeContext.
 
 ## Phase 5 — Neo4j persistence
 
-Implement concrete graph adapter and persist:
+Implement Memory Projection Bridge + concrete graph adapter and persist:
 
 - operations;
 - regimes;
 - factors;
 - learnings;
-- evidence relations.
+- evidence relations;
+- projection idempotency/retry/rebuild status.
 
 ## Phase 6 — LangGraph V4
 
@@ -1264,9 +1544,13 @@ Add:
 - experience-aware specialist analysis;
 - POST-OUTCOME Learning workflow.
 
-## Phase 7 — Scenario / Stress
+## Phase 7 — Strategy Comparison + Scenario / Stress
 
-Add quantitative stress/sensitivity workflows.
+Add:
+
+- StrategyComparison composition workflow;
+- ScenarioDefinition / StressResult;
+- quantitative stress/sensitivity workflows.
 
 ## Phase 8 — Dashboard V4
 
@@ -1276,7 +1560,8 @@ Expose:
 - Experience & Learning;
 - Historical Similarity;
 - Risk / Stress;
-- richer Copilot rationale.
+- richer Copilot rationale;
+- AnalysisRun change-detection view (“what changed”).
 
 ---
 
@@ -1310,13 +1595,18 @@ The following are frozen V4.0 invariants if this architecture is approved:
 8. Recency and regime similarity are separate signals.
 9. Qdrant is semantic retrieval, not truth; V4.0 standardizes B3 semantic memory on 768-dimensional multilingual embeddings.
 10. Neo4j is relational memory, not workflow orchestration.
-11. SQLite/Parquet remain structured numerical truth.
-12. Human-readable knowledge is generated as a view from canonical runtime memory; Obsidian is not a required V4.0 backend.
-13. PRE-ANALYSIS experience retrieval is mandatory where relevant.
-14. POST-OUTCOME learning is the canonical feedback path.
-15. Risk Validation remains downstream.
-16. Human remains final decision authority.
-17. No autonomous trading.
+11. SQLite/Parquet are the canonical structured source of truth; Qdrant and Neo4j are rebuildable projections.
+12. Current-state snapshots are replaceable; the historical operation ledger is append-only/versioned.
+13. Experience-critical FeatureSnapshots, Outcomes and Learning evidence outlive raw-data retention windows.
+14. Human-readable knowledge is generated as a view from canonical runtime memory; Obsidian is not a required V4.0 backend.
+15. PRE-ANALYSIS experience retrieval is mandatory where relevant and is nested inside KnowledgeContext.
+16. ExperienceAssessment contextualizes but does not silently rewrite deterministic opportunity ranking.
+17. OutcomeFinalized is the canonical POST-OUTCOME trigger.
+18. Learning scope/population limitations, including personal selection bias, are explicit.
+19. Risk Validation remains downstream.
+20. Human decision does not imply execution; operations are reconstructed from external/broker evidence.
+21. Human remains final decision authority.
+22. No autonomous trading.
 
 ---
 
@@ -1350,6 +1640,9 @@ V4.0 closes the missing learning loop:
 
 ```text
 Analysis
+→ Human Decision
+→ optional external action
+→ broker/transaction ingestion
 → Operation
 → Outcome
 → Experience
