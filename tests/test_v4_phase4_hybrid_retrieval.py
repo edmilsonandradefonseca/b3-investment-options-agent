@@ -91,12 +91,18 @@ def experience(index: int, *, day: int, close: float, vol: float, trend: str = "
     )
 
 
-def learning(learning_id: str, *, status: LearningStatus = LearningStatus.ACTIVE) -> Learning:
+def learning(
+    learning_id: str,
+    *,
+    status: LearningStatus = LearningStatus.ACTIVE,
+    scope: LearningScope = LearningScope.PERSONAL_EXPERIENCE,
+    last_confirmed_at: datetime | None = None,
+) -> Learning:
     return Learning(
         learning_id=learning_id,
         statement="Short PUT PETR4 historically performed better in sideways/high-vol regimes.",
         status=status,
-        learning_scope=LearningScope.PERSONAL_EXPERIENCE,
+        learning_scope=scope,
         first_observed_at=BASE,
         last_updated_at=BASE + timedelta(days=20),
         subject_ids=("B3-PETR4",),
@@ -105,7 +111,12 @@ def learning(learning_id: str, *, status: LearningStatus = LearningStatus.ACTIVE
         sample_size=12,
         win_rate=0.75,
         confidence=0.70,
-        population_scope="user historical PETR4 short-put operations",
+        last_confirmed_at=last_confirmed_at,
+        population_scope=(
+            "user historical PETR4 short-put operations"
+            if scope == LearningScope.PERSONAL_EXPERIENCE
+            else None
+        ),
         selection_bias_warning="Selected personal operations; not market-wide probability.",
         valid_from=BASE,
     )
@@ -329,3 +340,131 @@ def test_experience_ranker_emits_retrieval_trace():
     assert [item.final_rank for item in result.matches] == [1, 2]
     assert result.trace.items[0].rerank_components
     assert dict(result.retrieval_metadata)["trace_id"] == result.trace.trace_id
+
+
+def _semantic_result_for_learning(learning_id: str, score: float = 0.8):
+    from b3_agent.knowledge.vector_store import VectorSearchResult
+    return VectorSearchResult(
+        chunk_id=f"chunk-{learning_id}",
+        evidence_id=f"ev-{learning_id}",
+        score=score,
+        content=f"semantic content for {learning_id}",
+        metadata={
+            "extra": {
+                "canonical_id": learning_id,
+                "learning_id": learning_id,
+            }
+        },
+    )
+
+
+def test_learning_aging_uses_last_confirmation_not_first_observation():
+    current = snapshot("FS-CURRENT", 20, 40.0, 0.45)
+    current_regime = regime("REG-CURRENT", current)
+    as_of = BASE + timedelta(days=400)
+
+    old_but_reconfirmed = learning(
+        "LRN-RECENT-CONFIRM",
+        last_confirmed_at=as_of - timedelta(days=10),
+    )
+    stale = learning(
+        "LRN-STALE",
+        last_confirmed_at=as_of - timedelta(days=300),
+    )
+
+    result = ExperienceRanker().rank(
+        current_snapshot=current,
+        current_regime=current_regime,
+        as_of=as_of,
+        experiences=(),
+        semantic_results=(
+            _semantic_result_for_learning(old_but_reconfirmed.learning_id),
+            _semantic_result_for_learning(stale.learning_id),
+        ),
+        learnings=(old_but_reconfirmed, stale),
+        top_k=2,
+    )
+
+    by_id = {match.reference_id: match for match in result.matches}
+    assert by_id[old_but_reconfirmed.learning_id].temporal_score > by_id[stale.learning_id].temporal_score
+    assert result.matches[0].reference_id == old_but_reconfirmed.learning_id
+
+
+def test_learning_scope_controls_temporal_decay():
+    current = snapshot("FS-CURRENT", 20, 40.0, 0.45)
+    current_regime = regime("REG-CURRENT", current)
+    as_of = BASE + timedelta(days=220)
+    confirmed = BASE + timedelta(days=20)
+
+    market_observation = learning(
+        "LRN-MARKET",
+        scope=LearningScope.MARKET_OBSERVATION,
+        last_confirmed_at=confirmed,
+    )
+    durable_personal = learning(
+        "LRN-PERSONAL",
+        scope=LearningScope.PERSONAL_EXPERIENCE,
+        last_confirmed_at=confirmed,
+    )
+
+    result = ExperienceRanker().rank(
+        current_snapshot=current,
+        current_regime=current_regime,
+        as_of=as_of,
+        experiences=(),
+        semantic_results=(
+            _semantic_result_for_learning(market_observation.learning_id),
+            _semantic_result_for_learning(durable_personal.learning_id),
+        ),
+        learnings=(market_observation, durable_personal),
+        top_k=2,
+    )
+
+    by_id = {match.reference_id: match for match in result.matches}
+    assert by_id[durable_personal.learning_id].temporal_score > by_id[market_observation.learning_id].temporal_score
+
+
+def test_old_learning_can_remain_relevant_when_regime_matches():
+    current = snapshot("FS-CURRENT", 20, 40.0, 0.45)
+    current_regime = regime("REG-CURRENT", current)
+    as_of = BASE + timedelta(days=400)
+
+    matching = learning(
+        "LRN-MATCHING-REGIME",
+        last_confirmed_at=BASE,
+    )
+    mismatching = Learning(
+        learning_id="LRN-MISMATCHING-REGIME",
+        statement="Different regime learning.",
+        status=LearningStatus.ACTIVE,
+        learning_scope=LearningScope.PERSONAL_EXPERIENCE,
+        first_observed_at=BASE,
+        last_updated_at=BASE,
+        last_confirmed_at=BASE,
+        subject_ids=("B3-PETR4",),
+        strategy_type="SHORT_PUT",
+        conditions=("TREND=BEAR", "VOLATILITY=LOW", "FOREIGN_FLOW=NEGATIVE"),
+        sample_size=12,
+        win_rate=0.75,
+        confidence=0.70,
+        population_scope="user historical PETR4 short-put operations",
+        valid_from=BASE,
+    )
+
+    result = ExperienceRanker().rank(
+        current_snapshot=current,
+        current_regime=current_regime,
+        as_of=as_of,
+        experiences=(),
+        semantic_results=(
+            _semantic_result_for_learning(matching.learning_id, 0.7),
+            _semantic_result_for_learning(mismatching.learning_id, 0.7),
+        ),
+        learnings=(matching, mismatching),
+        top_k=2,
+    )
+
+    by_id = {match.reference_id: match for match in result.matches}
+    assert by_id[matching.learning_id].regime_score == 1.0
+    assert by_id[mismatching.learning_id].regime_score == 0.0
+    assert by_id[matching.learning_id].relevance_score > by_id[mismatching.learning_id].relevance_score
