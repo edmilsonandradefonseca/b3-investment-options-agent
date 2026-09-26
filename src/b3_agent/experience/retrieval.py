@@ -14,7 +14,7 @@ from b3_agent.schemas.experience import (
     RetrievalTraceItem,
 )
 from b3_agent.schemas.feature_snapshot import FeatureSnapshot
-from b3_agent.schemas.learning import Learning, LearningStatus
+from b3_agent.schemas.learning import Learning, LearningScope, LearningStatus
 from b3_agent.schemas.market_regime import MarketRegime
 from b3_agent.knowledge.vector_store import VectorSearchResult
 
@@ -26,7 +26,14 @@ class ExperienceRankingPolicy:
     regime_weight: float = 0.25
     temporal_weight: float = 0.15
     confidence_weight: float = 0.10
-    half_life_days: float = 180.0
+    experience_half_life_days: float = 180.0
+    learning_half_life_days: tuple[tuple[LearningScope, float | None], ...] = (
+        (LearningScope.PERSONAL_EXPERIENCE, 365.0),
+        (LearningScope.MARKET_OBSERVATION, 90.0),
+        (LearningScope.EXTERNAL_RESEARCH, 180.0),
+        (LearningScope.MODEL_DERIVED, 180.0),
+        (LearningScope.COMBINED, 365.0),
+    )
 
     def __post_init__(self) -> None:
         weights = (
@@ -40,8 +47,15 @@ class ExperienceRankingPolicy:
             raise ValueError("ranking weights must be non-negative")
         if sum(weights) <= 0:
             raise ValueError("at least one ranking weight must be positive")
-        if self.half_life_days <= 0:
-            raise ValueError("half_life_days must be positive")
+        if self.experience_half_life_days <= 0:
+            raise ValueError("experience_half_life_days must be positive")
+        seen_scopes: set[LearningScope] = set()
+        for scope, half_life in self.learning_half_life_days:
+            if scope in seen_scopes:
+                raise ValueError("learning scope decay policy must be unique")
+            seen_scopes.add(scope)
+            if half_life is not None and half_life <= 0:
+                raise ValueError("learning half-life must be positive or None")
 
 
 class ExperienceRanker:
@@ -58,6 +72,7 @@ class ExperienceRanker:
         as_of: datetime,
         experiences: Iterable[Experience],
         semantic_results: Iterable[VectorSearchResult] = (),
+        learnings: Iterable[Learning] = (),
         top_k: int = 10,
     ) -> ExperienceRetrievalResult:
         if as_of.tzinfo is None or as_of.utcoffset() is None:
@@ -85,6 +100,7 @@ class ExperienceRanker:
             semantic_sources[reference] = result.evidence_id
             initial_rank_by_reference.setdefault(reference, semantic_rank)
 
+        learning_by_id = {item.learning_id: item for item in learnings}
         matches: list[ExperienceMatch] = []
         for experience in experiences:
             if experience.operation.underlying_id != current_snapshot.subject_id:
@@ -103,7 +119,7 @@ class ExperienceRanker:
             temporal_score = _temporal_score(
                 experience.outcome.finalized_at,
                 as_of=as_of,
-                half_life_days=self.policy.half_life_days,
+                half_life_days=self.policy.experience_half_life_days,
             )
             confidence_score = experience.market_regime.confidence or 0.0
             semantic_score = semantic_by_reference.get(experience.experience_id, 0.0)
@@ -134,12 +150,58 @@ class ExperienceRanker:
         for reference, semantic_score in semantic_by_reference.items():
             if any(match.reference_id == reference for match in matches):
                 continue
+
+            learning = learning_by_id.get(reference)
+            if learning is None:
+                matches.append(
+                    ExperienceMatch(
+                        reference_id=reference,
+                        reference_type="LEARNING",
+                        relevance_score=semantic_score,
+                        semantic_score=semantic_score,
+                        fusion_score=semantic_score,
+                        initial_rank=initial_rank_by_reference.get(reference),
+                    )
+                )
+                continue
+
+            anchor = (
+                learning.last_confirmed_at
+                or learning.last_updated_at
+                or learning.first_observed_at
+            )
+            learning_temporal_score = _temporal_score(
+                anchor,
+                as_of=as_of,
+                half_life_days=_learning_half_life_days(
+                    learning.learning_scope,
+                    self.policy,
+                ),
+            )
+            learning_confidence = learning.confidence or 0.0
+            relevance = _weighted_score(
+                semantic_score=semantic_score,
+                feature_score=0.0,
+                regime_score=_learning_regime_similarity(
+                    learning,
+                    current_regime,
+                ),
+                temporal_score=learning_temporal_score,
+                confidence_score=learning_confidence,
+                policy=self.policy,
+            )
             matches.append(
                 ExperienceMatch(
                     reference_id=reference,
                     reference_type="LEARNING",
-                    relevance_score=semantic_score,
+                    relevance_score=relevance,
                     semantic_score=semantic_score,
+                    regime_score=_learning_regime_similarity(
+                        learning,
+                        current_regime,
+                    ),
+                    temporal_score=learning_temporal_score,
+                    confidence_score=learning_confidence,
                     fusion_score=semantic_score,
                     initial_rank=initial_rank_by_reference.get(reference),
                 )
@@ -212,7 +274,8 @@ class ExperienceRanker:
             ),
             retrieval_metadata=(
                 ("ranker", "experience-ranker-v2"),
-                ("half_life_days", str(self.policy.half_life_days)),
+                ("experience_half_life_days", str(self.policy.experience_half_life_days)),
+                ("learning_decay_policy", _learning_decay_policy_label(self.policy)),
                 ("candidate_count", str(len(reranked))),
                 ("selected_count", str(len(selected))),
                 ("trace_id", trace_id),
@@ -315,9 +378,58 @@ def _regime_similarity(current: MarketRegime, historical: MarketRegime) -> float
     return sum(current_map[name] == historical_map[name] for name in common) / len(common)
 
 
-def _temporal_score(observed_at: datetime, *, as_of: datetime, half_life_days: float) -> float:
+def _temporal_score(
+    observed_at: datetime,
+    *,
+    as_of: datetime,
+    half_life_days: float | None,
+) -> float:
     age_days = max(0.0, (as_of - observed_at).total_seconds() / 86400.0)
+    if half_life_days is None:
+        return 1.0
     return exp(-log(2.0) * age_days / half_life_days)
+
+
+def _learning_half_life_days(
+    scope: LearningScope,
+    policy: ExperienceRankingPolicy,
+) -> float | None:
+    configured = dict(policy.learning_half_life_days)
+    return configured.get(scope, 180.0)
+
+
+def _learning_decay_policy_label(policy: ExperienceRankingPolicy) -> str:
+    return ",".join(
+        f"{scope.value}:{'none' if half_life is None else half_life}"
+        for scope, half_life in policy.learning_half_life_days
+    )
+
+
+def _learning_regime_similarity(
+    learning: Learning,
+    current_regime: MarketRegime,
+) -> float:
+    if current_regime.regime_id in learning.regime_ids:
+        return 1.0
+
+    condition_map: dict[str, str] = {}
+    for condition in learning.conditions:
+        if "=" not in condition:
+            continue
+        name, label = condition.split("=", 1)
+        condition_map[name.strip().upper()] = label.strip().upper()
+
+    current_map = {
+        dimension.name.value.upper(): dimension.label.upper()
+        for dimension in current_regime.dimensions
+    }
+    common = set(condition_map) & set(current_map)
+    if not common:
+        return 0.0
+    return sum(
+        condition_map[name] == current_map[name]
+        for name in common
+    ) / len(common)
 
 
 def _weighted_score(
