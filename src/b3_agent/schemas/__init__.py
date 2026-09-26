@@ -49,3 +49,6 @@ __all__ = [
     "ExperienceMatch",
     "ExperienceRetrievalResult",
 ]
+
+from .scenario import PositionStress, ScenarioDefinition, StressResult
+from .strategy_comparison import StrategyAlternative, StrategyComparison
