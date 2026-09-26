@@ -132,7 +132,7 @@ def test_feature_snapshot_builder_filters_unavailable_future_market_data():
                 name="foreign_flow_5d",
                 value=500.0,
                 domain=FeatureDomain.FLOW,
-                available_at=ts(31, 14),
+                available_at=ts(30, 18),
                 unit="BRL_mn",
             ),
         ),
