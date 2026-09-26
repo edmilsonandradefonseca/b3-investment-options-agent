@@ -25,6 +25,7 @@ ExperienceLoader = Callable[[str, datetime], Iterable[Experience]]
 LearningLoader = Callable[[str, datetime], Iterable[Learning]]
 PreviousLearningLoader = Callable[[str], Learning | None]
 CohortLoader = Callable[[Operation, MarketRegime], Iterable[Experience]]
+RetrievalTraceSink = Callable[[ExperienceRetrievalResult], None]
 
 
 @dataclass(frozen=True)
@@ -45,12 +46,14 @@ class ExperienceContextService:
         experience_loader: ExperienceLoader,
         learning_loader: LearningLoader,
         semantic_index: LearningSemanticIndex | None = None,
+        retrieval_trace_sink: RetrievalTraceSink | None = None,
     ) -> None:
         self.ranker = ranker
         self.assessment_engine = assessment_engine
         self.experience_loader = experience_loader
         self.learning_loader = learning_loader
         self.semantic_index = semantic_index
+        self.retrieval_trace_sink = retrieval_trace_sink
 
     def build(
         self,
@@ -80,8 +83,11 @@ class ExperienceContextService:
             as_of=as_of,
             experiences=experiences,
             semantic_results=semantic_results,
+            learnings=learnings,
             top_k=top_k,
         )
+        if self.retrieval_trace_sink is not None:
+            self.retrieval_trace_sink(retrieval)
         assessment = self.assessment_engine.assess(
             retrieval,
             learnings=learnings,

@@ -5,7 +5,7 @@
 **Date:** 2026-09-26  
 **Supersedes:** Architecture V3.1  
 **Analytical baseline preserved:** V2.3 deterministic investment engine  
-**Related ADR:** `ADR-0020 — Continuous Learning & Experience Memory`
+**Related ADRs:** `ADR-0020 — Continuous Learning & Experience Memory`; `ADR-0021 — Hybrid Retrieval, Evidence Ranking and Memory Authority`
 
 ---
 
@@ -894,6 +894,52 @@ Opportunity
 
 Experience may contextualize an opportunity, but it must not silently mutate the deterministic score or ranking.
 
+
+## 12.2 Hybrid dense/sparse retrieval and reranking
+
+Experience retrieval is explicitly hybrid. Dense semantic similarity is necessary but not sufficient for B3 queries because exact tickers, option symbols, strategies, expiry/strike identifiers and named events can be lexically decisive.
+
+The target retrieval path is:
+
+```text
+Query / Intent
+      ↓
+Query Understanding
+      ↓
+Metadata + PIT Filters
+      ↓
+Dense Retrieval ─┐
+                 ├─→ Fusion / RRF
+Sparse Retrieval ─┘
+      ↓
+Bounded candidates
+      ↓
+Context enrichment
+      ├── strategy/context match
+      ├── market-regime similarity
+      ├── temporal relevance
+      ├── evidence confidence
+      ├── informational value
+      └── graph relevance
+      ↓
+Deterministic / calibrated reranker
+      ↓
+ExperienceRetrievalResult
+```
+
+The following invariants apply:
+
+- Qdrant/vector similarity produces candidates, not final truth;
+- lexical/exact-token relevance must be available for symbols and discriminative terms;
+- PIT/metadata filters are part of retrieval semantics;
+- dense and sparse results may be fused with RRF or a calibrated equivalent;
+- reranking signals must remain separately observable where practical;
+- ranking weights are configuration/calibration concerns, not architecture constants;
+- retrieval/use frequency does not count as evidence confirmation.
+
+Recommended evaluation includes Precision@K, MRR, NDCG, evidence utilization, retrieval/reranking latency and human usefulness.
+
+
 ---
 
 # 13. Knowledge and memory architecture
@@ -1171,6 +1217,30 @@ Backtests and learning validation must not use future knowledge.
 
 Walk-forward/progressive validation is preferred over random temporal mixing.
 
+
+## 17.1 Point-in-Time Context Service
+
+V4.0 treats point-in-time reconstruction as an explicit service responsibility, not only as a database filter.
+
+Conceptually:
+
+```text
+build_context(as_of)
+   ├── portfolio snapshot
+   ├── market snapshot
+   ├── option state
+   ├── market regime
+   ├── evidence available at as_of
+   └── memory/relationship versions valid at as_of
+```
+
+The service must distinguish `event_time` / observation time from `available_at`. An event that occurred but was not yet available to the system cannot be used in historical replay.
+
+Canonical invariant:
+
+> No historical evaluation may consume information whose `available_at` is later than the evaluation `as_of`.
+
+
 ---
 
 # 18. Risk architecture
@@ -1224,6 +1294,22 @@ Evidence Persistence
 ```
 
 A news summary alone is not a Learning.
+
+
+## 19.0.1 Source Document, Claim and Evidence
+
+Research provenance should distinguish the source container from the claims used in reasoning.
+
+```text
+Source Document
+      ↓
+Claim
+      ↓
+Supporting / Contradicting Evidence
+```
+
+A document may contain multiple claims, and multiple evidence items may support or contradict a claim. Learning and reasoning should reference canonical claim/evidence identities when practical rather than treating an entire document as one indivisible truth unit.
+
 
 ## 19.1 AnalysisRun and change detection
 

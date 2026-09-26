@@ -17,7 +17,7 @@ from .learning import (
     LearningScope,
     LearningStatus,
 )
-from .experience import ExperienceAssessment, ExperienceMatch, ExperienceRetrievalResult
+from .experience import ExperienceAssessment, ExperienceMatch, ExperienceRetrievalResult, RetrievalTrace, RetrievalTraceItem
 
 __all__ = [
     "DataRecord",
@@ -48,6 +48,8 @@ __all__ = [
     "ExperienceAssessment",
     "ExperienceMatch",
     "ExperienceRetrievalResult",
+    "RetrievalTrace",
+    "RetrievalTraceItem",
 ]
 
 from .scenario import PositionStress, ScenarioDefinition, StressResult

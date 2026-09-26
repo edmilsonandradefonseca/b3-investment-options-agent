@@ -98,10 +98,16 @@ def _with_point_in_time(
 
 def _is_valid_at(result: VectorSearchResult, valid_at: datetime) -> bool:
     published_at = _as_datetime(result.metadata.get("published_at"))
+    retrieved_at = _as_datetime(result.metadata.get("retrieved_at"))
     valid_from = _as_datetime(result.metadata.get("valid_from"))
     valid_to = _as_datetime(result.metadata.get("valid_to"))
 
     if published_at is not None and published_at > valid_at:
+        return False
+    # retrieved_at is the earliest explicit system-availability timestamp in
+    # the current EvidenceMetadata contract. Historical replay must not use
+    # evidence that the system had not acquired yet.
+    if retrieved_at is not None and retrieved_at > valid_at:
         return False
     if valid_from is not None and valid_from > valid_at:
         return False
