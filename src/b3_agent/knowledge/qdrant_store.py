@@ -152,17 +152,16 @@ class QdrantVectorStore:
                 models.Prefetch(
                     query=list(embedding.values),
                     using="dense",
-                    query_filter=query_filter,
                     limit=prefetch_limit,
                 ),
                 models.Prefetch(
                     query=_lexical_sparse_vector(query_text),
                     using="sparse",
-                    query_filter=query_filter,
                     limit=prefetch_limit,
                 ),
             ],
             query=models.FusionQuery(fusion=models.Fusion.RRF),
+            query_filter=query_filter,
             limit=top_k,
             with_payload=True,
         )
