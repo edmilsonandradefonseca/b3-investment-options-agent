@@ -28,7 +28,6 @@ The current V3.1 architecture already provides strong foundations:
 - Qdrant vector-store foundation;
 - Knowledge Graph contracts with temporal validity;
 - KnowledgeContext combining deterministic context, RAG and graph context;
-- Obsidian memory;
 - information lifecycle / freshness decay;
 - Risk Validation;
 - human decision boundary.
@@ -110,7 +109,7 @@ These concepts are architecture-level contracts. Detailed implementation schemas
 
 ## Memory architecture
 
-Continuous learning will use complementary persistence layers with distinct responsibilities.
+Continuous learning will use the same three-backend hybrid-memory direction adopted by João Resolve: SQLite/Parquet + Qdrant + Neo4j, with distinct responsibilities.
 
 ### SQLite / Parquet
 
@@ -157,18 +156,13 @@ MarketEvent → IMPACTS → Instrument / Sector
 
 The current backend-neutral Knowledge Graph contracts will be preserved and evolved toward a concrete Neo4j persistence adapter.
 
-### Obsidian
+### Human-readable presentation
 
-Human-readable persistent knowledge for material:
+Obsidian is not part of the target V4.0 runtime memory architecture.
 
-- learnings;
-- theses;
-- decisions;
-- rationale;
-- research summaries;
-- project memory.
+Human-readable learnings, theses, decisions, rationale and research summaries are generated from canonical structured memory, Qdrant retrieval and Neo4j relationships and presented through Dashboard/Copilot surfaces.
 
-Raw numerical feature snapshots and transaction-level data should not be duplicated into Obsidian by default.
+Existing Obsidian integration may remain temporarily as legacy compatibility during migration, but new V4.0 capabilities must not depend on it. Project documentation remains in Git/GitHub.
 
 ## LangGraph changes
 
@@ -353,7 +347,7 @@ After acceptance of this ADR:
 1. draft the next B3 Architecture revision with Continuous Learning & Experience Memory incorporated directly into the architecture;
 2. include the seven canonical concepts in that architecture;
 3. define the PRE-ANALYSIS and POST-OUTCOME workflows;
-4. define the target persistence topology for SQLite/Parquet, Qdrant, Neo4j and Obsidian;
+4. define the target persistence topology for SQLite/Parquet, Qdrant and Neo4j;
 5. map current implementation status as EXISTS / PARTIAL / MISSING;
 6. produce the V3.1 → next-version migration plan.
 
