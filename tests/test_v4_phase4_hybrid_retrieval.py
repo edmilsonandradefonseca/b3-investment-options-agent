@@ -242,3 +242,65 @@ def test_ranker_does_not_mutate_deterministic_score_contract():
     deterministic_score = 0.72
     assert deterministic_score == 0.72
     assert assessment.historical_similarity is not None
+
+
+def test_qdrant_hybrid_search_combines_dense_and_sparse():
+    client = QdrantClient(":memory:")
+    store = QdrantVectorStore(
+        client=client,
+        collection_name="hybrid-test",
+        vector_size=8,
+        hybrid=True,
+    )
+    embeddings = DeterministicEmbeddingProvider(dimensions=8)
+
+    from b3_agent.knowledge.chunking import EvidenceChunker
+    from b3_agent.knowledge.evidence import Evidence, EvidenceKind, EvidenceMetadata
+
+    def make_evidence(evidence_id: str, content: str):
+        metadata = EvidenceMetadata(
+            document_id=evidence_id,
+            source="test",
+            published_at=BASE,
+            retrieved_at=BASE,
+            ticker_refs=("PETR4",),
+            topic="learning",
+        )
+        return Evidence(
+            evidence_id=evidence_id,
+            kind=EvidenceKind.ANALYTICAL,
+            title=evidence_id,
+            content=content,
+            metadata=metadata,
+        )
+
+    lexical = make_evidence(
+        "LEXICAL",
+        "PETR4 TOTSV316 SHORT_PUT exact option identifier",
+    )
+    semantic = make_evidence(
+        "SEMANTIC",
+        "selling downside option premium in a sideways high-volatility regime",
+    )
+
+    chunks = []
+    for item in (lexical, semantic):
+        chunks.extend(EvidenceChunker(max_chars=2000).chunk(item))
+    vectors = embeddings.embed(tuple(chunk.content for chunk in chunks))
+    store.upsert(tuple(chunks), vectors)
+
+    query = "PETR4 TOTSV316"
+    query_embedding = embeddings.embed((query,))[0]
+    results = store.hybrid_search(
+        query,
+        query_embedding,
+        top_k=2,
+        metadata_filter=__import__(
+            "b3_agent.knowledge.vector_store",
+            fromlist=["MetadataFilter"],
+        ).MetadataFilter(ticker="PETR4", topic="learning"),
+    )
+
+    assert len(results) == 2
+    assert {item.evidence_id for item in results} == {"LEXICAL", "SEMANTIC"}
+    assert results[0].score >= results[1].score
