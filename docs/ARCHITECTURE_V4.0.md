@@ -1,9 +1,9 @@
 # B3 Investment & Options Agent — Architecture V4.0
 
 **Version:** 4.0  
-**Status:** PROPOSED — Architecture Review  
+**Status:** APPROVED / FROZEN  
 **Date:** 2026-09-26  
-**Supersedes when approved:** Architecture V3.1  
+**Supersedes:** Architecture V3.1  
 **Analytical baseline preserved:** V2.3 deterministic investment engine  
 **Related ADR:** `ADR-0020 — Continuous Learning & Experience Memory`
 
@@ -1610,20 +1610,59 @@ The following are frozen V4.0 invariants if this architecture is approved:
 
 ---
 
-# 30. Freeze criteria
+# 30. Final use-case architecture gate
 
-V4.0 can be marked **APPROVED / FROZEN** when:
+The second architecture review verified all twelve approved use cases against the V4.0 target design.
 
-- the architecture review is accepted;
-- ADR-0020 is accepted;
-- the canonical learning-domain concepts are accepted as architecture contracts;
-- no unresolved contradiction exists with V3.1 preserved boundaries;
-- the migration sequence is accepted;
-- implementation work begins only after contract-level review.
+| UC | Use Case | V4.0 architectural path | Gate |
+|---|---|---|---:|
+| UC-01 | Portfolio Intelligence | Current State → Portfolio Engine → KnowledgeContext → Synthesis/Risk → Dashboard/Copilot | **PASS** |
+| UC-02 | Options Position & Lifecycle Intelligence | Option/Broker Data → Options Engine → Operation/Outcome → Experience → Dashboard | **PASS** |
+| UC-03 | Opportunity Discovery | Providers/Portfolio/Market → Opportunity Engine → ExperienceAssessment → Synthesis | **PASS** |
+| UC-04 | Strategy Comparison & What-if | StrategyComparison → existing deterministic engines → experience/risk context | **PASS** |
+| UC-05 | Market & Regime Intelligence | Provider Adapters → PIT → Quant/MarketRegime → KnowledgeContext | **PASS** |
+| UC-06 | Contextual Factor Intelligence | Factor candidates → statistical validation → Learning Candidate → Learning Engine | **PASS** |
+| UC-07 | Historical Operation Reconstruction | Historical Ledger → Operation → PIT FeatureSnapshots → Outcome | **PASS** |
+| UC-08 | Experience & Continuous Learning | OutcomeFinalized → Experience → Learning → Validation/Drift → Hybrid Memory | **PASS** |
+| UC-09 | Historical Similarity & Precedent Retrieval | KnowledgeContext → ExperienceRetrievalResult → ExperienceAssessment | **PASS** |
+| UC-10 | Research, News & Event Intelligence | Research/Event evidence → graph relations → Learning impact + AnalysisRun change detection | **PASS** |
+| UC-11 | Risk, Scenario & Stress Intelligence | ScenarioDefinition → Stress Engine → StressResult → Risk Validation | **PASS** |
+| UC-12 | Decision Rationale & Conversational Copilot | KnowledgeContext + specialist outputs + AnalysisRun → Synthesis/Reasoning → Dashboard/Copilot | **PASS** |
+
+The review also closed the previously identified cross-cutting gaps:
+
+- current-state snapshots vs append-only historical ledger;
+- persistent experience evidence beyond raw-data retention;
+- human decision separated from external execution;
+- experience contextualization separated from deterministic opportunity score;
+- ExperienceRetrievalResult nested inside KnowledgeContext;
+- SQLite/Parquet canonical truth with rebuildable Qdrant/Neo4j projections;
+- OutcomeFinalized as the POST-OUTCOME trigger;
+- learning scope and personal-selection-bias metadata;
+- StrategyComparison;
+- ScenarioDefinition / StressResult;
+- AnalysisRun / Change Detection;
+- explicit Provider Adapter / canonical-contract / PIT layer;
+- target semantic memory standardized on multilingual 768d embeddings.
+
+**Final gate result: PASS — no unresolved architecture contradiction remains against the approved twelve-use-case baseline.**
 
 ---
 
-# 31. Final architecture statement
+# 31. Freeze criteria
+
+V4.0 is **APPROVED / FROZEN** because:
+
+- the architecture review passed against UC-01 through UC-12;
+- ADR-0020 is accepted;
+- the canonical learning-domain concepts are incorporated into this architecture;
+- no unresolved contradiction exists with preserved V3.1 boundaries;
+- the migration sequence is accepted;
+- implementation begins only through contract-first phases defined in the migration plan.
+
+---
+
+# 32. Final architecture statement
 
 V3.1 established the integrated B3 application boundary:
 
