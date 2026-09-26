@@ -626,6 +626,17 @@ Authoritative for:
 
 ## Qdrant
 
+Target semantic-memory standard:
+
+```text
+Model: sentence-transformers/paraphrase-multilingual-mpnet-base-v2
+Dimension: 768
+Collection: b3_memory_768
+Distance: cosine
+```
+
+The previous 384-dimensional direction is superseded for V4.0.
+
 Optimized for semantic retrieval of:
 
 - learnings;
