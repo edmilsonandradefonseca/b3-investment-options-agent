@@ -35,7 +35,7 @@ class FakeLLM:
             "subject_id": "PETR4",
             "thesis": "Maintain while evidence remains supportive.",
             "rationale": "Deterministic and historical context do not require a change.",
-            "evidence_refs": [],
+            "evidence_refs": ["LRN-001"],
             "risks": ["Conditions can change."],
             "opportunity_cost": "Capital remains allocated.",
             "capital_impact": "No immediate change.",
