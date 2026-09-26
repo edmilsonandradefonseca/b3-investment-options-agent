@@ -70,7 +70,7 @@ class KnowledgeContext:
 class KnowledgeContextBuilder:
     """Combine bounded RAG, PIT-valid KG traversal and deterministic context."""
 
-    def __init__(self, retriever: ObsidianRetriever, graph: KnowledgeGraphStore) -> None:
+    def __init__(self, retriever: ObsidianRetriever | None, graph: KnowledgeGraphStore) -> None:
         self.retriever = retriever
         self.graph = graph
 
@@ -95,7 +95,7 @@ class KnowledgeContextBuilder:
         if as_of is not None and as_of.tzinfo is None:
             raise ValueError("as_of must be timezone-aware")
 
-        rag = self.retriever.retrieve(query, top_k=rag_top_k)
+        rag = self.retriever.retrieve(query, top_k=rag_top_k) if self.retriever is not None else ()
         seeds = self._seed_entities(query, rag, graph_top_k, as_of=as_of)
         entities, relations = self._expand(seeds, graph_top_k, neighbor_depth, as_of=as_of)
         events = tuple(item for item in entities if item.entity_type == EntityType.MARKET_EVENT)
