@@ -29,3 +29,10 @@ __all__ = [
     "PointInTimeVectorRetriever",
     "FreshnessScorer",
 ]
+
+from .learning_semantic import (
+    B3_SEMANTIC_COLLECTION,
+    B3_SEMANTIC_DIMENSIONS,
+    B3_SEMANTIC_MODEL,
+    LearningSemanticIndex,
+)

@@ -19,4 +19,13 @@ __all__ = [
     "OperationReconstructor",
     "OutcomeEngine",
     "OutcomeFinalized",
+    "ExperienceAssessmentEngine",
+    "ExperienceRanker",
+    "ExperienceRankingPolicy",
 ]
+
+from .retrieval import (
+    ExperienceAssessmentEngine,
+    ExperienceRanker,
+    ExperienceRankingPolicy,
+)

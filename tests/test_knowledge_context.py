@@ -60,11 +60,13 @@ def test_context_serialization_is_agent_safe(tmp_path: Path):
         deterministic_context={"price_ref": "BRAPI:PETR4:2026-09-17", "options_ref": "OPLAB:PETR4"},
     )
     payload = context.as_dict()
-    assert set(payload) == {"query", "as_of", "rag", "entities", "relations", "events", "sources", "freshness", "confidence", "deterministic_context", "metadata"}
+    assert set(payload) == {"query", "as_of", "rag", "entities", "relations", "events", "sources", "freshness", "confidence", "deterministic_context", "experience_retrieval", "experience_assessment", "metadata"}
     assert payload["as_of"] == AS_OF.isoformat()
     assert payload["entities"][0]["entity_type"] in {"company", "stock", "option", "sector", "market_event"}
     assert isinstance(payload["relations"][0]["relation"], str)
     assert payload["deterministic_context"]["price_ref"].startswith("BRAPI:")
+    assert payload["experience_retrieval"] is None
+    assert payload["experience_assessment"] is None
     assert [event["entity_id"] for event in payload["events"]] == ["EV-OIL"]
 
 

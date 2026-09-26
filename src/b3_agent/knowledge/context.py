@@ -4,6 +4,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from typing import Any
 
+from b3_agent.schemas.experience import ExperienceAssessment, ExperienceRetrievalResult
+
 from .graph_schema import EntityType, GraphEntity, GraphRelation, RelationType
 from .graph_store import KnowledgeGraphStore
 from .retrieval import ObsidianRetriever, RetrievedEvidence
@@ -23,6 +25,8 @@ class KnowledgeContext:
     freshness: tuple[dict[str, Any], ...] = ()
     confidence: tuple[dict[str, Any], ...] = ()
     deterministic_context: dict[str, Any] = field(default_factory=dict)
+    experience_retrieval: ExperienceRetrievalResult | None = None
+    experience_assessment: ExperienceAssessment | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
@@ -38,6 +42,16 @@ class KnowledgeContext:
             "freshness": [dict(item) for item in self.freshness],
             "confidence": [dict(item) for item in self.confidence],
             "deterministic_context": dict(self.deterministic_context),
+            "experience_retrieval": (
+                asdict(self.experience_retrieval)
+                if self.experience_retrieval is not None
+                else None
+            ),
+            "experience_assessment": (
+                asdict(self.experience_assessment)
+                if self.experience_assessment is not None
+                else None
+            ),
             "metadata": dict(self.metadata),
         }
 
@@ -69,6 +83,8 @@ class KnowledgeContextBuilder:
         neighbor_depth: int = 1,
         as_of: datetime | None = None,
         deterministic_context: dict[str, Any] | None = None,
+        experience_retrieval: ExperienceRetrievalResult | None = None,
+        experience_assessment: ExperienceAssessment | None = None,
     ) -> KnowledgeContext:
         if not query.strip():
             raise ValueError("query must not be empty")
@@ -104,6 +120,8 @@ class KnowledgeContextBuilder:
             events=events,
             sources=tuple(sources),
             deterministic_context=dict(deterministic_context or {}),
+            experience_retrieval=experience_retrieval,
+            experience_assessment=experience_assessment,
             metadata={
                 "rag_count": len(rag),
                 "entity_count": len(entities),
@@ -112,6 +130,12 @@ class KnowledgeContextBuilder:
                 "seed_count": len(seeds),
                 "neighbor_depth": neighbor_depth,
                 "point_in_time": as_of is not None,
+                "experience_match_count": (
+                    len(experience_retrieval.matches)
+                    if experience_retrieval is not None
+                    else 0
+                ),
+                "experience_assessment": experience_assessment is not None,
             },
         )
 
