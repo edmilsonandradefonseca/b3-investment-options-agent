@@ -24,6 +24,11 @@ class EntityType(StrEnum):
     RISK = "risk"
     SIGNAL = "signal"
     EVIDENCE = "evidence"
+    OPERATION = "operation"
+    OUTCOME = "outcome"
+    MARKET_REGIME = "market_regime"
+    LEARNING = "learning"
+    FACTOR = "factor"
 
 
 class RelationType(StrEnum):
@@ -44,6 +49,12 @@ class RelationType(StrEnum):
     RELATED_TO = "related_to"
     PRECEDES = "precedes"
     SUPERSEDES = "supersedes"
+    HAS_OUTCOME = "has_outcome"
+    OCCURRED_IN = "occurred_in"
+    VALID_IN = "valid_in"
+    CONTRADICTED_BY = "contradicted_by"
+    ASSOCIATED_WITH = "associated_with"
+    EXPOSED_TO = "exposed_to"
 
 
 @dataclass(frozen=True)
@@ -106,15 +117,21 @@ ENTITY_RELATION_RULES: dict[RelationType, tuple[set[EntityType], set[EntityType]
     RelationType.HAS_POSITION: ({EntityType.PORTFOLIO}, {EntityType.POSITION}),
     RelationType.INSTRUMENT: ({EntityType.POSITION, EntityType.OPTION, EntityType.STRATEGY}, {EntityType.INSTRUMENT, EntityType.STOCK, EntityType.OPTION}),
     RelationType.USES: ({EntityType.STRATEGY}, {EntityType.OPTION, EntityType.INSTRUMENT}),
-    RelationType.ABOUT: ({EntityType.INSIGHT, EntityType.DECISION, EntityType.RISK, EntityType.SIGNAL}, {EntityType.INSTRUMENT, EntityType.STOCK, EntityType.COMPANY, EntityType.PORTFOLIO, EntityType.OPTION}),
-    RelationType.SUPPORTED_BY: ({EntityType.INSIGHT, EntityType.DECISION}, {EntityType.EVIDENCE, EntityType.INSIGHT}),
+    RelationType.ABOUT: ({EntityType.INSIGHT, EntityType.DECISION, EntityType.RISK, EntityType.SIGNAL, EntityType.OPERATION, EntityType.LEARNING}, {EntityType.INSTRUMENT, EntityType.STOCK, EntityType.COMPANY, EntityType.PORTFOLIO, EntityType.OPTION, EntityType.STRATEGY}),
+    RelationType.SUPPORTED_BY: ({EntityType.INSIGHT, EntityType.DECISION, EntityType.LEARNING}, {EntityType.EVIDENCE, EntityType.INSIGHT, EntityType.OPERATION}),
     RelationType.BASED_ON: ({EntityType.DECISION}, {EntityType.INSIGHT, EntityType.SIGNAL, EntityType.EVIDENCE}),
     RelationType.AFFECTS: ({EntityType.RISK}, {EntityType.POSITION, EntityType.INSTRUMENT, EntityType.PORTFOLIO}),
     RelationType.IMPACTS: ({EntityType.MARKET_EVENT}, {EntityType.INSTRUMENT, EntityType.STOCK, EntityType.COMPANY, EntityType.SECTOR}),
     RelationType.DERIVED_FROM: ({EntityType.INSIGHT, EntityType.SIGNAL}, {EntityType.EVIDENCE, EntityType.INSIGHT}),
     RelationType.RELATED_TO: (set(EntityType), set(EntityType)),
     RelationType.PRECEDES: ({EntityType.INSIGHT, EntityType.DECISION, EntityType.MARKET_EVENT}, {EntityType.INSIGHT, EntityType.DECISION, EntityType.MARKET_EVENT}),
-    RelationType.SUPERSEDES: ({EntityType.INSIGHT, EntityType.DECISION}, {EntityType.INSIGHT, EntityType.DECISION}),
+    RelationType.SUPERSEDES: ({EntityType.INSIGHT, EntityType.DECISION, EntityType.LEARNING}, {EntityType.INSIGHT, EntityType.DECISION, EntityType.LEARNING}),
+    RelationType.HAS_OUTCOME: ({EntityType.OPERATION}, {EntityType.OUTCOME}),
+    RelationType.OCCURRED_IN: ({EntityType.OPERATION}, {EntityType.MARKET_REGIME}),
+    RelationType.VALID_IN: ({EntityType.LEARNING}, {EntityType.MARKET_REGIME}),
+    RelationType.CONTRADICTED_BY: ({EntityType.LEARNING}, {EntityType.EVIDENCE, EntityType.OPERATION}),
+    RelationType.ASSOCIATED_WITH: ({EntityType.LEARNING, EntityType.INSTRUMENT, EntityType.STOCK}, {EntityType.FACTOR}),
+    RelationType.EXPOSED_TO: ({EntityType.INSTRUMENT, EntityType.STOCK, EntityType.COMPANY}, {EntityType.FACTOR}),
 }
 
 
