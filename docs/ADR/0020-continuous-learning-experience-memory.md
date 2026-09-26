@@ -1,6 +1,6 @@
 # ADR-0020 — Continuous Learning & Experience Memory
 
-**Status:** Proposed  
+**Status:** Accepted  
 **Date:** 2026-09-26  
 **Change class:** C7 — Architecture
 
