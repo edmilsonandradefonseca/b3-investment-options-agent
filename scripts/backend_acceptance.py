@@ -16,6 +16,7 @@ from b3_agent.knowledge.runtime_projection import RuntimeProjectionService
 from b3_agent.orchestration.live_providers import LiveProviderService
 from b3_agent.portfolio.snapshot import load_active_snapshots
 from b3_agent.providers.searxng_news import SearxngNewsAdapter
+from b3_agent.providers.brapi.fundamentals import BrapiFundamentalsAdapter
 from b3_agent.repositories.option_ledger import OptionTransactionLedger
 from b3_agent.research_events import ResearchEventService
 
@@ -137,6 +138,14 @@ def run_acceptance(*, ticker: str = "PETR4") -> dict[str, object]:
         f"calls={len(live.options_analysis.calls)}"
     )
 
+    brapi_fundamentals = BrapiFundamentalsAdapter()
+    fundamental_records = brapi_fundamentals.get_financial_data(normalized_ticker)
+    dividend_records = brapi_fundamentals.get_dividends(normalized_ticker)
+    print(
+        f"FUNDAMENTALS OK ticker={normalized_ticker} "
+        f"metrics={len(fundamental_records)} dividends={len(dividend_records)}"
+    )
+
     news_records = SearxngNewsAdapter(base_url=searxng_url).search(
         normalized_ticker,
         limit=5,
@@ -179,6 +188,8 @@ def run_acceptance(*, ticker: str = "PETR4") -> dict[str, object]:
         "market_records": len(live.market_records),
         "option_contracts": len(live.option_contracts),
         "option_quotes": len(live.option_quotes),
+        "fundamental_metrics": len(fundamental_records),
+        "dividend_records": len(dividend_records),
         "research_events": len(research.events),
     }
 
