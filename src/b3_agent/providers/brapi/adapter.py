@@ -1,5 +1,6 @@
 ﻿from datetime import date, datetime, timezone
 import json
+import os
 import urllib.parse
 import urllib.request
 
@@ -45,10 +46,7 @@ class BrapiAdapter:
 
         request = urllib.request.Request(
             url,
-            headers={
-                "User-Agent": "b3-investment-options-agent/0.1",
-                "Accept": "application/json",
-            },
+            headers=self._headers(),
         )
 
         with urllib.request.urlopen(request, timeout=15) as response:
@@ -122,3 +120,14 @@ class BrapiAdapter:
             )
 
         return records
+
+    @staticmethod
+    def _headers() -> dict[str, str]:
+        headers = {
+            "User-Agent": "b3-investment-options-agent/0.1",
+            "Accept": "application/json",
+        }
+        token = os.getenv("BRAPI_TOKEN")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        return headers
