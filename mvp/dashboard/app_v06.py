@@ -14,9 +14,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from b3_agent.opportunity import OpportunityIntelligenceEngine
-from b3_agent.options.transactions import OptionsTransactionLoader
-from b3_agent.portfolio import PortfolioIntelligenceEngine
+from b3_agent.dashboard_e2e import DashboardE2EService
 from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
 from b3_agent.repositories.portfolio import PortfolioRepository
 
@@ -49,22 +47,6 @@ def _temp_path(uploaded_file) -> Path:
     return Path(handle.name)
 
 
-def _load_btg(uploaded_file):
-    path = _temp_path(uploaded_file)
-    try:
-        return BtgRendaVariavelLoader().load(path)
-    finally:
-        path.unlink(missing_ok=True)
-
-
-def _load_transactions(uploaded_file):
-    path = _temp_path(uploaded_file)
-    try:
-        return OptionsTransactionLoader().load(path)
-    finally:
-        path.unlink(missing_ok=True)
-
-
 def _load_configured():
     configured = os.getenv("B3_AGENT_PORTFOLIO_FILE", "")
     if not configured:
@@ -80,6 +62,8 @@ def _load_configured():
 for key, default in {
     "context": None,
     "transactions": (),
+    "intelligence": None,
+    "opportunities": None,
     "btg_status": "Not loaded",
     "options_status": "Not loaded",
     "load_error": None,
@@ -102,26 +86,39 @@ with st.sidebar:
         st.session_state.load_error = None
         loaded = False
         if btg_file:
+            portfolio_path = _temp_path(btg_file)
+            options_path = _temp_path(options_file) if options_file else None
             try:
-                st.session_state.context = _load_btg(btg_file)
+                snapshot = DashboardE2EService().load(
+                    portfolio_path,
+                    options_path=options_path,
+                )
+                st.session_state.context = snapshot.portfolio
+                st.session_state.intelligence = snapshot.portfolio_intelligence
+                st.session_state.transactions = snapshot.option_transactions
+                st.session_state.opportunities = snapshot.opportunities
                 st.session_state.btg_status = (
-                    f"✓ Loaded — {len(st.session_state.context.positions)} positions"
+                    f"✓ Loaded — {len(snapshot.portfolio.positions)} positions"
+                )
+                st.session_state.options_status = (
+                    f"✓ Loaded — {len(snapshot.option_transactions)} transactions"
+                    if options_file else "Not loaded"
                 )
                 loaded = True
             except Exception as exc:
                 st.session_state.btg_status = "✗ Load failed"
-                st.session_state.load_error = f"BTG: {exc}"
-        if options_file:
-            try:
-                st.session_state.transactions = _load_transactions(options_file)
-                st.session_state.options_status = (
-                    f"✓ Loaded — {len(st.session_state.transactions)} transactions"
-                )
-                loaded = True
-            except Exception as exc:
-                st.session_state.options_status = "✗ Load failed"
-                suffix = f" | Options: {exc}"
-                st.session_state.load_error = (st.session_state.load_error or "") + suffix
+                if options_file:
+                    st.session_state.options_status = "✗ Load failed"
+                st.session_state.load_error = f"E2E load: {exc}"
+            finally:
+                portfolio_path.unlink(missing_ok=True)
+                if options_path is not None:
+                    options_path.unlink(missing_ok=True)
+        elif options_file:
+            st.session_state.load_error = (
+                "Carregue o BTG Portfolio junto com Options Transactions "
+                "para montar um snapshot E2E consistente."
+            )
         if not loaded:
             st.session_state.load_error = "Selecione pelo menos um arquivo Excel."
 
@@ -160,7 +157,11 @@ if context is None:
         st.info("Carregue o Excel BTG no painel DATA & COPILOT à direita para iniciar.")
         st.stop()
 
-intelligence = PortfolioIntelligenceEngine().build(context)
+intelligence = st.session_state.intelligence
+if intelligence is None:
+    intelligence = __import__(
+        "b3_agent.portfolio", fromlist=["PortfolioIntelligenceEngine"]
+    ).PortfolioIntelligenceEngine().build(context)
 rows = [
     {
         "Ticker": p.ticker,
@@ -215,10 +216,14 @@ with tab_options:
 
 with tab_opportunities:
     st.subheader("Opportunities")
-    opportunity_set = OpportunityIntelligenceEngine().assess(())
+    opportunity_set = st.session_state.opportunities
+    if opportunity_set is None:
+        opportunity_set = DashboardE2EService().load(
+            Path(os.environ["B3_AGENT_PORTFOLIO_FILE"])
+        ).opportunities if os.getenv("B3_AGENT_PORTFOLIO_FILE", "").lower().endswith((".xlsx", ".xlsm")) else None
     c1, c2 = st.columns(2)
-    c1.metric("Eligible", len(opportunity_set.ranked_opportunities))
-    c2.metric("Rejected", len(opportunity_set.rejected_opportunities))
+    c1.metric("Eligible", len(opportunity_set.ranked_opportunities) if opportunity_set else 0)
+    c2.metric("Rejected", len(opportunity_set.rejected_opportunities) if opportunity_set else 0)
     st.info(
         "Nenhum input analítico de oportunidade foi carregado nesta sessão. "
         "A V4 não converte exposição de portfolio em oportunidade sem dados "
