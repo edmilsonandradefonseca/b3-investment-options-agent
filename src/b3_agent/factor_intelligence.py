@@ -4,7 +4,7 @@ import math
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 
-from b3_agent.schemas.factor import FactorObservation, FactorStudy, FactorTestResult
+from b3_agent.schemas.factor import FactorObservation, FactorStudy, FactorTestResult, FactorWalkForwardFold, FactorWalkForwardResult
 
 AS_OF = date | datetime
 
@@ -56,6 +56,35 @@ class FactorIntelligenceEngine:
             for item in raw
         )
         return FactorStudy(as_of=as_of, results=results, alpha=alpha, holdout_fraction=holdout_fraction, min_sample_size=min_sample_size)
+
+    def walk_forward(
+        self,
+        factor_id: str,
+        observations: Sequence[FactorObservation],
+        *,
+        as_of: AS_OF,
+        train_size: int = 30,
+        test_size: int = 10,
+    ) -> FactorWalkForwardResult:
+        ordered = sorted(observations, key=lambda item: item.observed_at)
+        if train_size < 3 or test_size < 2:
+            raise ValueError("train_size >= 3 and test_size >= 2 are required")
+        folds = []
+        cursor = train_size
+        while cursor + test_size <= len(ordered):
+            train = ordered[cursor-train_size:cursor]
+            test = ordered[cursor:cursor+test_size]
+            train_r = _correlation(train); test_r = _correlation(test)
+            stable = train_r is not None and test_r is not None and train_r * test_r > 0
+            folds.append(FactorWalkForwardFold(train[0].observed_at, train[-1].observed_at, test[0].observed_at, test[-1].observed_at, train_r, test_r, stable))
+            cursor += test_size
+        test_values = sorted(f.test_correlation for f in folds if f.test_correlation is not None)
+        median = None
+        if test_values:
+            mid=len(test_values)//2
+            median=test_values[mid] if len(test_values)%2 else (test_values[mid-1]+test_values[mid])/2
+        stable_ratio=sum(f.direction_stable for f in folds)/len(folds) if folds else 0.0
+        return FactorWalkForwardResult(factor_id, as_of, tuple(folds), stable_ratio, median, "VALIDATED" if folds else "WARNING")
 
 
 def _correlation(observations: Sequence[FactorObservation]) -> float | None:

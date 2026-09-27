@@ -27,3 +27,12 @@ def test_factor_engine_rejects_small_sample_as_validated_evidence():
     assert result.quality_status == "WARNING"
     assert result.statistically_significant is False
     assert result.p_value is None
+
+
+def test_factor_walk_forward_requires_persistent_direction():
+    result=FactorIntelligenceEngine().walk_forward("momentum",_series(1,70),as_of=datetime(2026,9,27,tzinfo=timezone.utc),train_size=30,test_size=10)
+    assert len(result.folds)==4
+    assert result.stable_fold_ratio == 1.0
+    assert result.median_test_correlation is not None
+    assert result.median_test_correlation > .99
+    assert result.interpretation == "association_only_no_causal_claim"
