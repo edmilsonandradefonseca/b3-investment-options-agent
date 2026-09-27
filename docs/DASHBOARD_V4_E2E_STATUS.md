@@ -1,62 +1,48 @@
 # Dashboard V4 E2E — Functional Validation
 
-**Status:** IN PROGRESS  
-**Architecture baseline:** V4 frozen at merge commit `4c341227`
+**Status:** FUNCTIONAL BASELINE COMPLETE — provider/runtime calibration remains  
+**Architecture baseline:** V4.0 frozen at merge commit `4c341227`  
+**Validation branch:** `feature/v4-dashboard-e2e`
 
-## First functional slice
+## Authoritative portfolio path
 
-The dashboard is now treated as a read-only consumer of the frozen V4 domain.
+BTG Excel `Renda Variavel` → `BtgRendaVariavelLoader` → `PortfolioContext` → deterministic engines → Dashboard/Copilot context.
 
-Current E2E path:
+Only `Posição > Ações` and `Posição > Opções` are authoritative for positions. Auxiliary statement sections are ignored. BTG cash is **unknown**, not zero, because this snapshot does not provide the cash balance.
 
-BTG Excel → `BtgRendaVariavelLoader` → `PortfolioContext` → `PortfolioIntelligenceEngine` → dashboard
+## UC-01…UC-12 reconciliation
 
-Options transactions remain a separate substitutive snapshot.
+| UC | Functional baseline | Remaining external/calibration work |
+|---|---|---|
+| 01 Portfolio Intelligence | IMPLEMENTED / TESTED | enrich sector/P&L when canonical inputs exist |
+| 02 Options Lifecycle | IMPLEMENTED / TESTED | IV/Greeks require validated market provider |
+| 03 Opportunity Discovery | IMPLEMENTED / TESTED | connect real market/valuation/options providers |
+| 04 Strategy Comparison / What-if | IMPLEMENTED / TESTED | calibrate scenarios with real data |
+| 05 Market & Regime | IMPLEMENTED / TESTED | feed live/historical canonical market features |
+| 06 Factor Intelligence | IMPLEMENTED / TESTED | real factor construction, broader robustness/regime calibration |
+| 07 Historical Reconstruction | IMPLEMENTED / TESTED | ingest real historical execution ledger |
+| 08 Continuous Learning | IMPLEMENTED / TESTED | accumulate real finalized outcomes/cohorts |
+| 09 Historical Similarity / RAG | IMPLEMENTED / TESTED | runtime Qdrant benchmark/calibration |
+| 10 Research / News / Events | IMPLEMENTED / TESTED | connect research/news providers and entity-impact enrichment |
+| 11 Risk / Scenario / Stress | IMPLEMENTED / TESTED | calibrate shocks and richer sensitivities |
+| 12 Conversational Copilot | CONTEXT BOUNDARY IMPLEMENTED / TESTED | connect conversational LLM/UI to orchestrator |
 
-## Runtime alignment
+## Safety and authority invariants
 
-The UI no longer presents Obsidian as a runtime knowledge component.
-
-It exposes the frozen V4 ownership model:
-- SQLite / Parquet — canonical structured state
-- Qdrant — reconstructible RAG/retrieval projection
-- Neo4j — reconstructible relationship projection
-
-## Opportunity safety
-
-Portfolio exposure alone is not treated as an opportunity signal. The Opportunities tab remains empty until validated upstream market/valuation/options analytical inputs are connected to the deterministic Opportunity pipeline.
-
-## Next E2E slice
-
-1. validate a real BTG XLSX against the current loader;
-2. validate option transaction XLSX;
-3. connect validated analytical inputs to `OpportunityPipeline.build_from_inputs`;
-4. expose V4 regime/experience/learning/scenario outputs through `DashboardV4Presenter`;
-5. run the 12 use cases against real/snapshot data.
-
-## Implemented E2E seam
-
-`DashboardE2EService` now provides a Streamlit-independent deterministic seam:
-
-BTG XLSX → PortfolioContext → PortfolioIntelligence + optional Options Transactions → empty/sourced OpportunitySet
-
-This is covered by a realistic generated XLSX fixture. It proves integration without requiring the user's private workbook in CI and preserves the rule that missing analytical inputs cannot be invented.
-
+- deterministic/statistical services own measurable facts;
+- LLMs may explain/synthesize but do not override deterministic facts;
+- no opportunity is invented outside the canonical analytical pipeline;
+- no autonomous order execution;
+- point-in-time availability is mandatory;
+- correlation/significance are not represented as causality;
+- personal historical experience is not generalized into market probability;
+- SQLite/Parquet own canonical structured truth; Qdrant/Neo4j are rebuildable projections;
+- provenance and `as_of` remain visible through the pipeline.
 
 ## Real BTG validation — 2026-09-27
 
-Validated against the user's newer BTG statement using only the authoritative
-`Renda Variavel` sections `Posição > Ações` and `Posição > Opções`.
+The user's current BTG statement was validated without committing private data. The two authoritative sections produced 21 stock rows + 26 option rows. Economic aliases such as `PETRPN→PETR4`, `GGBRPN→GGBR4`, `BRADPN→BBDC4`, and `CMIGPN→CMIG4` are resolved only for economic aggregation; broker source identifiers remain untouched.
 
-Observed real-world integration requirement: some BTG option `Ativo Ref.`
-identifiers use economic aliases such as `PETRPN`, `GGBRPN`, `BRADPN`
-and `CMIGPN`, while cash equities use `PETR4`, `GGBR4`, `BBDC4` and
-`CMIG4`.
+## Next gate
 
-The source identifier remains untouched in `Position.underlying_ticker`.
-`InstrumentIdentityResolver` maps only the economic aggregation key used by
-Portfolio Intelligence and Capital Risk. This prevents false uncovered-call
-risk and split exposure buckets without corrupting broker provenance.
-
-The alias table is intentionally explicit and deterministic. Unknown symbols
-are preserved unchanged; no fuzzy or inferred ticker conversion is allowed.
+The code baseline is ready to merge after branch CI/PR verification. The next phase is **provider/runtime integration and calibration**, followed by real end-to-end validation on Ubuntu/Qdrant/Neo4j/Streamlit where applicable.

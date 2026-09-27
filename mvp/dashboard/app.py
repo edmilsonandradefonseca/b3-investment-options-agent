@@ -1,8 +1,8 @@
-"""Dashboard entrypoint.
+"""B3 V4 Streamlit dashboard entrypoint.
 
-V0.6 keeps the experimental UI isolated in ``app_v06`` while making it the
-main Streamlit entrypoint. The prototype intentionally stays shallow so real
-user feedback can drive the next iteration.
+The UI is a read-only presentation surface over deterministic/statistical V4
+services. Business logic remains in domain services; no order execution is
+available from this entrypoint.
 """
 
 from app_v06 import *  # noqa: F401,F403
