@@ -3,7 +3,7 @@
 
 **Version:** 2.0  
 **Status:** ARCHITECTURE GATE — PASSED / CLOSED  
-**Date:** 2026-09-26  
+**Date:** 2026-09-27  
 **Functional baseline:** `docs/USE_CASES_INVESTMENT_OPTIONS_V2.0.md`  
 **Current architecture baseline:** V4.0 — APPROVED / FROZEN  
 **Purpose:** map the 12 approved use cases to the frozen V4.0 architecture and current implementation baseline, identifying what is implemented, what is partial, and what remains for V4 hardening.
@@ -834,116 +834,24 @@ The missing part is experience/learning-aware context and the corresponding Dash
 
 ---
 
-# 5. Required new canonical domain objects
+# 5. Reconciliation note — implemented V4 baseline
 
-The approved use cases reveal a small set of new first-class contracts.
+The original gap-analysis sections below were written before Phases 1–8 and are retained only in Git history. They are superseded by the executive matrix and current implementation status above.
 
-## 5.1 Operation
+The following capabilities that were originally identified as missing now exist in the V4 implementation:
+- Operation, FeatureSnapshot, Outcome, MarketRegime and Learning canonical contracts;
+- PIT operation reconstruction, feature snapshots, outcomes and regime reconstruction;
+- Experience/Learning engines and lifecycle;
+- hybrid dense+sparse retrieval with RRF plus deterministic/contextual reranking and retrieval traces;
+- Neo4j projection bridge with SQLite/Parquet as canonical authority;
+- PRE-ANALYSIS and POST-OUTCOME LangGraph hooks;
+- Scenario/Stress and Strategy Comparison foundations;
+- V4 dashboard/change detection;
+- historical-usefulness attribution;
+- Source Document → Claim → Evidence provenance;
+- retrieval benchmark metrics/harness.
 
-Represents the economic operation, not only a broker row.
-
-Minimum concepts:
-
-- operation_id;
-- strategy;
-- underlying;
-- option legs if applicable;
-- opened_at;
-- closed_at;
-- capital committed;
-- source transactions;
-- status.
-
-## 5.2 FeatureSnapshot
-
-Immutable point-in-time context associated with an operation or analysis timestamp.
-
-Conceptually:
-
-```text
-FeatureSnapshot
-├── as_of
-├── market_features
-├── option_features
-├── portfolio_features
-├── macro_features
-├── flow_features
-├── commodity_features
-├── event_refs
-├── quality
-└── provenance
-```
-
-## 5.3 Outcome
-
-Represents what actually happened after the operation/decision.
-
-Possible fields:
-
-- realized P&L;
-- return;
-- duration;
-- assignment/exercise;
-- MAE;
-- MFE;
-- exit reason;
-- finalized_at.
-
-## 5.4 MarketRegime
-
-Represents a deterministic/statistically derived state of the market.
-
-It must be versioned and reproducible from source features.
-
-## 5.5 Learning
-
-Represents reusable experience supported by observations/outcomes.
-
-It is distinct from `Insight`.
-
-```text
-Insight
-= observation/assessment
-
-Learning
-= reusable pattern/hypothesis with accumulated evidence,
-  statistics, confidence, validity and lifecycle
-```
-
-## 5.6 LearningEvidenceLink
-
-Links a Learning to:
-
-- supporting operations;
-- contradicting operations;
-- evidence;
-- regime;
-- related entities;
-- superseded learnings.
-
----
-
-# 6. Required new engines/services
-
-The use cases imply the following missing or expanded services.
-
-| Component | Need | Status |
-|---|---|---:|
-| Feature Snapshot Engine | reconstruct PIT context | **MISSING** |
-| Outcome Engine | canonical realized outcome | **MISSING** |
-| Market Regime Engine | classify/reconstruct regime | **MISSING** |
-| Factor Intelligence / Statistical Engine | validate relationships | **MISSING** |
-| Experience Engine | bind operation + features + outcome | **MISSING** |
-| Learning Engine | create/update learning | **MISSING** |
-| Drift/Confidence Engine | aging, drift, confidence update | **MISSING** |
-| Experience Similarity Ranker | combine structured/semantic/regime/time relevance | **MISSING** |
-| Scenario/Stress Engine | quantitative what-if/stress | **MISSING** |
-| Qdrant semantic retrieval | retrieve semantic evidence using target 768d multilingual embeddings | **EXISTS/PARTIAL** |
-| Knowledge Context Builder | bounded RAG + KG + deterministic context | **EXISTS** |
-| Persistent Neo4j adapter | durable relationship memory | **MISSING** |
-| Human-readable presentation | generated from canonical memory via Dashboard/Copilot | **PARTIAL** |
-
----
+Remaining items are hardening/calibration or end-to-end production-data validation, not missing V4 architectural primitives.
 
 # 7. Required LangGraph evolution
 

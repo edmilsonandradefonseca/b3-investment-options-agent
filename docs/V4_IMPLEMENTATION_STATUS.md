@@ -1,8 +1,8 @@
 # B3 Architecture V4.0 — Implementation Status
 
-**Date:** 2026-09-26  
+**Date:** 2026-09-27  
 **Architecture:** V4.0 — APPROVED / FROZEN  
-**Current phase:** Phases 1–8 — COMPLETE ON `main`  
+**Current phase:** Phases 1–8 COMPLETE; V4 hardening blocks 1–3 implemented on PR #24  
 **Implementation baseline:** commit `26cd213e62ee4b6889ce2ac2c9a2d3b2496e38a8`
 
 ## Executive status
@@ -201,3 +201,18 @@ Recommended retrieval evaluation metrics:
 V4.0 remains **APPROVED / FROZEN**.
 
 Material changes to canonical contracts, persistence ownership, workflow authority, memory topology or human-decision boundaries require architecture review/ADR. Calibration of retrieval weights, thresholds and ranking profiles is implementation/evaluation work unless it changes those boundaries.
+
+
+## Hardening update — 2026-09-27
+
+Completed on PR #24:
+- decision/evidence/outcome historical-usefulness attribution with conservative neutral-prior shrinkage and canonical SQLite persistence;
+- Source Document → Claim → Evidence provenance contracts with explicit SUPPORTS/CONTRADICTS links;
+- retrieval benchmark harness for Precision@K, Recall@K, MRR, NDCG@K and latency.
+
+Both usefulness and provenance blocks passed CI before the benchmark block was added.
+
+Remaining V4 verification path:
+1. reconcile UC-01…UC-12 documentation against the actual implemented baseline;
+2. run complete regression/CI;
+3. record verified V4 baseline and close/freeze PR #24.
