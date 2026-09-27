@@ -37,3 +37,8 @@ def test_options_intelligence_surfaces_execution_history():
     assert '"Lado": item.side' in source
     assert '"Nota": item.note_number' in source
     assert "BTG Portfolio é autoritativo para a posição atual" in source
+
+
+def test_dashboard_source_compiles():
+    source = Path("mvp/dashboard/app_v06.py").read_text(encoding="utf-8")
+    compile(source, "mvp/dashboard/app_v06.py", "exec")
