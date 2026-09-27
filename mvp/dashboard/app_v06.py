@@ -147,35 +147,38 @@ with st.sidebar:
         "Para poucos arquivos, envie até 10 PDFs por lote. "
         "Para histórico grande, compacte as notas em um único ZIP."
     )
-    brokerage_files = st.file_uploader(
-        "Notas de corretagem",
-        type=["pdf", "zip"],
+    direct_pdfs = st.file_uploader(
+        "PDFs de notas",
+        type=["pdf"],
         accept_multiple_files=True,
-        key="v06_brokerage_notes",
+        key="v06_brokerage_pdfs",
+        help=f"Até {MAX_DIRECT_PDFS} PDFs por lote.",
+    )
+    archive_file = st.file_uploader(
+        "ZIP de notas",
+        type=["zip"],
+        accept_multiple_files=False,
+        key="v06_brokerage_zip",
         help=(
-            "PDF: até 10 por lote. ZIP: até 250 PDFs / 100 MB descompactados. "
-            "As notas alimentam o ledger histórico e não substituem a posição atual do BTG."
+            f"Um único ZIP por lote, até {MAX_ARCHIVE_PDFS} PDFs e "
+            "100 MB descompactados."
         ),
     )
 
     if st.button("🧾 IMPORT BROKERAGE NOTES", use_container_width=True):
         st.session_state.load_error = None
-        if not brokerage_files:
+        if not direct_pdfs and archive_file is None:
             st.session_state.load_error = "Selecione PDFs ou um ZIP com notas de corretagem."
+        elif direct_pdfs and archive_file is not None:
+            st.session_state.load_error = (
+                "Envie PDFs OU um único ZIP por lote, não os dois formatos juntos."
+            )
+        elif len(direct_pdfs) > MAX_DIRECT_PDFS:
+            st.session_state.load_error = (
+                f"Selecione no máximo {MAX_DIRECT_PDFS} PDFs por lote. "
+                "Para muitas notas, use um arquivo ZIP."
+            )
         else:
-            direct_pdfs = [item for item in brokerage_files if item.name.lower().endswith(".pdf")]
-            zip_files = [item for item in brokerage_files if item.name.lower().endswith(".zip")]
-
-            if len(direct_pdfs) > MAX_DIRECT_PDFS:
-                st.session_state.load_error = (
-                    f"Selecione no máximo {MAX_DIRECT_PDFS} PDFs por lote. "
-                    "Para muitas notas, use um arquivo ZIP."
-                )
-            elif len(zip_files) > 1 or (zip_files and direct_pdfs):
-                st.session_state.load_error = (
-                    "Envie até 10 PDFs OU um único ZIP por lote, não os dois formatos juntos."
-                )
-            else:
                 ledger = OptionTransactionLedger(settings.data_dir / "options.sqlite3")
                 inserted = 0
                 parsed = 0
@@ -185,8 +188,8 @@ with st.sidebar:
                 progress = st.progress(0.0, text="Preparando notas...")
                 status = st.empty()
 
-                if zip_files:
-                    archive_path = _temp_path(zip_files[0])
+                if archive_file is not None:
+                    archive_path = _temp_path(archive_file)
                     try:
                         with zipfile.ZipFile(archive_path) as archive:
                             members = [
@@ -234,7 +237,7 @@ with st.sidebar:
                                     text=f"Processadas {index}/{total_files} notas",
                                 )
                     except Exception as exc:
-                        failures.append(f"{zip_files[0].name}: {exc}")
+                        failures.append(f"{archive_file.name}: {exc}")
                     finally:
                         archive_path.unlink(missing_ok=True)
                 else:
