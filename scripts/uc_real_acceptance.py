@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 import os
 
+from b3_agent.providers.brapi.adapter import BrapiAdapter
+
 from b3_agent.config import settings
 from b3_agent.copilot_context import CopilotContextBuilder
 from b3_agent.dashboard_e2e import (
@@ -31,12 +33,22 @@ class UcResult:
 
 
 def main() -> None:
+    _load_shared_env()
     portfolio_path = settings.data_dir / "imports" / "portfolio.xlsx"
     if not portfolio_path.is_file():
         raise SystemExit(f"missing real portfolio: {portfolio_path}")
 
     portfolio = BtgRendaVariavelLoader().load(portfolio_path)
     ticker = _acceptance_ticker(portfolio)
+    provider_tickers = _provider_acceptance_tickers(portfolio)
+    provider_results = _validate_brapi_market(provider_tickers)
+    print(
+        "BRAPI MULTI-TICKER OK "
+        + " ".join(
+            f"{symbol}={count}"
+            for symbol, count in provider_results.items()
+        )
+    )
     live = LiveProviderService().load(ticker)
     now = datetime.now(timezone.utc)
 
@@ -46,7 +58,7 @@ def main() -> None:
         portfolio_path,
         opportunity_inputs=DashboardOpportunityInputs(
             options_analyses=(live.options_analysis,),
-            source_refs=live.sources,
+            source_refs=live.source_refs,
         ),
     )
     results.append(UcResult(
@@ -80,7 +92,7 @@ def main() -> None:
         subject_id=ticker,
         as_of=now,
         market_records=live.market_records,
-        source_refs=live.sources,
+        source_refs=live.source_refs,
     )
     regime = MarketRegimeEngine().classify(feature_snapshot)
     results.append(UcResult(
@@ -157,6 +169,70 @@ def main() -> None:
     if failed:
         raise SystemExit(1)
     print("===== B3 REAL UC ACCEPTANCE COMPLETED =====")
+
+
+def _load_shared_env() -> None:
+    env_path = Path(
+        os.getenv("B3_SHARED_PLATFORM_ENV", "/opt/joao-runtime/joao.env")
+    )
+    if not env_path.is_file():
+        return
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key and key not in os.environ:
+            os.environ[key] = value.strip().strip('"').strip("'")
+
+
+def _provider_acceptance_tickers(portfolio) -> tuple[str, ...]:
+    configured = os.getenv("B3_ACCEPTANCE_TICKERS", "").strip()
+    if configured:
+        values = tuple(
+            dict.fromkeys(
+                item.upper().strip()
+                for item in configured.split(",")
+                if item.strip()
+            )
+        )
+        if values:
+            return values
+
+    portfolio_tickers = sorted(
+        {
+            (position.underlying_ticker or position.ticker).upper()
+            for position in portfolio.positions
+            if (position.underlying_ticker or position.ticker)
+            and position.instrument_type != "OPTION"
+        }
+    )
+    preferred = [
+        ticker
+        for ticker in portfolio_tickers
+        if ticker != "PETR4"
+    ][:4]
+    if "PETR4" in portfolio_tickers:
+        preferred.insert(0, "PETR4")
+    return tuple(preferred[:5] or portfolio_tickers[:5])
+
+
+def _validate_brapi_market(tickers: tuple[str, ...]) -> dict[str, int]:
+    from datetime import date, timedelta
+
+    if not tickers:
+        raise RuntimeError("no portfolio tickers available for BRAPI acceptance")
+    end = date.today()
+    start = end - timedelta(days=15)
+    adapter = BrapiAdapter()
+    results: dict[str, int] = {}
+    for ticker in tickers:
+        records = adapter.get_market_data(ticker, start, end)
+        if not records:
+            raise RuntimeError(f"BRAPI returned no market records for {ticker}")
+        results[ticker] = len(records)
+    return results
 
 
 def _acceptance_ticker(portfolio) -> str:
