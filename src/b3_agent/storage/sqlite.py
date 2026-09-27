@@ -85,6 +85,24 @@ CREATE INDEX IF NOT EXISTS idx_retrieval_traces_as_of
 CREATE INDEX IF NOT EXISTS idx_retrieval_traces_query_id
     ON retrieval_traces(query_id);
 
+CREATE TABLE IF NOT EXISTS usefulness_attributions (
+    attribution_id TEXT PRIMARY KEY,
+    decision_id TEXT NOT NULL,
+    evidence_ref TEXT NOT NULL,
+    outcome_id TEXT NOT NULL,
+    observed_at TEXT NOT NULL,
+    association TEXT NOT NULL,
+    attribution_confidence REAL NOT NULL,
+    rationale TEXT NOT NULL DEFAULT '',
+    source_refs_json TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_usefulness_attributions_evidence
+    ON usefulness_attributions(evidence_ref, observed_at);
+
+CREATE INDEX IF NOT EXISTS idx_usefulness_attributions_decision
+    ON usefulness_attributions(decision_id);
+
 CREATE TABLE IF NOT EXISTS dataset_references (
     dataset_id TEXT PRIMARY KEY,
     dataset_name TEXT NOT NULL UNIQUE,
