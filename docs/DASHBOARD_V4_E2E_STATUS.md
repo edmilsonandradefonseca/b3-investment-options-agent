@@ -33,3 +33,11 @@ Portfolio exposure alone is not treated as an opportunity signal. The Opportunit
 3. connect validated analytical inputs to `OpportunityPipeline.build_from_inputs`;
 4. expose V4 regime/experience/learning/scenario outputs through `DashboardV4Presenter`;
 5. run the 12 use cases against real/snapshot data.
+
+## Implemented E2E seam
+
+`DashboardE2EService` now provides a Streamlit-independent deterministic seam:
+
+BTG XLSX → PortfolioContext → PortfolioIntelligence + optional Options Transactions → empty/sourced OpportunitySet
+
+This is covered by a realistic generated XLSX fixture. It proves integration without requiring the user's private workbook in CI and preserves the rule that missing analytical inputs cannot be invented.
