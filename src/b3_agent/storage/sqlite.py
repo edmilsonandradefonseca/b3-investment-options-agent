@@ -62,6 +62,84 @@ CREATE INDEX IF NOT EXISTS idx_transactions_executed_at
 CREATE INDEX IF NOT EXISTS idx_transactions_ticker
     ON transactions(ticker);
 
+CREATE TABLE IF NOT EXISTS retrieval_traces (
+    trace_id TEXT PRIMARY KEY,
+    query_id TEXT NOT NULL,
+    as_of TEXT NOT NULL,
+    retrieval_mode TEXT NOT NULL,
+    fusion_method TEXT,
+    ranker_version TEXT NOT NULL,
+    candidate_count INTEGER NOT NULL,
+    selected_count INTEGER NOT NULL,
+    subject_ids_json TEXT NOT NULL,
+    current_snapshot_id TEXT,
+    current_regime_id TEXT,
+    retrieval_metadata_json TEXT NOT NULL,
+    trace_items_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_retrieval_traces_as_of
+    ON retrieval_traces(as_of);
+
+CREATE INDEX IF NOT EXISTS idx_retrieval_traces_query_id
+    ON retrieval_traces(query_id);
+
+CREATE TABLE IF NOT EXISTS usefulness_attributions (
+    attribution_id TEXT PRIMARY KEY,
+    decision_id TEXT NOT NULL,
+    evidence_ref TEXT NOT NULL,
+    outcome_id TEXT NOT NULL,
+    observed_at TEXT NOT NULL,
+    association TEXT NOT NULL,
+    attribution_confidence REAL NOT NULL,
+    rationale TEXT NOT NULL DEFAULT '',
+    source_refs_json TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_usefulness_attributions_evidence
+    ON usefulness_attributions(evidence_ref, observed_at);
+
+CREATE INDEX IF NOT EXISTS idx_usefulness_attributions_decision
+    ON usefulness_attributions(decision_id);
+
+CREATE TABLE IF NOT EXISTS source_documents (
+    document_id TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    title TEXT NOT NULL,
+    retrieved_at TEXT NOT NULL,
+    published_at TEXT,
+    source_url TEXT,
+    content_hash TEXT,
+    version INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS claims (
+    claim_id TEXT PRIMARY KEY,
+    statement TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    status TEXT NOT NULL,
+    valid_from TEXT,
+    valid_to TEXT,
+    version INTEGER NOT NULL,
+    supersedes_claim_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS claim_evidence_links (
+    claim_id TEXT NOT NULL,
+    evidence_id TEXT NOT NULL,
+    document_id TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    observed_at TEXT NOT NULL,
+    confidence REAL NOT NULL,
+    PRIMARY KEY (claim_id, evidence_id, direction),
+    FOREIGN KEY (claim_id) REFERENCES claims(claim_id),
+    FOREIGN KEY (document_id) REFERENCES source_documents(document_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_claim_evidence_document
+    ON claim_evidence_links(document_id);
+
 CREATE TABLE IF NOT EXISTS dataset_references (
     dataset_id TEXT PRIMARY KEY,
     dataset_name TEXT NOT NULL UNIQUE,

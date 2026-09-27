@@ -3,10 +3,10 @@
 
 **Version:** 2.0  
 **Status:** ARCHITECTURE GATE — PASSED / CLOSED  
-**Date:** 2026-09-26  
+**Date:** 2026-09-27  
 **Functional baseline:** `docs/USE_CASES_INVESTMENT_OPTIONS_V2.0.md`  
 **Current architecture baseline:** V4.0 — APPROVED / FROZEN  
-**Purpose:** map the 12 approved use cases to current capabilities and identify the minimum architectural evolution required before defining the next architecture version.
+**Purpose:** map the 12 approved use cases to the frozen V4.0 architecture and current implementation baseline, identifying what is implemented, what is partial, and what remains for V4 hardening.
 
 ---
 
@@ -22,22 +22,24 @@ This matrix evaluates the current repository against the approved functional bas
 
 # 2. Executive result
 
-| UC | Use Case | Current Status | Main reason |
-|---|---|---:|---|
-| UC-01 | Portfolio Intelligence | **PARTIAL** | Strong deterministic portfolio exposure/capital foundation exists; broader contextual/risk/learning integration is incomplete. |
-| UC-02 | Options Position & Lifecycle Intelligence | **PARTIAL** | PUT/CALL analysis and option reconciliation exist; complete lifecycle, Greeks/IV history, realized outcome and roll intelligence are incomplete. |
-| UC-03 | Opportunity Discovery | **PARTIAL** | Opportunity producers/ranking pipeline exist; market-regime, prior-experience and continuous-learning inputs are not integrated. |
-| UC-04 | Strategy Comparison & What-if | **PARTIAL** | Deterministic option/stock economics exist; canonical scenario/comparison engine is not complete. |
-| UC-05 | Market & Regime Intelligence | **PARTIAL** | Quant and live Market Intelligence exist; no first-class MarketRegime Engine/object. |
-| UC-06 | Contextual Factor Intelligence | **PARTIAL** | Quant correlations, market research and KG contracts exist; no factor-discovery/statistical-validation pipeline. |
-| UC-07 | Historical Operation Reconstruction | **MISSING** | Transaction history exists, but no canonical point-in-time Feature Snapshot + Outcome reconstruction pipeline. |
-| UC-08 | Experience & Continuous Learning | **MISSING** | Insight/memory/lifecycle foundations exist, but no Learning object, Learning Engine, outcome feedback loop or drift engine. |
-| UC-09 | Historical Similarity & Precedent Retrieval | **PARTIAL** | Qdrant/RAG/context retrieval foundations exist; no structured historical-state similarity engine or combined relevance ranker. |
-| UC-10 | Research, News & Event Intelligence | **PARTIAL** | Market Intelligence web research and event-aware KG/RAG foundations exist; evidence-to-learning update loop is missing. |
-| UC-11 | Risk, Scenario & Stress Intelligence | **PARTIAL** | Risk validator and capital-risk foundations exist; scenario/stress/sensitivity engine is missing. |
-| UC-12 | Decision Rationale & Conversational Copilot | **PARTIAL** | Orchestrator/LangGraph/specialists/synthesis/reasoning exist; full experience-aware rationale and dashboard surface are incomplete. |
+The original architecture-gate assessment was completed before the V4 implementation sequence. The implementation baseline on 2026-09-26 has now advanced through V4 Phases 1–8.
 
-**Architecture implication:** the current B3 codebase already contains substantial deterministic, orchestration and knowledge foundations. The next architecture should extend these foundations with an explicit **Experience → Outcome → Learning → Memory → Retrieval** loop rather than replace them.
+| UC | Use Case | V4 implementation status | Main remaining work |
+|---|---|---:|---|
+| UC-01 | Portfolio Intelligence | **PARTIAL / STRONG FOUNDATION** | Complete learning-aware portfolio workflow, richer contextual risk and end-to-end validation. |
+| UC-02 | Options Position & Lifecycle Intelligence | **PARTIAL / STRONG FOUNDATION** | Complete lifecycle coverage, Greeks/IV history quality, roll/assignment semantics and realized-outcome breadth. |
+| UC-03 | Opportunity Discovery | **PARTIAL / INTEGRATED FOUNDATION** | Calibrate experience/regime influence and explainable ranking without mutating deterministic score. |
+| UC-04 | Strategy Comparison & What-if | **IMPLEMENTED FOUNDATION** | Historical validation and scenario-library expansion. |
+| UC-05 | Market & Regime Intelligence | **IMPLEMENTED FOUNDATION** | Broaden provider coverage, calibrate regime definitions and validate transitions. |
+| UC-06 | Contextual Factor Intelligence | **PARTIAL** | Complete factor-discovery/statistical-validation pipeline and multiple-testing safeguards. |
+| UC-07 | Historical Operation Reconstruction | **IMPLEMENTED FOUNDATION** | End-to-end PIT replay against real historical data and provider availability timestamps. |
+| UC-08 | Experience & Continuous Learning | **IMPLEMENTED FOUNDATION** | Statistical calibration, drift evaluation, attribution quality and production data validation. |
+| UC-09 | Historical Similarity & Precedent Retrieval | **IMPLEMENTED FOUNDATION** | Dense+sparse benchmark, RRF/reranking calibration, retrieval traces and labeled evaluation set. |
+| UC-10 | Research, News & Event Intelligence | **PARTIAL** | Strengthen Source Document → Claim → Evidence provenance and learning feedback. |
+| UC-11 | Risk, Scenario & Stress Intelligence | **IMPLEMENTED FOUNDATION** | Validate scenarios against historical episodes and expand sensitivities. |
+| UC-12 | Decision Rationale & Conversational Copilot | **IMPLEMENTED FOUNDATION** | Complete explainable response contract, evidence freshness display and end-to-end user validation. |
+
+**Architecture implication:** no rewrite is required. The V4 architecture is frozen; remaining work is hardening, calibration and end-to-end evidence that the implementation satisfies the approved use cases.
 
 ---
 
@@ -832,116 +834,24 @@ The missing part is experience/learning-aware context and the corresponding Dash
 
 ---
 
-# 5. Required new canonical domain objects
+# 5. Reconciliation note — implemented V4 baseline
 
-The approved use cases reveal a small set of new first-class contracts.
+The original gap-analysis sections below were written before Phases 1–8 and are retained only in Git history. They are superseded by the executive matrix and current implementation status above.
 
-## 5.1 Operation
+The following capabilities that were originally identified as missing now exist in the V4 implementation:
+- Operation, FeatureSnapshot, Outcome, MarketRegime and Learning canonical contracts;
+- PIT operation reconstruction, feature snapshots, outcomes and regime reconstruction;
+- Experience/Learning engines and lifecycle;
+- hybrid dense+sparse retrieval with RRF plus deterministic/contextual reranking and retrieval traces;
+- Neo4j projection bridge with SQLite/Parquet as canonical authority;
+- PRE-ANALYSIS and POST-OUTCOME LangGraph hooks;
+- Scenario/Stress and Strategy Comparison foundations;
+- V4 dashboard/change detection;
+- historical-usefulness attribution;
+- Source Document → Claim → Evidence provenance;
+- retrieval benchmark metrics/harness.
 
-Represents the economic operation, not only a broker row.
-
-Minimum concepts:
-
-- operation_id;
-- strategy;
-- underlying;
-- option legs if applicable;
-- opened_at;
-- closed_at;
-- capital committed;
-- source transactions;
-- status.
-
-## 5.2 FeatureSnapshot
-
-Immutable point-in-time context associated with an operation or analysis timestamp.
-
-Conceptually:
-
-```text
-FeatureSnapshot
-├── as_of
-├── market_features
-├── option_features
-├── portfolio_features
-├── macro_features
-├── flow_features
-├── commodity_features
-├── event_refs
-├── quality
-└── provenance
-```
-
-## 5.3 Outcome
-
-Represents what actually happened after the operation/decision.
-
-Possible fields:
-
-- realized P&L;
-- return;
-- duration;
-- assignment/exercise;
-- MAE;
-- MFE;
-- exit reason;
-- finalized_at.
-
-## 5.4 MarketRegime
-
-Represents a deterministic/statistically derived state of the market.
-
-It must be versioned and reproducible from source features.
-
-## 5.5 Learning
-
-Represents reusable experience supported by observations/outcomes.
-
-It is distinct from `Insight`.
-
-```text
-Insight
-= observation/assessment
-
-Learning
-= reusable pattern/hypothesis with accumulated evidence,
-  statistics, confidence, validity and lifecycle
-```
-
-## 5.6 LearningEvidenceLink
-
-Links a Learning to:
-
-- supporting operations;
-- contradicting operations;
-- evidence;
-- regime;
-- related entities;
-- superseded learnings.
-
----
-
-# 6. Required new engines/services
-
-The use cases imply the following missing or expanded services.
-
-| Component | Need | Status |
-|---|---|---:|
-| Feature Snapshot Engine | reconstruct PIT context | **MISSING** |
-| Outcome Engine | canonical realized outcome | **MISSING** |
-| Market Regime Engine | classify/reconstruct regime | **MISSING** |
-| Factor Intelligence / Statistical Engine | validate relationships | **MISSING** |
-| Experience Engine | bind operation + features + outcome | **MISSING** |
-| Learning Engine | create/update learning | **MISSING** |
-| Drift/Confidence Engine | aging, drift, confidence update | **MISSING** |
-| Experience Similarity Ranker | combine structured/semantic/regime/time relevance | **MISSING** |
-| Scenario/Stress Engine | quantitative what-if/stress | **MISSING** |
-| Qdrant semantic retrieval | retrieve semantic evidence using target 768d multilingual embeddings | **EXISTS/PARTIAL** |
-| Knowledge Context Builder | bounded RAG + KG + deterministic context | **EXISTS** |
-| Persistent Neo4j adapter | durable relationship memory | **MISSING** |
-| Human-readable presentation | generated from canonical memory via Dashboard/Copilot | **PARTIAL** |
-
----
+Remaining items are hardening/calibration or end-to-end production-data validation, not missing V4 architectural primitives.
 
 # 7. Required LangGraph evolution
 
@@ -1184,4 +1094,103 @@ After these concepts are approved, produce the C7 ADR and the next architecture 
 **Rewrite required:** NO  
 **C7 review required:** YES  
 
-**RESULT:** Architecture V4.0 passed the final UC-01…UC-12 review and is APPROVED / FROZEN. Next work is contract-first implementation according to the V3.1 → V4.0 migration plan.
+**RESULT:** Architecture V4.0 passed the final UC-01…UC-12 architecture review and is APPROVED / FROZEN. The repository has since completed implementation Phases 1–8. The next gate is V4 hardening: code-to-use-case reconciliation, retrieval evaluation, provenance refinement, PIT replay validation, statistical calibration and full regression/CI.
+
+
+---
+
+# 14. Post-implementation reconciliation — 2026-09-26
+
+The following implementation blocks now exist on `main`:
+
+```text
+Phase 1  Canonical V4 contracts
+Phase 2  Historical experience / PIT substrate
+Phase 3  Structured learning
+Phase 4  Hybrid experience retrieval
+Phase 5  Memory projection / Neo4j bridge
+Phase 6  LangGraph PRE-ANALYSIS + POST-OUTCOME workflows
+Phase 7  Strategy comparison + scenario/stress
+Phase 8  Dashboard + AnalysisRun + change detection
+```
+
+This changes the interpretation of several earlier “MISSING” findings in this document. Those labels are retained in the historical sections as the architecture-gate record, while the executive table above reflects the current implementation baseline.
+
+## Remaining cross-cutting gaps
+
+The remaining highest-value gaps are:
+
+1. **Hybrid retrieval quality evaluation**
+   - dense-only baseline;
+   - dense + filters;
+   - dense + sparse + fusion;
+   - fusion + contextual reranking;
+   - Precision@K / MRR / NDCG / human usefulness.
+
+2. **Sparse retrieval completion/calibration**
+   - exact ticker/option symbol handling;
+   - strategy/event lexical relevance;
+   - RRF or calibrated fusion.
+
+3. **Point-in-time replay validation**
+   - enforce `available_at <= as_of`;
+   - validate real provider publication/availability semantics;
+   - detect accidental look-ahead.
+
+4. **Research provenance**
+   - Source Document;
+   - Claim;
+   - Supporting/Contradicting Evidence;
+   - canonical evidence IDs.
+
+5. **Learning calibration**
+   - aging by information type;
+   - regime-aware relevance;
+   - contradiction handling;
+   - confidence vs usefulness separation;
+   - no self-reinforcement from retrieval/use frequency.
+
+6. **Explainability**
+   - retrieval traces;
+   - ranking-component visibility;
+   - data freshness;
+   - assumptions/limitations;
+   - evidence IDs and versions.
+
+7. **UC-06 Factor Intelligence**
+   - this remains the largest functional/statistical gap relative to the other V4 blocks.
+
+## Storage ownership after V4 implementation
+
+```text
+SQLite / Parquet = authoritative structured state
+Qdrant            = reconstructible dense/sparse retrieval projection
+Neo4j             = reconstructible relationship projection
+```
+
+Cross-store objects must share canonical IDs and versions. Projection failure must not invalidate canonical structured state.
+
+## Retrieval invariant
+
+The target retrieval architecture is:
+
+```text
+Query understanding
+      ↓
+metadata + PIT filters
+      ↓
+dense retrieval + sparse retrieval
+      ↓
+fusion / RRF
+      ↓
+bounded candidate set
+      ↓
+context enrichment
+      ↓
+reranking
+      ↓
+ExperienceRetrievalResult / ExperienceAssessment
+```
+
+The Qdrant score is not the final relevance score.
+

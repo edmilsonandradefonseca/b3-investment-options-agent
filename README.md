@@ -23,28 +23,32 @@ The project investigates how an agentic architecture can combine these sources w
 The B3 Investment & Options Agent follows an enterprise-oriented agentic architecture:
 
 ```text
-                 Dashboard
-                     │
-                     ▼
-               Orchestrator
-                     │
-                     ▼
-                 LangGraph
-                     │
-       ┌─────────────┼─────────────┐
-       ▼             ▼             ▼
- Deterministic   Knowledge      Agents
-    Engine        Context
-       │             │             │
- Quant/Valuation  Qdrant/KG     Reasoning
- Options/Portfolio Obsidian     Synthesis
-       │             │             │
-       └─────────────┼─────────────┘
-                     ▼
-                    Risk
-                     │
-                     ▼
-                  Decision
+                 Dashboard / Copilot
+                       │
+                       ▼
+                  Orchestrator
+                       │
+                       ▼
+                   LangGraph
+                       │
+        ┌──────────────┼──────────────┐
+        ▼              ▼              ▼
+ Deterministic     Knowledge       Agents
+   Engines          Context
+        │              │              │
+ Portfolio/Options  SQL/Qdrant/    Reasoning
+ Quant/Valuation    Neo4j          Synthesis
+        │              │              │
+        └──────────────┼──────────────┘
+                       ▼
+          Hybrid Retrieval / Evidence
+                       ▼
+                 Scenario / Risk
+                       ▼
+                  Human Decision
+                       │
+                       ▼
+             Outcome / Learning Loop
 ```
 
 ### Architectural principle
@@ -78,14 +82,27 @@ Current foundations include:
 - structured market and portfolio data;
 - point-in-time and provenance-aware data contracts;
 - deterministic quantitative and valuation engines;
-- semantic knowledge through the Obsidian integration;
-- persistent analytical state through SQLite / Parquet;
+- persistent structured analytical state through SQLite / Parquet;
+- dense/sparse semantic retrieval through Qdrant;
+- relationship memory through Neo4j;
 - controlled LLM access through an LLM Gate;
 - decision persistence and memory;
 - explicit architectural decisions (ADRs);
 - phase freezes and validation records.
 
 The broader research direction is to evolve this into a reusable **Knowledge Context Layer**, combining structured facts, semantic retrieval and relationship-based knowledge while preserving provenance and temporal correctness.
+
+### V4 memory ownership
+
+The target runtime intentionally separates authority from retrieval projections:
+
+```text
+SQLite / Parquet = canonical structured truth
+Qdrant            = reconstructible dense/sparse retrieval projection
+Neo4j             = reconstructible relationship projection
+```
+
+Obsidian is not part of the target V4 runtime architecture. Project documentation remains in Git/GitHub.
 
 ## Agentic AI research
 
@@ -129,9 +146,9 @@ The repository currently contains dedicated components for:
 
 ## Project status
 
-The project has progressed beyond the initial governance baseline and now includes implemented data, quantitative, valuation, options and portfolio capabilities, together with automated tests, CI and architecture governance.
+The project has progressed through the Architecture V4 implementation blocks for canonical experience contracts, point-in-time historical reconstruction, structured learning, hybrid experience retrieval, memory projection, LangGraph learning workflows, scenario/strategy comparison and V4 dashboard/change detection.
 
-The next evolution is focused on completing the end-to-end MVP experience, including the knowledge/context layer, agent orchestration and executive dashboards, followed by systematic evaluation.
+The next evolution is V4 hardening: retrieval-quality evaluation, sparse/dense fusion calibration, provenance and Claim/Evidence refinement, point-in-time replay validation, statistical learning validation and end-to-end reconciliation against the twelve approved use cases.
 
 ## Repository structure
 
@@ -174,7 +191,7 @@ Personal portfolio data, account information and other private investment record
 
 The project serves as a practical laboratory for studying enterprise-oriented Agentic AI architecture, with particular emphasis on:
 
-**context → knowledge → tools → orchestration → reasoning → validation → decision**
+**context → knowledge → retrieval → tools → orchestration → reasoning → validation → decision → outcome → learning**
 
 The central research question is how these layers can be composed to produce AI-assisted decisions that are **context-aware, traceable, reusable and operationally controllable**.
 
@@ -182,7 +199,7 @@ The central research question is how these layers can be composed to produce AI-
 
 The long-term roadmap is:
 
-`DATA → QUANT → VALUATION → OPTIONS → PORTFOLIO → OPPORTUNITY RANKER → KNOWLEDGE/RAG → LLM GATE → INVESTMENT COMMITTEE → RISK → DECISION → MEMORY → BACKTEST → WALK-FORWARD → PAPER → LIVE COPILOT`
+`DATA → PIT CONTEXT → QUANT/VALUATION/OPTIONS/PORTFOLIO → OPPORTUNITY → HYBRID RETRIEVAL → KNOWLEDGE/EXPERIENCE → LANGGRAPH/LLM → SCENARIO/RISK → HUMAN DECISION → OUTCOME → LEARNING → MEMORY PROJECTION → WALK-FORWARD → LIVE COPILOT`
 
 Execution is intentionally phased:
 

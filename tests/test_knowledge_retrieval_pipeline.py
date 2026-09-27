@@ -79,3 +79,43 @@ def test_metadata_filter_is_preserved() -> None:
         as_of=datetime(2026, 9, 17, tzinfo=timezone.utc),
     )
     assert len(results) == 1
+
+
+def test_point_in_time_rejects_evidence_not_yet_retrieved() -> None:
+    client = QdrantClient(location=":memory:")
+    embeddings = DeterministicEmbeddingProvider(dimensions=8)
+    store = QdrantVectorStore(client=client, vector_size=8)
+    ingestion = VectorIngestionPipeline(
+        chunker=EvidenceChunker(max_chars=1200),
+        embeddings=embeddings,
+        store=store,
+    )
+
+    published = datetime(2026, 9, 10, tzinfo=timezone.utc)
+    retrieved = datetime(2026, 9, 18, tzinfo=timezone.utc)
+    metadata = EvidenceMetadata(
+        document_id="late-ingest",
+        source="test-news",
+        published_at=published,
+        retrieved_at=retrieved,
+        ticker_refs=("PETR4",),
+    )
+    ingestion.ingest(
+        Evidence(
+            evidence_id="late-ingest",
+            kind=EvidenceKind.NEWS,
+            title="late-ingest",
+            content="PETR4 evidence published earlier but acquired later.",
+            metadata=metadata,
+            source_url="https://example.com/late",
+        )
+    )
+
+    retriever = PointInTimeVectorRetriever(store, embeddings)
+    results = retriever.retrieve(
+        "PETR4",
+        as_of=datetime(2026, 9, 17, tzinfo=timezone.utc),
+        top_k=5,
+    )
+
+    assert results == ()

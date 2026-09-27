@@ -50,15 +50,26 @@ class LearningSemanticIndex:
         if as_of.tzinfo is None or as_of.utcoffset() is None:
             raise ValueError("as_of must be timezone-aware")
         embedding = self.embeddings.embed((query,))[0]
-        results = self.store.search(
-            embedding,
-            top_k=max(top_k, top_k * 3),
-            metadata_filter=MetadataFilter(
-                ticker=ticker,
-                topic="learning",
-                published_before=as_of,
-            ),
+        metadata_filter = MetadataFilter(
+            ticker=ticker,
+            topic="learning",
+            published_before=as_of,
         )
+        search_k = max(top_k, top_k * 3)
+        if self.store.hybrid:
+            results = self.store.hybrid_search(
+                query,
+                embedding,
+                top_k=search_k,
+                prefetch_k=max(search_k * 2, search_k),
+                metadata_filter=metadata_filter,
+            )
+        else:
+            results = self.store.search(
+                embedding,
+                top_k=search_k,
+                metadata_filter=metadata_filter,
+            )
         valid = []
         for result in results:
             valid_from = result.metadata.get("valid_from")

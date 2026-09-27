@@ -5,6 +5,9 @@ from .market_data import MarketDataRepository
 from .option_contract import OptionContractRepository
 from .option_quote import OptionQuoteRepository
 from .transaction import TransactionRepository
+from .retrieval_trace import RetrievalTraceRepository
+from .usefulness import UsefulnessAttributionRepository
+from .provenance import ProvenanceRepository
 
 __all__ = [
     "DataSourceRepository",
@@ -14,4 +17,7 @@ __all__ = [
     "OptionContractRepository",
     "OptionQuoteRepository",
     "TransactionRepository",
+    "RetrievalTraceRepository",
+    "UsefulnessAttributionRepository",
+    "ProvenanceRepository",
 ]

@@ -231,3 +231,84 @@ def test_post_outcome_langgraph_learns_and_projects(tmp_path):
     assert post.learning_update.learning.status == LearningStatus.CANDIDATE
     assert graph.get_entity("OP-001") is not None
     assert graph.get_entity(post.learning_update.learning.learning_id) is not None
+
+
+def test_pre_analysis_applies_learning_lifecycle_and_persists_trace():
+    exp = historical_experience()
+    drifted = Learning(
+        learning_id="LRN-DRIFT",
+        statement="Observed favorable personal outcomes.",
+        status=LearningStatus.DRIFT_DETECTED,
+        learning_scope=LearningScope.PERSONAL_EXPERIENCE,
+        first_observed_at=BASE,
+        last_updated_at=BASE + timedelta(days=10),
+        last_confirmed_at=BASE + timedelta(days=10),
+        subject_ids=("B3-PETR4",),
+        strategy_type="SHORT_PUT",
+        conditions=("TREND=SIDEWAYS", "VOLATILITY=HIGH"),
+        sample_size=8,
+        win_rate=0.75,
+        confidence=0.7,
+        population_scope="user PETR4 short-put operations",
+        selection_bias_warning="Selected personal operations.",
+    )
+
+    from b3_agent.knowledge.vector_store import VectorSearchResult
+
+    class FakeSemanticIndex:
+        def search(self, query, *, as_of, ticker=None, top_k=10):
+            return (
+                VectorSearchResult(
+                    chunk_id="chunk-LRN-DRIFT",
+                    evidence_id="EV-LRN-DRIFT",
+                    score=0.9,
+                    content="PETR4 short put sideways volatility",
+                    metadata={
+                        "extra": {
+                            "canonical_id": "LRN-DRIFT",
+                            "learning_id": "LRN-DRIFT",
+                        }
+                    },
+                ),
+            )
+
+    persisted = []
+    service = ExperienceContextService(
+        ranker=ExperienceRanker(),
+        assessment_engine=ExperienceAssessmentEngine(),
+        experience_loader=lambda subject_id, as_of: (exp,),
+        learning_loader=lambda subject_id, as_of: (drifted,),
+        semantic_index=FakeSemanticIndex(),
+        retrieval_trace_sink=persisted.append,
+    )
+
+    current_snapshot = FeatureSnapshot(
+        snapshot_id="FS-CURRENT-TRACE",
+        subject_id="B3-PETR4",
+        as_of=BASE + timedelta(days=20),
+        features=(
+            FeatureValue("close", 40.2, FeatureDomain.MARKET, BASE + timedelta(days=20)),
+            FeatureValue("volatility_20d", 0.44, FeatureDomain.MARKET, BASE + timedelta(days=20)),
+        ),
+    )
+    current_regime = MarketRegime(
+        regime_id="REG-CURRENT-TRACE",
+        as_of=current_snapshot.as_of,
+        dimensions=regime().dimensions,
+        classifier_version="regime-v1",
+        feature_snapshot_id=current_snapshot.snapshot_id,
+        confidence=0.8,
+    )
+
+    context = service.build(
+        query="PETR4 short put",
+        snapshot=current_snapshot,
+        regime=current_regime,
+        as_of=current_snapshot.as_of,
+        ticker="PETR4",
+    )
+
+    by_id = {item.reference_id: item for item in context.retrieval.matches}
+    assert by_id["LRN-DRIFT"].lifecycle_score == 0.65
+    assert context.retrieval.trace is not None
+    assert persisted == [context.retrieval]
