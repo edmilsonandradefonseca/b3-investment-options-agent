@@ -28,6 +28,10 @@ st.set_page_config(page_title="B3 Investment Copilot", page_icon="📊", layout=
 MAX_DIRECT_PDFS = 10
 MAX_ARCHIVE_PDFS = 250
 MAX_ARCHIVE_UNCOMPRESSED_BYTES = 100 * 1024 * 1024
+BROKERAGE_SOURCE_CONTRACT = (
+    "BTG Portfolio é autoritativo para a posição atual; notas de corretagem "
+    "são histórico append-only para preços executados e reconstrução das operações."
+)
 
 # Streamlit has a native left sidebar; for this prototype we visually move it
 # to the right so we can test the intended product layout before adopting a
@@ -423,10 +427,7 @@ with tab_options:
     else:
         st.info("Nenhuma nota de corretagem importada. O preço histórico de compra/venda ainda não está disponível.")
 
-    st.caption(
-        "BTG Portfolio é autoritativo para a posição atual; notas de corretagem "
-        "são histórico append-only para preços executados e reconstrução das operações."
-    )
+    st.caption(BROKERAGE_SOURCE_CONTRACT)
 
 with tab_opportunities:
     st.subheader("Opportunities")
