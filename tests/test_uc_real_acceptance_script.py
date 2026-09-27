@@ -13,3 +13,9 @@ def test_real_uc_acceptance_script_has_all_use_cases():
 def test_real_uc_acceptance_compiles():
     source = Path("scripts/uc_real_acceptance.py").read_text(encoding="utf-8")
     compile(source, "scripts/uc_real_acceptance.py", "exec")
+
+
+def test_acceptance_prefers_configurable_representative_ticker():
+    text = Path("scripts/uc_real_acceptance.py").read_text(encoding="utf-8")
+    assert 'os.getenv("B3_ACCEPTANCE_TICKER", "PETR4")' in text
+    assert 'if "PETR4" in portfolio_tickers' in text
