@@ -180,7 +180,6 @@ def _beta(
     if benchmark_variance == 0:
         return None
     return covariance / benchmark_variance
-    return covariance / benchmark_variance
 def compute_quant_features(
     records: Sequence[StockMarketData],
     *,
@@ -222,18 +221,6 @@ def compute_quant_features(
             latest_return = (current_price / previous_price) - 1.0
             latest_log_return = math.log(current_price / previous_price)
     rsi_value = _rsi(prices, 14)
-    beta_value = None
-    correlation_value = None
-    if benchmark_records is not None:
-        asset_returns, benchmark_returns = _aligned_returns(
-            ordered,
-            benchmark_records,
-        )
-        beta_value = _beta(asset_returns, benchmark_returns)
-        correlation_value = _correlation(
-            asset_returns,
-            benchmark_returns,
-        )
     beta_value = None
     correlation_value = None
     if benchmark_records is not None:

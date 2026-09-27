@@ -18,6 +18,9 @@ class PositionAssessment:
     market_value: float | None
     assignment_capital: float
     deliverable_shares: float
+    expiration_date: date | None = None
+    option_type: str | None = None
+    strike: float | None = None
 
 
 class PositionIntelligenceEngine:
@@ -50,6 +53,9 @@ class PositionIntelligenceEngine:
                     market_value=position.market_value,
                     assignment_capital=assignment_capital,
                     deliverable_shares=deliverable_shares,
+                    expiration_date=position.expiration_date,
+                    option_type=(position.option_type or "").upper() or None,
+                    strike=position.strike,
                 )
             )
         return tuple(assessments)

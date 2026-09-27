@@ -4,6 +4,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from b3_agent.schemas.position import PortfolioContext, Position
+from .instrument_identity import InstrumentIdentityResolver
 
 
 @dataclass(frozen=True)
@@ -24,11 +25,14 @@ class PositionExposure:
 class PositionIntelligenceEngine:
     """Deterministic exposure and coverage context for existing positions."""
 
+    def __init__(self, identity_resolver: InstrumentIdentityResolver | None = None) -> None:
+        self.identity_resolver = identity_resolver or InstrumentIdentityResolver()
+
     def build_exposures(self, portfolio: PortfolioContext) -> tuple[PositionExposure, ...]:
         grouped: dict[str, list[Position]] = defaultdict(list)
         for position in portfolio.positions:
             underlying = position.underlying_ticker or position.ticker
-            grouped[underlying].append(position)
+            grouped[self.identity_resolver.resolve(underlying)].append(position)
 
         total_net_value = sum(p.market_value or 0.0 for p in portfolio.positions) + portfolio.cash
         exposures: list[PositionExposure] = []

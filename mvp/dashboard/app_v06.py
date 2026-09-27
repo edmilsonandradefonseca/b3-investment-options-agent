@@ -14,8 +14,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from b3_agent.opportunity import OpportunityIntelligenceEngine
-from b3_agent.options.transactions import OptionsTransactionLoader
+from b3_agent.dashboard_e2e import DashboardE2EService
 from b3_agent.portfolio import PortfolioIntelligenceEngine
 from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
 from b3_agent.repositories.portfolio import PortfolioRepository
@@ -49,22 +48,6 @@ def _temp_path(uploaded_file) -> Path:
     return Path(handle.name)
 
 
-def _load_btg(uploaded_file):
-    path = _temp_path(uploaded_file)
-    try:
-        return BtgRendaVariavelLoader().load(path)
-    finally:
-        path.unlink(missing_ok=True)
-
-
-def _load_transactions(uploaded_file):
-    path = _temp_path(uploaded_file)
-    try:
-        return OptionsTransactionLoader().load(path)
-    finally:
-        path.unlink(missing_ok=True)
-
-
 def _load_configured():
     configured = os.getenv("B3_AGENT_PORTFOLIO_FILE", "")
     if not configured:
@@ -80,6 +63,13 @@ def _load_configured():
 for key, default in {
     "context": None,
     "transactions": (),
+    "intelligence": None,
+    "opportunities": None,
+    "strategy_comparisons": (),
+    "stress_results": (),
+    "market_regime": None,
+    "factor_study": None,
+    "factor_walk_forward": (),
     "btg_status": "Not loaded",
     "options_status": "Not loaded",
     "load_error": None,
@@ -88,7 +78,7 @@ for key, default in {
 
 with st.sidebar:
     st.header("DATA & COPILOT")
-    st.caption("Prototype V0.6")
+    st.caption("V4 E2E • read-only")
 
     st.markdown("#### Load Excel")
     btg_file = st.file_uploader("BTG Portfolio", type=["xlsx", "xlsm"], key="v06_btg")
@@ -102,27 +92,45 @@ with st.sidebar:
         st.session_state.load_error = None
         loaded = False
         if btg_file:
+            portfolio_path = _temp_path(btg_file)
+            options_path = _temp_path(options_file) if options_file else None
             try:
-                st.session_state.context = _load_btg(btg_file)
+                snapshot = DashboardE2EService().load(
+                    portfolio_path,
+                    options_path=options_path,
+                )
+                st.session_state.context = snapshot.portfolio
+                st.session_state.intelligence = snapshot.portfolio_intelligence
+                st.session_state.transactions = snapshot.option_transactions
+                st.session_state.opportunities = snapshot.opportunities
+                st.session_state.strategy_comparisons = snapshot.strategy_comparisons
+                st.session_state.stress_results = snapshot.stress_results
+                st.session_state.market_regime = snapshot.market_regime
+                st.session_state.factor_study = snapshot.factor_study
+                st.session_state.factor_walk_forward = snapshot.factor_walk_forward
                 st.session_state.btg_status = (
-                    f"✓ Loaded — {len(st.session_state.context.positions)} positions"
+                    f"✓ Loaded — {len(snapshot.portfolio.positions)} positions"
+                )
+                st.session_state.options_status = (
+                    f"✓ Loaded — {len(snapshot.option_transactions)} transactions"
+                    if options_file else "Not loaded"
                 )
                 loaded = True
             except Exception as exc:
                 st.session_state.btg_status = "✗ Load failed"
-                st.session_state.load_error = f"BTG: {exc}"
-        if options_file:
-            try:
-                st.session_state.transactions = _load_transactions(options_file)
-                st.session_state.options_status = (
-                    f"✓ Loaded — {len(st.session_state.transactions)} transactions"
-                )
-                loaded = True
-            except Exception as exc:
-                st.session_state.options_status = "✗ Load failed"
-                suffix = f" | Options: {exc}"
-                st.session_state.load_error = (st.session_state.load_error or "") + suffix
-        if not loaded:
+                if options_file:
+                    st.session_state.options_status = "✗ Load failed"
+                st.session_state.load_error = f"E2E load: {exc}"
+            finally:
+                portfolio_path.unlink(missing_ok=True)
+                if options_path is not None:
+                    options_path.unlink(missing_ok=True)
+        elif options_file:
+            st.session_state.load_error = (
+                "Carregue o BTG Portfolio junto com Options Transactions "
+                "para montar um snapshot E2E consistente."
+            )
+        if not loaded and not st.session_state.load_error:
             st.session_state.load_error = "Selecione pelo menos um arquivo Excel."
 
     st.divider()
@@ -134,9 +142,9 @@ with st.sidebar:
 
     st.divider()
     st.markdown("#### Knowledge")
-    st.write("🟡 Obsidian")
-    st.write("🟡 RAG")
-    st.write("⚪ Neo4j — future integration")
+    st.write("🟢 Structured state — SQLite / Parquet")
+    st.write("🟡 RAG — Qdrant projection")
+    st.write("🟡 Relationships — Neo4j projection")
 
     st.divider()
     st.markdown("#### Copilot")
@@ -160,7 +168,9 @@ if context is None:
         st.info("Carregue o Excel BTG no painel DATA & COPILOT à direita para iniciar.")
         st.stop()
 
-intelligence = PortfolioIntelligenceEngine().build(context)
+intelligence = st.session_state.intelligence
+if intelligence is None:
+    intelligence = PortfolioIntelligenceEngine().build(context)
 rows = [
     {
         "Ticker": p.ticker,
@@ -185,7 +195,7 @@ stock_value = float(stock_df["Valor de mercado"].fillna(0).sum())
 option_value = float(option_df["Valor de mercado"].fillna(0).sum())
 
 st.title("B3 Investment Copilot")
-st.caption("V0.6 prototype • deterministic facts • read-only")
+st.caption("V4 E2E • deterministic facts • read-only")
 
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Market value", f"R$ {market_value:,.2f}")
@@ -194,8 +204,8 @@ c3.metric("Stocks", len(stock_df))
 c4.metric("Options", len(option_df))
 
 st.divider()
-tab_portfolio, tab_options, tab_opportunities, tab_intelligence = st.tabs(
-    ["Portfolio", "Options Intelligence", "Opportunities", "Portfolio Intelligence"]
+tab_portfolio, tab_options, tab_opportunities, tab_intelligence, tab_decision, tab_factors = st.tabs(
+    ["Portfolio", "Options Intelligence", "Opportunities", "Portfolio Intelligence", "Decision Context", "Factor Intelligence"]
 )
 
 with tab_portfolio:
@@ -210,19 +220,68 @@ with tab_options:
     c2.metric("Puts", int((option_df["Tipo opção"] == "PUT").sum()))
     c3.metric("Calls", int((option_df["Tipo opção"] == "CALL").sum()))
     c4.metric("Assignment capital", f"R$ {intelligence.capital_risk.assignment_capital:,.2f}")
+    risk1, risk2 = st.columns(2)
+    risk1.metric(
+        "Uncovered call shares",
+        f"{intelligence.capital_risk.uncovered_call_shares:,.0f}",
+    )
+    risk2.metric(
+        "Cash secured",
+        "Unknown" if intelligence.capital_risk.fully_cash_secured is None else ("Yes" if intelligence.capital_risk.fully_cash_secured else "No"),
+    )
     st.dataframe(option_df, use_container_width=True, hide_index=True)
+    expiration_rows = [
+        {
+            "Vencimento": item.expiration_date,
+            "Opções": item.option_count,
+            "Short puts": item.short_put_count,
+            "Short calls": item.short_call_count,
+            "Capital assignment": item.assignment_capital,
+            "Ações entregáveis": item.deliverable_shares,
+        }
+        for item in intelligence.expiration_risk
+    ]
+    if expiration_rows:
+        st.markdown("#### Risk by expiration")
+        st.dataframe(pd.DataFrame(expiration_rows), use_container_width=True, hide_index=True)
     st.caption("Valores vêm do PortfolioContext; nenhum multiplicador ou contrato é inferido pelo dashboard.")
 
 with tab_opportunities:
     st.subheader("Opportunities")
-    opportunity_set = OpportunityIntelligenceEngine().assess(())
+    opportunity_set = st.session_state.opportunities
+    if opportunity_set is None:
+        opportunity_set = DashboardE2EService().load(
+            Path(os.environ["B3_AGENT_PORTFOLIO_FILE"])
+        ).opportunities if os.getenv("B3_AGENT_PORTFOLIO_FILE", "").lower().endswith((".xlsx", ".xlsm")) else None
     c1, c2 = st.columns(2)
-    c1.metric("Eligible", len(opportunity_set.ranked_opportunities))
-    c2.metric("Rejected", len(opportunity_set.rejected_opportunities))
-    st.info(
-        "Opportunity producers ainda não estão conectados a esta UI. "
-        "Nenhuma oportunidade é inventada a partir da exposição do portfolio."
-    )
+    c1.metric("Eligible", len(opportunity_set.ranked_opportunities) if opportunity_set else 0)
+    c2.metric("Rejected", len(opportunity_set.rejected_opportunities) if opportunity_set else 0)
+    if opportunity_set and opportunity_set.ranked_opportunities:
+        opportunity_rows = [
+            {
+                "Ticker": item.ticker,
+                "Ação": item.action,
+                "Atratividade": item.attractiveness,
+                "Retorno esperado": item.expected_return,
+                "Capital requerido": item.capital_requirement,
+                "Valuation ref": item.valuation_range_ref,
+                "Options ref": item.options_analysis_ref,
+                "Quant ref": item.quant_features_ref,
+                "Fontes": ", ".join(item.source_refs),
+            }
+            for item in opportunity_set.ranked_opportunities
+        ]
+        st.dataframe(pd.DataFrame(opportunity_rows), use_container_width=True, hide_index=True)
+        st.caption(
+            f"Ranking policy {opportunity_set.ranking_policy_version} • "
+            f"Quality {opportunity_set.quality_status}"
+        )
+    else:
+        st.info(
+            "Nenhum input analítico de oportunidade foi carregado nesta sessão. "
+            "A V4 não converte exposição de portfolio em oportunidade sem dados "
+            "determinísticos upstream (market/valuation/options analysis)."
+        )
 
 with tab_intelligence:
     st.subheader("Portfolio Intelligence")
@@ -237,13 +296,117 @@ with tab_intelligence:
             "Opções": e.option_count,
             "Short options": e.short_option_count,
             "Assignment capital": e.assignment_capital,
+            "Call coverage": e.call_coverage_ratio,
         }
         for e in getattr(intelligence, "exposures", ())
     ]
     if exposures:
-        st.dataframe(pd.DataFrame(exposures), use_container_width=True, hide_index=True)
+        exposure_df = pd.DataFrame(exposures)
+        st.markdown("#### Economic exposure")
+        st.dataframe(exposure_df, use_container_width=True, hide_index=True)
+        concentrated = exposure_df.sort_values("Peso", ascending=False).head(5)
+        st.markdown("#### Top 5 concentration")
+        st.dataframe(
+            concentrated[["Ticker", "Valor líquido", "Peso", "Assignment capital", "Call coverage"]],
+            use_container_width=True,
+            hide_index=True,
+        )
     else:
         st.info("Nenhuma exposição calculada.")
+
+with tab_decision:
+    st.subheader("Decision Context")
+    st.caption("UC-04 / UC-05 • explicit assumptions • no hidden ranking")
+    regime = st.session_state.market_regime
+    if regime is not None:
+        st.markdown("#### Market regime")
+        st.dataframe(
+            pd.DataFrame([
+                {"Dimensão": item.name.value, "Estado": item.label, "Score": item.score}
+                for item in regime.dimensions
+            ]),
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.caption(
+            f"{regime.classifier_version} • confidence={regime.confidence:.2f} • "
+            f"sources={', '.join(regime.source_refs)}"
+        )
+    else:
+        st.info("Nenhum FeatureSnapshot validado foi carregado para classificação de regime.")
+
+    comparisons = st.session_state.strategy_comparisons
+    if comparisons:
+        st.markdown("#### Strategy comparisons")
+        rows = []
+        for item in comparisons:
+            left, right = item.alternatives
+            rows.append({
+                "Left": left.label, "Right": right.label,
+                "Capital Δ": item.capital_delta,
+                "Expected return Δ": item.expected_return_delta,
+                "Max loss Δ": item.max_loss_delta,
+                "Liquidity Δ": item.liquidity_delta,
+                "Quality": item.quality_status,
+            })
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        st.caption("Todos os deltas são right-minus-left; nenhuma alternativa é escolhida automaticamente.")
+    else:
+        st.info("Nenhum par de estratégias explícito foi carregado.")
+
+    stresses = st.session_state.stress_results
+    if stresses:
+        st.markdown("#### Scenario stress")
+        st.dataframe(
+            pd.DataFrame([
+                {
+                    "Scenario": item.scenario_id,
+                    "Base": item.base_portfolio_value,
+                    "Stressed": item.stressed_portfolio_value,
+                    "P&L": item.portfolio_pnl,
+                    "Return": item.portfolio_return,
+                    "Gross exposure": item.gross_exposure,
+                    "Max concentration": item.max_concentration,
+                    "Quality": item.quality_status,
+                }
+                for item in stresses
+            ]),
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.caption("Choques são inputs explícitos; o dashboard não infere previsão nem repricing de opções.")
+    else:
+        st.info("Nenhum cenário explícito foi carregado.")
+
+with tab_factors:
+    st.subheader("Factor Intelligence")
+    st.caption("UC-06 • statistical association only • no causal claim")
+    factor_study = st.session_state.factor_study
+    if factor_study is None:
+        st.info("Nenhuma série de fatores validada foi carregada.")
+    else:
+        st.dataframe(pd.DataFrame([{
+            "Factor": item.factor_id,
+            "N": item.sample_size,
+            "Train corr": item.train_correlation,
+            "Holdout corr": item.holdout_correlation,
+            "Adjusted p": item.adjusted_p_value,
+            "Direction stable": item.direction_stable,
+            "Significant": item.statistically_significant,
+            "Quality": item.quality_status,
+        } for item in factor_study.results]), use_container_width=True, hide_index=True)
+        st.caption(f"Multiple testing: {factor_study.correction_method} • alpha={factor_study.alpha:.2f}")
+        walk = st.session_state.factor_walk_forward
+        if walk:
+            st.markdown("#### Walk-forward robustness")
+            st.dataframe(pd.DataFrame([{
+                "Factor": item.factor_id,
+                "Folds": len(item.folds),
+                "Stable fold ratio": item.stable_fold_ratio,
+                "Median test corr": item.median_test_correlation,
+                "Quality": item.quality_status,
+            } for item in walk]), use_container_width=True, hide_index=True)
+        st.warning("Significância e correlação não demonstram causalidade nem constituem recomendação de investimento.")
 
 st.divider()
 st.caption(

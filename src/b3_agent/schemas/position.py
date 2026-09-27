@@ -51,6 +51,7 @@ class PortfolioContext:
     as_of: date
     positions: tuple[Position, ...]
     cash: float = 0.0
+    cash_is_known: bool = True
     source_refs: tuple[str, ...] = ()
     quality_status: str = "VALIDATED"
 

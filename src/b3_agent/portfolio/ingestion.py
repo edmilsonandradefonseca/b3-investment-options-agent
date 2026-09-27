@@ -97,7 +97,7 @@ class BtgRendaVariavelLoader:
                 ))
 
             return PortfolioContext(
-                as_of=as_of, positions=tuple(positions), cash=0.0,
+                as_of=as_of, positions=tuple(positions), cash=0.0, cash_is_known=False,
                 source_refs=("BTG:Renda Variavel",), quality_status="VALIDATED",
             )
         finally:

@@ -28,7 +28,6 @@ class QuantFeatures:
 
     beta: float | None = None
     correlation: float | None = None
-    correlation: float | None = None
 
     average_volume_20d: float | None = None
     average_dollar_volume_20d: float | None = None
