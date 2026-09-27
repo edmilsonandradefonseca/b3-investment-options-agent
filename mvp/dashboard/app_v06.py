@@ -65,6 +65,9 @@ for key, default in {
     "transactions": (),
     "intelligence": None,
     "opportunities": None,
+    "strategy_comparisons": (),
+    "stress_results": (),
+    "market_regime": None,
     "btg_status": "Not loaded",
     "options_status": "Not loaded",
     "load_error": None,
@@ -98,6 +101,9 @@ with st.sidebar:
                 st.session_state.intelligence = snapshot.portfolio_intelligence
                 st.session_state.transactions = snapshot.option_transactions
                 st.session_state.opportunities = snapshot.opportunities
+                st.session_state.strategy_comparisons = snapshot.strategy_comparisons
+                st.session_state.stress_results = snapshot.stress_results
+                st.session_state.market_regime = snapshot.market_regime
                 st.session_state.btg_status = (
                     f"✓ Loaded — {len(snapshot.portfolio.positions)} positions"
                 )
@@ -194,8 +200,8 @@ c3.metric("Stocks", len(stock_df))
 c4.metric("Options", len(option_df))
 
 st.divider()
-tab_portfolio, tab_options, tab_opportunities, tab_intelligence = st.tabs(
-    ["Portfolio", "Options Intelligence", "Opportunities", "Portfolio Intelligence"]
+tab_portfolio, tab_options, tab_opportunities, tab_intelligence, tab_decision = st.tabs(
+    ["Portfolio", "Options Intelligence", "Opportunities", "Portfolio Intelligence", "Decision Context"]
 )
 
 with tab_portfolio:
@@ -303,6 +309,70 @@ with tab_intelligence:
         )
     else:
         st.info("Nenhuma exposição calculada.")
+
+with tab_decision:
+    st.subheader("Decision Context")
+    st.caption("UC-04 / UC-05 • explicit assumptions • no hidden ranking")
+    regime = st.session_state.market_regime
+    if regime is not None:
+        st.markdown("#### Market regime")
+        st.dataframe(
+            pd.DataFrame([
+                {"Dimensão": item.name.value, "Estado": item.label, "Score": item.score}
+                for item in regime.dimensions
+            ]),
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.caption(
+            f"{regime.classifier_version} • confidence={regime.confidence:.2f} • "
+            f"sources={', '.join(regime.source_refs)}"
+        )
+    else:
+        st.info("Nenhum FeatureSnapshot validado foi carregado para classificação de regime.")
+
+    comparisons = st.session_state.strategy_comparisons
+    if comparisons:
+        st.markdown("#### Strategy comparisons")
+        rows = []
+        for item in comparisons:
+            left, right = item.alternatives
+            rows.append({
+                "Left": left.label, "Right": right.label,
+                "Capital Δ": item.capital_delta,
+                "Expected return Δ": item.expected_return_delta,
+                "Max loss Δ": item.max_loss_delta,
+                "Liquidity Δ": item.liquidity_delta,
+                "Quality": item.quality_status,
+            })
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        st.caption("Todos os deltas são right-minus-left; nenhuma alternativa é escolhida automaticamente.")
+    else:
+        st.info("Nenhum par de estratégias explícito foi carregado.")
+
+    stresses = st.session_state.stress_results
+    if stresses:
+        st.markdown("#### Scenario stress")
+        st.dataframe(
+            pd.DataFrame([
+                {
+                    "Scenario": item.scenario_id,
+                    "Base": item.base_portfolio_value,
+                    "Stressed": item.stressed_portfolio_value,
+                    "P&L": item.portfolio_pnl,
+                    "Return": item.portfolio_return,
+                    "Gross exposure": item.gross_exposure,
+                    "Max concentration": item.max_concentration,
+                    "Quality": item.quality_status,
+                }
+                for item in stresses
+            ]),
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.caption("Choques são inputs explícitos; o dashboard não infere previsão nem repricing de opções.")
+    else:
+        st.info("Nenhum cenário explícito foi carregado.")
 
 st.divider()
 st.caption(
