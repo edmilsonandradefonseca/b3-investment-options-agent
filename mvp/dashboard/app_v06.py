@@ -15,6 +15,7 @@ import pandas as pd
 import streamlit as st
 
 from b3_agent.dashboard_e2e import DashboardE2EService
+from b3_agent.portfolio import PortfolioIntelligenceEngine
 from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
 from b3_agent.repositories.portfolio import PortfolioRepository
 
@@ -119,7 +120,7 @@ with st.sidebar:
                 "Carregue o BTG Portfolio junto com Options Transactions "
                 "para montar um snapshot E2E consistente."
             )
-        if not loaded:
+        if not loaded and not st.session_state.load_error:
             st.session_state.load_error = "Selecione pelo menos um arquivo Excel."
 
     st.divider()
@@ -159,9 +160,7 @@ if context is None:
 
 intelligence = st.session_state.intelligence
 if intelligence is None:
-    intelligence = __import__(
-        "b3_agent.portfolio", fromlist=["PortfolioIntelligenceEngine"]
-    ).PortfolioIntelligenceEngine().build(context)
+    intelligence = PortfolioIntelligenceEngine().build(context)
 rows = [
     {
         "Ticker": p.ticker,
@@ -211,6 +210,15 @@ with tab_options:
     c2.metric("Puts", int((option_df["Tipo opção"] == "PUT").sum()))
     c3.metric("Calls", int((option_df["Tipo opção"] == "CALL").sum()))
     c4.metric("Assignment capital", f"R$ {intelligence.capital_risk.assignment_capital:,.2f}")
+    risk1, risk2 = st.columns(2)
+    risk1.metric(
+        "Uncovered call shares",
+        f"{intelligence.capital_risk.uncovered_call_shares:,.0f}",
+    )
+    risk2.metric(
+        "Cash secured",
+        "Yes" if intelligence.capital_risk.fully_cash_secured else "No",
+    )
     st.dataframe(option_df, use_container_width=True, hide_index=True)
     st.caption("Valores vêm do PortfolioContext; nenhum multiplicador ou contrato é inferido pelo dashboard.")
 
@@ -243,6 +251,7 @@ with tab_intelligence:
             "Opções": e.option_count,
             "Short options": e.short_option_count,
             "Assignment capital": e.assignment_capital,
+            "Call coverage": e.call_coverage_ratio,
         }
         for e in getattr(intelligence, "exposures", ())
     ]
