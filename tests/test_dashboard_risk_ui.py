@@ -10,6 +10,8 @@ def test_dashboard_surfaces_deterministic_option_risk_metrics():
     assert '"Call coverage": e.call_coverage_ratio' in source
 
 
-def test_options_only_validation_message_is_not_overwritten():
+def test_brokerage_note_validation_message_is_preserved():
     source = Path("mvp/dashboard/app_v06.py").read_text(encoding="utf-8")
-    assert "if not loaded and not st.session_state.load_error:" in source
+    assert "Selecione uma ou mais notas de corretagem em PDF." in source
+    assert "if failures:" in source
+    assert 'st.session_state.load_error = " | ".join(failures)' in source
