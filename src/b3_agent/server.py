@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -8,13 +9,21 @@ from uuid import uuid4
 from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
 
 from b3_agent.config import settings
 from b3_agent.options.transactions import OptionsTransactionLoader
+from b3_agent.options.brokerage_notes import BrokerageNoteParser
+from b3_agent.options.brokerage_batch import (
+    BrokerageBatchIngestionError,
+    BrokerageBatchIngestionService,
+)
 from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
 from b3_agent.repositories.transaction import TransactionRepository
+from b3_agent.repositories.option_ledger import OptionTransactionLedger
+from b3_agent.repositories.source_manifest import SourceManifestRecord, SourceManifestRepository
 from b3_agent.schemas.transaction import Transaction
 from b3_agent.storage.sqlite import SQLiteStore
 from b3_agent.orchestration import OrchestratorRequest, OrchestratorResponse, b3_orchestrator, configure_default_workflow
@@ -207,6 +216,163 @@ def import_options(file: UploadFile = File(...)) -> dict[str, Any]:
     )
     _configure_runtime.cache_clear()
     return result
+
+
+def _store_brokerage_note(upload: UploadFile) -> dict[str, Any]:
+    """Validate, archive and persist a brokerage-note PDF."""
+    if not upload.filename or not upload.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="nota de corretagem deve ser PDF (.pdf)")
+
+    notes_dir = _import_dir() / "brokerage_notes"
+    notes_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = Path(upload.filename).name
+    target = notes_dir / safe_name
+    temp_path: Path | None = None
+    try:
+        with NamedTemporaryFile(
+            prefix=f".{safe_name}.",
+            suffix=".pdf",
+            dir=notes_dir,
+            delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            while True:
+                chunk = upload.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                handle.write(chunk)
+
+        if temp_path.stat().st_size < 5:
+            raise ValueError("PDF vazio ou inválido")
+
+        transactions = BrokerageNoteParser().parse(temp_path)
+        source_fingerprint = hashlib.sha256(temp_path.read_bytes()).hexdigest()
+        temp_path.replace(target)
+
+        ledger_path = settings.data_dir / "options.sqlite3"
+        inserted_count = OptionTransactionLedger(ledger_path).append(transactions)
+
+        note_number = transactions[0].note_number
+        source_ref = transactions[0].source_ref.split(f":{safe_name}")[0]
+        trade_dates = [item.as_of for item in transactions if item.as_of is not None]
+        coverage_start = min(trade_dates) if trade_dates else None
+        coverage_end = max(trade_dates) if trade_dates else None
+
+        SourceManifestRepository(settings.data_dir / "source_manifest.sqlite3").upsert(
+            SourceManifestRecord(
+                source_fingerprint=source_fingerprint,
+                source_type="BROKERAGE_NOTE",
+                source_id=note_number or source_fingerprint,
+                source_ref=source_ref,
+                file_name=safe_name,
+                imported_at=datetime.now(timezone.utc),
+                record_count=len(transactions),
+                coverage_start=coverage_start,
+                coverage_end=coverage_end,
+                scope="PERIOD_ONLY",
+                completeness="UNKNOWN",
+            )
+        )
+
+        return {
+            "status": "processed",
+            "file": upload.filename,
+            "active_file": str(target),
+            "note_number": note_number,
+            "trade_date": (
+                coverage_start.isoformat()
+                if coverage_start == coverage_end and coverage_start
+                else None
+            ),
+            "parsed_count": len(transactions),
+            "inserted_count": inserted_count,
+            "transaction_ids": [item.transaction_id for item in transactions],
+            "message": "nota de corretagem processada e registrada no ledger",
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"nota de corretagem inválida: {exc}",
+        ) from exc
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink(missing_ok=True)
+
+
+@app.post("/imports/brokerage-notes")
+def import_brokerage_note(file: UploadFile = File(...)) -> dict[str, Any]:
+    """Append option trades from a brokerage note to the historical ledger."""
+    result = _store_brokerage_note(file)
+    _configure_runtime.cache_clear()
+    return result
+
+
+@app.post("/imports/brokerage-notes/batch")
+def import_brokerage_note_batch(file: UploadFile = File(...)) -> dict[str, Any]:
+    """Process a ZIP of brokerage-note PDFs sequentially from disk."""
+    if not file.filename or not file.filename.lower().endswith(".zip"):
+        raise HTTPException(status_code=400, detail="lote deve ser ZIP (.zip)")
+
+    temp_path: Path | None = None
+    try:
+        with NamedTemporaryFile(
+            prefix=".brokerage-batch.",
+            suffix=".zip",
+            dir=_import_dir(),
+            delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            while True:
+                chunk = file.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                handle.write(chunk)
+
+        result = BrokerageBatchIngestionService(settings.data_dir).ingest_zip(
+            temp_path
+        )
+        _configure_runtime.cache_clear()
+        return result
+    except BrokerageBatchIngestionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"lote de notas inválido: {exc}",
+        ) from exc
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink(missing_ok=True)
+
+
+@app.get("/imports/brokerage-notes/upload", response_class=HTMLResponse)
+def brokerage_note_batch_upload_page() -> HTMLResponse:
+    """Minimal direct-to-FastAPI upload page for large brokerage-note batches."""
+    return HTMLResponse(
+        """
+        <!doctype html>
+        <html lang="pt-BR">
+          <head>
+            <meta charset="utf-8">
+            <title>B3 Brokerage Notes Batch Import</title>
+          </head>
+          <body style="font-family: sans-serif; max-width: 720px; margin: 40px auto;">
+            <h2>B3 — Importar ZIP de notas de corretagem</h2>
+            <p>
+              O arquivo é enviado diretamente ao backend B3 e processado
+              sequencialmente em disco. O ZIP não passa pela sessão do Streamlit.
+            </p>
+            <form method="post" action="/imports/brokerage-notes/batch"
+                  enctype="multipart/form-data">
+              <input type="file" name="file" accept=".zip,application/zip" required>
+              <button type="submit">Importar ZIP</button>
+            </form>
+          </body>
+        </html>
+        """
+    )
 
 
 def _response_to_model(response: OrchestratorResponse) -> OrchestrateResponse:
