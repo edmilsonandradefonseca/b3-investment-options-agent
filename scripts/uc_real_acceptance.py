@@ -252,51 +252,47 @@ def _acceptance_ticker(portfolio) -> str:
 
 
 def _load_canonical_transactions():
+    from datetime import date, datetime, time
+    from b3_agent.repositories.option_ledger import OptionTransactionLedger
+    from b3_agent.schemas.transaction import Transaction
+
     db_path = settings.data_dir / "options.sqlite3"
     if not db_path.is_file():
         return ()
-    import sqlite3
-    from b3_agent.schemas.transaction import Transaction
 
-    connection = sqlite3.connect(db_path)
-    connection.row_factory = sqlite3.Row
-    try:
-        columns = {
-            row["name"]
-            for row in connection.execute("PRAGMA table_info(option_transactions)")
-        }
-        required = {
-            "transaction_id", "ticker", "trade_date", "action", "quantity",
-            "price", "source_ref",
-        }
-        if not required.issubset(columns):
-            return ()
-        rows = connection.execute(
-            "SELECT * FROM option_transactions ORDER BY trade_date, transaction_id"
-        ).fetchall()
-    finally:
-        connection.close()
-
+    rows = OptionTransactionLedger(db_path).list_all()
     transactions = []
     for row in rows:
-        try:
-            traded_at = datetime.fromisoformat(str(row["trade_date"]))
-            if traded_at.tzinfo is None:
-                traded_at = traded_at.replace(tzinfo=timezone.utc)
-            transactions.append(
-                Transaction(
-                    transaction_id=str(row["transaction_id"]),
-                    instrument_id=str(row["ticker"]),
-                    ticker=str(row["ticker"]),
-                    traded_at=traded_at,
-                    action=str(row["action"]).upper(),
-                    quantity=abs(float(row["quantity"])),
-                    price=float(row["price"]),
-                    source_ref=str(row["source_ref"]),
-                )
+        if row.as_of is None or row.execution_price is None:
+            continue
+
+        if isinstance(row.as_of, datetime):
+            executed_at = row.as_of
+            if executed_at.tzinfo is None:
+                executed_at = executed_at.replace(tzinfo=timezone.utc)
+        elif isinstance(row.as_of, date):
+            executed_at = datetime.combine(
+                row.as_of,
+                time.min,
+                tzinfo=timezone.utc,
             )
-        except (TypeError, ValueError, KeyError):
-            return ()
+        else:
+            continue
+
+        transactions.append(
+            Transaction(
+                transaction_id=row.transaction_id,
+                executed_at=executed_at,
+                action=row.side,
+                instrument_type="OPTION",
+                ticker=row.option_ticker,
+                quantity=row.absolute_quantity,
+                price=float(row.execution_price),
+                broker=row.broker,
+                source_ref=row.source_ref,
+            )
+        )
+
     return tuple(transactions)
 
 

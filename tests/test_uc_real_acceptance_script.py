@@ -38,3 +38,11 @@ def test_real_uc_acceptance_loads_shared_env():
     text = Path("scripts/uc_real_acceptance.py").read_text(encoding="utf-8")
     assert "_load_shared_env()" in text
     assert "/opt/joao-runtime/joao.env" in text
+
+
+def test_uc07_uses_option_transaction_ledger_bridge():
+    text = Path("scripts/uc_real_acceptance.py").read_text(encoding="utf-8")
+    assert "OptionTransactionLedger" in text
+    assert 'instrument_type="OPTION"' in text
+    assert "row.side" in text
+    assert "row.execution_price" in text
