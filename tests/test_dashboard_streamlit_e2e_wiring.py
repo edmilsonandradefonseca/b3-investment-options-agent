@@ -17,7 +17,8 @@ def test_brokerage_notes_are_a_separate_append_only_upload_flow():
     assert "accept_multiple_files=True" in source
     assert "BrokerageNoteParser().parse(note_path)" in source
     assert "OptionTransactionLedger" in source
-    assert "inserted += ledger.append(transactions)" in source
+    assert "ledger.append(transactions)" in source
+    assert "inserted += inserted_count" in source
     assert "não substituem a posição atual do BTG" in source
 
 
