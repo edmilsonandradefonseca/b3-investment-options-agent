@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 from io import BytesIO
-from unittest.mock import Mock
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, Mock
 
 from qdrant_client import QdrantClient
 
@@ -57,6 +58,8 @@ def test_vector_evidence_retriever_uses_hybrid_qdrant():
         metadata=EvidenceMetadata(
             document_id="DOC-PETR4",
             source="test:runtime",
+            published_at=datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc),
+            retrieved_at=datetime(2026, 9, 27, 12, 1, tzinfo=timezone.utc),
             ticker_refs=("PETR4",),
             topic="market",
         ),
@@ -86,7 +89,7 @@ def test_production_runtime_builds_shared_qdrant_and_neo4j(monkeypatch):
     qdrant_client.collection_exists.return_value = True
     monkeypatch.setattr(runtime, "QdrantClient", lambda url: qdrant_client)
 
-    driver = Mock()
+    driver = MagicMock()
     monkeypatch.setattr(
         runtime.GraphDatabase,
         "driver",
