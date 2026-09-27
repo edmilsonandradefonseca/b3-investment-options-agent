@@ -218,3 +218,34 @@ def test_empty_historical_data_is_rejected(monkeypatch):
             date(2026, 9, 1),
             date(2026, 9, 10),
         )
+
+
+def test_brapi_market_adapter_sends_bearer_auth_when_configured(monkeypatch):
+    monkeypatch.setenv("BRAPI_TOKEN", "secret-token")
+    captured = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+        def read(self):
+            return b'{"results":[{"data":{"historicalDataPrice":[{"date":1790467200,"open":30,"high":31,"low":29,"close":30.5,"volume":1000}]}}]}'
+
+    def fake_urlopen(request, timeout=15):
+        captured["authorization"] = request.headers.get("Authorization")
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    from datetime import date
+    from b3_agent.providers.brapi.adapter import BrapiAdapter
+
+    records = BrapiAdapter().get_market_data(
+        "PETR4",
+        date(2026, 9, 27),
+        date(2026, 9, 27),
+    )
+
+    assert len(records) == 1
+    assert captured["authorization"] == "Bearer secret-token"
