@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from b3_agent.schemas.position import PortfolioContext
+from .instrument_identity import InstrumentIdentityResolver
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,9 @@ class CapitalRiskSnapshot:
 class CapitalRiskEngine:
     """Calculate capital requirements without producing or executing orders."""
 
+    def __init__(self, identity_resolver: InstrumentIdentityResolver | None = None) -> None:
+        self.identity_resolver = identity_resolver or InstrumentIdentityResolver()
+
     def assess(self, portfolio: PortfolioContext) -> CapitalRiskSnapshot:
         assignment_capital = 0.0
         uncovered_call_shares = 0.0
@@ -26,7 +30,8 @@ class CapitalRiskEngine:
         grouped: dict[str, dict[str, float]] = {}
         for position in portfolio.positions:
             underlying = position.underlying_ticker or position.ticker
-            bucket = grouped.setdefault(underlying, {"stock_shares": 0.0, "call_shares": 0.0})
+            economic_ticker = self.identity_resolver.resolve(underlying)
+            bucket = grouped.setdefault(economic_ticker, {"stock_shares": 0.0, "call_shares": 0.0})
             if position.instrument_type != "OPTION" and position.quantity > 0:
                 bucket["stock_shares"] += position.quantity
             if position.instrument_type == "OPTION" and position.quantity < 0:
