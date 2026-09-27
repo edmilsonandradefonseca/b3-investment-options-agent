@@ -4,6 +4,7 @@ import json
 from io import BytesIO
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, Mock
+from types import SimpleNamespace
 
 from qdrant_client import QdrantClient
 
@@ -87,6 +88,14 @@ def test_production_runtime_builds_shared_qdrant_and_neo4j(monkeypatch):
 
     qdrant_client = Mock()
     qdrant_client.collection_exists.return_value = True
+    qdrant_client.get_collection.return_value = SimpleNamespace(
+        config=SimpleNamespace(
+            params=SimpleNamespace(
+                vectors={"dense": SimpleNamespace(size=768)},
+                sparse_vectors={"sparse": object()},
+            )
+        )
+    )
     monkeypatch.setattr(runtime, "QdrantClient", lambda url: qdrant_client)
 
     driver = MagicMock()
