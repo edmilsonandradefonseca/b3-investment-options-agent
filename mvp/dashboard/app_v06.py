@@ -56,6 +56,18 @@ def _temp_path(uploaded_file) -> Path:
     return Path(handle.name)
 
 
+def _parse_and_append_note(
+    note_path: Path,
+    display_name: str,
+    ledger: OptionTransactionLedger,
+) -> tuple[int, int, str | None]:
+    try:
+        transactions = BrokerageNoteParser().parse(note_path)
+        return len(transactions), ledger.append(transactions), None
+    except Exception as exc:
+        return 0, 0, f"{display_name}: {exc}"
+
+
 def _load_configured():
     configured = os.getenv("B3_AGENT_PORTFOLIO_FILE", "")
     if not configured:
@@ -167,17 +179,6 @@ with st.sidebar:
                 progress = st.progress(0.0, text="Preparando notas...")
                 status = st.empty()
 
-                def process_note_path(note_path: Path, display_name: str) -> None:
-                    nonlocal inserted, parsed, processed_files
-                    try:
-                        transactions = BrokerageNoteParser().parse(note_path)
-                        parsed += len(transactions)
-                        inserted += ledger.append(transactions)
-                    except Exception as exc:
-                        failures.append(f"{display_name}: {exc}")
-                    finally:
-                        processed_files += 1
-
                 if zip_files:
                     archive_path = _temp_path(zip_files[0])
                     try:
@@ -212,7 +213,14 @@ with st.sidebar:
                                             handle.write(chunk)
                                     note_path = Path(handle.name)
                                 try:
-                                    process_note_path(note_path, info.filename)
+                                    parsed_count, inserted_count, error = _parse_and_append_note(
+                                        note_path, info.filename, ledger
+                                    )
+                                    parsed += parsed_count
+                                    inserted += inserted_count
+                                    processed_files += 1
+                                    if error:
+                                        failures.append(error)
                                 finally:
                                     note_path.unlink(missing_ok=True)
                                 progress.progress(
@@ -229,7 +237,14 @@ with st.sidebar:
                         status.write(f"Processando {index}/{total_files}: {uploaded.name}")
                         note_path = _temp_path(uploaded)
                         try:
-                            process_note_path(note_path, uploaded.name)
+                            parsed_count, inserted_count, error = _parse_and_append_note(
+                                note_path, uploaded.name, ledger
+                            )
+                            parsed += parsed_count
+                            inserted += inserted_count
+                            processed_files += 1
+                            if error:
+                                failures.append(error)
                         finally:
                             note_path.unlink(missing_ok=True)
                         progress.progress(
