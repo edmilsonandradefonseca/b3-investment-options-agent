@@ -13,13 +13,14 @@
     "windows": [
       {
         "label": "main",
-        "title": "B3 Investment Copilot — Edmilson",
+        "title": "B3 Investment Copilot",
         "width": 1440,
         "height": 900,
         "minWidth": 1180,
         "minHeight": 720,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "center": true
       }
     ],
     "security": {
@@ -27,6 +28,13 @@
     }
   },
   "bundle": {
-    "active": false
+    "active": true,
+    "targets": ["nsis"],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      }
+    }
   }
 }
