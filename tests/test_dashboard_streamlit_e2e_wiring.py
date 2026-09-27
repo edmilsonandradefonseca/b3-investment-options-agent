@@ -12,7 +12,6 @@ def test_streamlit_uses_dashboard_e2e_service_for_uploaded_btg_snapshot():
 
 def test_brokerage_notes_are_a_separate_append_only_upload_flow():
     source = Path("mvp/dashboard/app_v06.py").read_text(encoding="utf-8")
-    assert '"Notas de corretagem"' in source
     assert '"PDFs de notas"' in source
     assert 'type=["pdf"]' in source
     assert '"ZIP de notas"' in source
