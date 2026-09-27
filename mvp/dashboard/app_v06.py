@@ -14,9 +14,12 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from b3_agent.config import settings
 from b3_agent.dashboard_e2e import DashboardE2EService
+from b3_agent.options.brokerage_notes import BrokerageNoteParser
 from b3_agent.portfolio import PortfolioIntelligenceEngine
 from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
+from b3_agent.repositories.option_ledger import OptionTransactionLedger
 from b3_agent.repositories.portfolio import PortfolioRepository
 
 st.set_page_config(page_title="B3 Investment Copilot", page_icon="📊", layout="wide")
@@ -71,7 +74,7 @@ for key, default in {
     "factor_study": None,
     "factor_walk_forward": (),
     "btg_status": "Not loaded",
-    "options_status": "Not loaded",
+    "options_status": "No brokerage notes loaded",
     "load_error": None,
 }.items():
     st.session_state.setdefault(key, default)
@@ -80,58 +83,77 @@ with st.sidebar:
     st.header("DATA & COPILOT")
     st.caption("V4 E2E • read-only")
 
-    st.markdown("#### Load Excel")
-    btg_file = st.file_uploader("BTG Portfolio", type=["xlsx", "xlsm"], key="v06_btg")
-    options_file = st.file_uploader(
-        "Options Transactions",
+    st.markdown("#### Current portfolio")
+    btg_file = st.file_uploader(
+        "BTG Portfolio",
         type=["xlsx", "xlsm"],
-        key="v06_options",
+        key="v06_btg",
+        help="Somente Renda Variavel > Posição > Ações e Posição > Opções são importadas.",
     )
 
-    if st.button("📥 LOAD DATA", type="primary", use_container_width=True):
+    if st.button("📥 LOAD BTG PORTFOLIO", type="primary", use_container_width=True):
         st.session_state.load_error = None
-        loaded = False
-        if btg_file:
+        if not btg_file:
+            st.session_state.load_error = "Selecione o arquivo Excel do BTG."
+        else:
             portfolio_path = _temp_path(btg_file)
-            options_path = _temp_path(options_file) if options_file else None
             try:
-                snapshot = DashboardE2EService().load(
-                    portfolio_path,
-                    options_path=options_path,
-                )
+                snapshot = DashboardE2EService().load(portfolio_path)
                 st.session_state.context = snapshot.portfolio
                 st.session_state.intelligence = snapshot.portfolio_intelligence
-                st.session_state.transactions = snapshot.option_transactions
                 st.session_state.opportunities = snapshot.opportunities
                 st.session_state.strategy_comparisons = snapshot.strategy_comparisons
                 st.session_state.stress_results = snapshot.stress_results
                 st.session_state.market_regime = snapshot.market_regime
                 st.session_state.factor_study = snapshot.factor_study
                 st.session_state.factor_walk_forward = snapshot.factor_walk_forward
+                st.session_state.transactions = OptionTransactionLedger(
+                    settings.data_dir / "options.sqlite3"
+                ).list_all()
                 st.session_state.btg_status = (
                     f"✓ Loaded — {len(snapshot.portfolio.positions)} positions"
                 )
-                st.session_state.options_status = (
-                    f"✓ Loaded — {len(snapshot.option_transactions)} transactions"
-                    if options_file else "Not loaded"
-                )
-                loaded = True
             except Exception as exc:
                 st.session_state.btg_status = "✗ Load failed"
-                if options_file:
-                    st.session_state.options_status = "✗ Load failed"
-                st.session_state.load_error = f"E2E load: {exc}"
+                st.session_state.load_error = f"BTG load: {exc}"
             finally:
                 portfolio_path.unlink(missing_ok=True)
-                if options_path is not None:
-                    options_path.unlink(missing_ok=True)
-        elif options_file:
-            st.session_state.load_error = (
-                "Carregue o BTG Portfolio junto com Options Transactions "
-                "para montar um snapshot E2E consistente."
+
+    st.markdown("#### Brokerage notes")
+    brokerage_files = st.file_uploader(
+        "Notas de corretagem",
+        type=["pdf"],
+        accept_multiple_files=True,
+        key="v06_brokerage_notes",
+        help="As notas alimentam o ledger histórico de opções; não substituem a posição atual do BTG.",
+    )
+
+    if st.button("🧾 IMPORT BROKERAGE NOTES", use_container_width=True):
+        st.session_state.load_error = None
+        if not brokerage_files:
+            st.session_state.load_error = "Selecione uma ou mais notas de corretagem em PDF."
+        else:
+            ledger = OptionTransactionLedger(settings.data_dir / "options.sqlite3")
+            inserted = 0
+            parsed = 0
+            failures = []
+            for uploaded in brokerage_files:
+                note_path = _temp_path(uploaded)
+                try:
+                    transactions = BrokerageNoteParser().parse(note_path)
+                    parsed += len(transactions)
+                    inserted += ledger.append(transactions)
+                except Exception as exc:
+                    failures.append(f"{uploaded.name}: {exc}")
+                finally:
+                    note_path.unlink(missing_ok=True)
+            st.session_state.transactions = ledger.list_all()
+            st.session_state.options_status = (
+                f"✓ Ledger — {len(st.session_state.transactions)} transactions "
+                f"({inserted} new / {parsed} parsed)"
             )
-        if not loaded and not st.session_state.load_error:
-            st.session_state.load_error = "Selecione pelo menos um arquivo Excel."
+            if failures:
+                st.session_state.load_error = " | ".join(failures)
 
     st.divider()
     st.markdown("#### Data status")
@@ -244,7 +266,40 @@ with tab_options:
     if expiration_rows:
         st.markdown("#### Risk by expiration")
         st.dataframe(pd.DataFrame(expiration_rows), use_container_width=True, hide_index=True)
-    st.caption("Valores vêm do PortfolioContext; nenhum multiplicador ou contrato é inferido pelo dashboard.")
+    transactions = st.session_state.transactions
+    if not transactions:
+        ledger_path = settings.data_dir / "options.sqlite3"
+        if ledger_path.exists():
+            transactions = OptionTransactionLedger(ledger_path).list_all()
+            st.session_state.transactions = transactions
+
+    if transactions:
+        st.markdown("#### Histórico de compra e venda — notas de corretagem")
+        tx_rows = [
+            {
+                "Data": item.as_of,
+                "Opção": item.option_ticker,
+                "Lado": item.side,
+                "Quantidade": item.absolute_quantity,
+                "Preço executado": item.execution_price,
+                "Valor total": item.total_amount,
+                "Nota": item.note_number,
+                "Corretora": item.broker,
+            }
+            for item in transactions
+        ]
+        st.dataframe(
+            pd.DataFrame(tx_rows).sort_values(["Data", "Opção"], ascending=[False, True]),
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.info("Nenhuma nota de corretagem importada. O preço histórico de compra/venda ainda não está disponível.")
+
+    st.caption(
+        "BTG Portfolio é autoritativo para a posição atual; notas de corretagem "
+        "são histórico append-only para preços executados e reconstrução das operações."
+    )
 
 with tab_opportunities:
     st.subheader("Opportunities")
