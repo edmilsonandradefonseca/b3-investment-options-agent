@@ -227,7 +227,7 @@ with tab_options:
     )
     risk2.metric(
         "Cash secured",
-        "Yes" if intelligence.capital_risk.fully_cash_secured else "No",
+        "Unknown" if intelligence.capital_risk.fully_cash_secured is None else ("Yes" if intelligence.capital_risk.fully_cash_secured else "No"),
     )
     st.dataframe(option_df, use_container_width=True, hide_index=True)
     expiration_rows = [

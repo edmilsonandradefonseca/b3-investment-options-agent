@@ -12,8 +12,8 @@ class CapitalRiskSnapshot:
 
     cash: float
     assignment_capital: float
-    cash_after_assignment: float
-    fully_cash_secured: bool
+    cash_after_assignment: float | None
+    fully_cash_secured: bool | None
     uncovered_call_shares: float
 
 
@@ -46,11 +46,11 @@ class CapitalRiskEngine:
         for bucket in grouped.values():
             uncovered_call_shares += max(0.0, bucket["call_shares"] - bucket["stock_shares"])
 
-        cash_after_assignment = portfolio.cash - assignment_capital
+        cash_after_assignment = portfolio.cash - assignment_capital if portfolio.cash_is_known else None
         return CapitalRiskSnapshot(
             cash=portfolio.cash,
             assignment_capital=assignment_capital,
             cash_after_assignment=cash_after_assignment,
-            fully_cash_secured=cash_after_assignment >= 0.0,
+            fully_cash_secured=(cash_after_assignment >= 0.0) if cash_after_assignment is not None else None,
             uncovered_call_shares=uncovered_call_shares,
         )
