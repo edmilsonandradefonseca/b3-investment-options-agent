@@ -107,3 +107,42 @@ def test_analyze_quotes_rejects_call_without_current_price():
     assert result.calls == ()
     assert result.quality_status == "WARNING"
     assert result.assumptions == {"rejected_quotes": ("missing_current_price:CALL2",)}
+
+
+def test_analyze_quotes_rejects_invalid_put_without_aborting_batch():
+    invalid_put = OptionContract(
+        option_id="BADPUT",
+        underlying_id="PETR4",
+        underlying_ticker="PETR4",
+        option_ticker="PETR4P001",
+        option_type="PUT",
+        strike=1.0,
+        expiration_date=date(2026, 10, 16),
+    )
+    valid_put = OptionContract(
+        option_id="GOODPUT",
+        underlying_id="PETR4",
+        underlying_ticker="PETR4",
+        option_ticker="PETR4P300",
+        option_type="PUT",
+        strike=30.0,
+        expiration_date=date(2026, 10, 16),
+    )
+
+    result = OptionsAnalysisEngine().analyze_quotes(
+        contracts=(invalid_put, valid_put),
+        quotes=(
+            make_quote("BADPUT", mid=2.0, last=2.0, bid=1.9, ask=2.1),
+            make_quote("GOODPUT", mid=1.0, last=1.0, bid=0.9, ask=1.1),
+        ),
+        as_of=date(2026, 9, 16),
+    )
+
+    assert len(result.puts) == 1
+    assert result.puts[0].option_id == "GOODPUT"
+    assert result.quality_status == "WARNING"
+    assert result.assumptions is not None
+    assert any(
+        item.startswith("invalid_contract:BADPUT:")
+        for item in result.assumptions["rejected_quotes"]
+    )
