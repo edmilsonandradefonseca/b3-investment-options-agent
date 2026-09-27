@@ -106,3 +106,21 @@ SQLite/Parquet remain canonical structured truth. Qdrant and Neo4j are rebuildab
 ## Future local LLM
 
 The future DeepSeek runtime follows the same platform rule: one reusable local inference service, multiple consumers, explicit routing/contracts, and application-level isolation. B3 and João may both use it without loading duplicate model instances.
+
+
+## Runtime validation result — 2026-09-27
+
+Executed successfully on the Ubuntu host after synchronizing commit `99cfa8e`.
+
+Observed results:
+
+- Python 3.14.4
+- full regression: `426 passed, 1 warning`
+- shared embedding health: OK
+- embedding model: `sentence-transformers/paraphrase-multilingual-mpnet-base-v2`
+- embedding dimension: 768
+- shared Qdrant hybrid smoke: OK
+- shared Neo4j `B3Entity` namespace smoke: OK
+- no shared service started, stopped, restarted or upgraded
+
+This closes the infrastructure-preflight portion of Runtime Integration. The next runtime gate is dashboard/BTG end-to-end validation against the shared platform.
