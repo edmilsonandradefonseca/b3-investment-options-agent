@@ -22,14 +22,21 @@ def test_streamlit_uses_dashboard_e2e_service_for_uploaded_btg_snapshot():
     assert 'type=["xlsx", "xlsm"]' in source
 
 
-def test_brokerage_notes_have_separate_pdf_and_zip_uploaders():
+def test_streamlit_handles_only_small_direct_pdf_batches():
     source = _source()
     assert '"PDFs de notas"' in source
     assert 'type=["pdf"]' in source
-    assert '"ZIP de notas"' in source
-    assert 'type=["zip"]' in source
     assert "accept_multiple_files=True" in source
-    assert "accept_multiple_files=False" in source
+    assert "MAX_DIRECT_PDFS = 10" in source
+    assert 'type=["zip"]' not in source
+    assert "zipfile.ZipFile" not in source
+
+
+def test_streamlit_exposes_backend_batch_importer_link():
+    source = _source()
+    assert "BATCH_IMPORT_URL" in source
+    assert "OPEN ZIP BATCH IMPORTER" in source
+    assert "/imports/brokerage-notes/upload" in source
 
 
 def test_brokerage_ingestion_is_append_only_and_uses_explicit_source_contract():
@@ -42,12 +49,8 @@ def test_brokerage_ingestion_is_append_only_and_uses_explicit_source_contract():
     assert "histórico append-only" in source
 
 
-def test_bulk_brokerage_upload_is_bounded_and_reports_progress():
+def test_direct_pdf_upload_reports_progress():
     source = _source()
-    assert "MAX_DIRECT_PDFS = 10" in source
-    assert "MAX_ARCHIVE_PDFS = 250" in source
-    assert "MAX_ARCHIVE_UNCOMPRESSED_BYTES" in source
-    assert "zipfile.ZipFile" in source
     assert "st.progress(" in source
     assert "Processando {index}/{total_files}" in source
 
