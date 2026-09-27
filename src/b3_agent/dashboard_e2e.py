@@ -18,6 +18,8 @@ from b3_agent.schemas.strategy_comparison import StrategyAlternative, StrategyCo
 from b3_agent.experience.regime_engine import MarketRegimeEngine
 from b3_agent.scenario import ScenarioStressEngine
 from b3_agent.strategy_comparison import StrategyComparisonEngine
+from b3_agent.factor_intelligence import FactorIntelligenceEngine
+from b3_agent.schemas.factor import FactorObservation, FactorStudy, FactorWalkForwardResult
 
 
 @dataclass(frozen=True)
@@ -29,6 +31,8 @@ class DashboardSnapshot:
     strategy_comparisons: tuple[StrategyComparison, ...] = ()
     stress_results: tuple[StressResult, ...] = ()
     market_regime: MarketRegime | None = None
+    factor_study: FactorStudy | None = None
+    factor_walk_forward: tuple[FactorWalkForwardResult, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -36,6 +40,13 @@ class DashboardDecisionInputs:
     strategy_pairs: tuple[tuple[StrategyAlternative, StrategyAlternative], ...] = ()
     scenarios: tuple[ScenarioDefinition, ...] = ()
     feature_snapshot: FeatureSnapshot | None = None
+
+
+@dataclass(frozen=True)
+class DashboardFactorInputs:
+    factors: dict[str, tuple[FactorObservation, ...]]
+    source_refs: tuple[str, ...] = ()
+    run_walk_forward: bool = True
 
 
 @dataclass(frozen=True)
@@ -60,6 +71,7 @@ class DashboardE2EService:
         options_path: str | Path | None = None,
         opportunity_inputs: DashboardOpportunityInputs | None = None,
         decision_inputs: DashboardDecisionInputs | None = None,
+        factor_inputs: DashboardFactorInputs | None = None,
     ) -> DashboardSnapshot:
         portfolio = BtgRendaVariavelLoader().load(portfolio_path)
         transactions = (
@@ -87,6 +99,16 @@ class DashboardE2EService:
         strategy_comparisons = tuple(StrategyComparisonEngine().compare(left, right) for left, right in decision_inputs.strategy_pairs)
         stress_results = tuple(ScenarioStressEngine().evaluate(portfolio, scenario) for scenario in decision_inputs.scenarios)
         market_regime = MarketRegimeEngine().classify(decision_inputs.feature_snapshot) if decision_inputs.feature_snapshot is not None else None
+        factor_study = None
+        factor_walk_forward = ()
+        if factor_inputs is not None:
+            factor_engine = FactorIntelligenceEngine()
+            factor_study = factor_engine.analyze(factor_inputs.factors, as_of=portfolio.as_of, source_refs=factor_inputs.source_refs)
+            if factor_inputs.run_walk_forward:
+                factor_walk_forward = tuple(
+                    factor_engine.walk_forward(factor_id, observations, as_of=portfolio.as_of)
+                    for factor_id, observations in sorted(factor_inputs.factors.items())
+                )
         return DashboardSnapshot(
             portfolio=portfolio,
             portfolio_intelligence=intelligence,
@@ -95,4 +117,6 @@ class DashboardE2EService:
             strategy_comparisons=strategy_comparisons,
             stress_results=stress_results,
             market_regime=market_regime,
+            factor_study=factor_study,
+            factor_walk_forward=factor_walk_forward,
         )
