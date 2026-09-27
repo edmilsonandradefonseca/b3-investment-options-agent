@@ -13,8 +13,12 @@ def test_streamlit_uses_dashboard_e2e_service_for_uploaded_btg_snapshot():
 def test_brokerage_notes_are_a_separate_append_only_upload_flow():
     source = Path("mvp/dashboard/app_v06.py").read_text(encoding="utf-8")
     assert '"Notas de corretagem"' in source
-    assert 'type=["pdf", "zip"]' in source
+    assert '"PDFs de notas"' in source
+    assert 'type=["pdf"]' in source
+    assert '"ZIP de notas"' in source
+    assert 'type=["zip"]' in source
     assert "accept_multiple_files=True" in source
+    assert "accept_multiple_files=False" in source
     assert "BrokerageNoteParser().parse(note_path)" in source
     assert "OptionTransactionLedger" in source
     assert "ledger.append(transactions)" in source
@@ -43,3 +47,9 @@ def test_options_intelligence_surfaces_execution_history():
 def test_dashboard_source_compiles():
     source = Path("mvp/dashboard/app_v06.py").read_text(encoding="utf-8")
     compile(source, "mvp/dashboard/app_v06.py", "exec")
+
+
+def test_uploaded_files_are_streamed_to_temp_storage():
+    source = Path("mvp/dashboard/app_v06.py").read_text(encoding="utf-8")
+    assert "uploaded_file.read(1024 * 1024)" in source
+    assert "uploaded_file.getvalue()" not in source
