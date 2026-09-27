@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import zipfile
 from pathlib import Path
 
 import pandas as pd
@@ -23,6 +24,10 @@ from b3_agent.repositories.option_ledger import OptionTransactionLedger
 from b3_agent.repositories.portfolio import PortfolioRepository
 
 st.set_page_config(page_title="B3 Investment Copilot", page_icon="📊", layout="wide")
+
+MAX_DIRECT_PDFS = 10
+MAX_ARCHIVE_PDFS = 250
+MAX_ARCHIVE_UNCOMPRESSED_BYTES = 100 * 1024 * 1024
 
 # Streamlit has a native left sidebar; for this prototype we visually move it
 # to the right so we can test the intended product layout before adopting a
@@ -120,40 +125,138 @@ with st.sidebar:
                 portfolio_path.unlink(missing_ok=True)
 
     st.markdown("#### Brokerage notes")
+    st.caption(
+        "Para poucos arquivos, envie até 10 PDFs por lote. "
+        "Para histórico grande, compacte as notas em um único ZIP."
+    )
     brokerage_files = st.file_uploader(
         "Notas de corretagem",
-        type=["pdf"],
+        type=["pdf", "zip"],
         accept_multiple_files=True,
         key="v06_brokerage_notes",
-        help="As notas alimentam o ledger histórico de opções; não substituem a posição atual do BTG.",
+        help=(
+            "PDF: até 10 por lote. ZIP: até 250 PDFs / 100 MB descompactados. "
+            "As notas alimentam o ledger histórico e não substituem a posição atual do BTG."
+        ),
     )
 
     if st.button("🧾 IMPORT BROKERAGE NOTES", use_container_width=True):
         st.session_state.load_error = None
         if not brokerage_files:
-            st.session_state.load_error = "Selecione uma ou mais notas de corretagem em PDF."
+            st.session_state.load_error = "Selecione PDFs ou um ZIP com notas de corretagem."
         else:
-            ledger = OptionTransactionLedger(settings.data_dir / "options.sqlite3")
-            inserted = 0
-            parsed = 0
-            failures = []
-            for uploaded in brokerage_files:
-                note_path = _temp_path(uploaded)
-                try:
-                    transactions = BrokerageNoteParser().parse(note_path)
-                    parsed += len(transactions)
-                    inserted += ledger.append(transactions)
-                except Exception as exc:
-                    failures.append(f"{uploaded.name}: {exc}")
-                finally:
-                    note_path.unlink(missing_ok=True)
-            st.session_state.transactions = ledger.list_all()
-            st.session_state.options_status = (
-                f"✓ Ledger — {len(st.session_state.transactions)} transactions "
-                f"({inserted} new / {parsed} parsed)"
-            )
-            if failures:
-                st.session_state.load_error = " | ".join(failures)
+            direct_pdfs = [item for item in brokerage_files if item.name.lower().endswith(".pdf")]
+            zip_files = [item for item in brokerage_files if item.name.lower().endswith(".zip")]
+
+            if len(direct_pdfs) > MAX_DIRECT_PDFS:
+                st.session_state.load_error = (
+                    f"Selecione no máximo {MAX_DIRECT_PDFS} PDFs por lote. "
+                    "Para muitas notas, use um arquivo ZIP."
+                )
+            elif len(zip_files) > 1 or (zip_files and direct_pdfs):
+                st.session_state.load_error = (
+                    "Envie até 10 PDFs OU um único ZIP por lote, não os dois formatos juntos."
+                )
+            else:
+                ledger = OptionTransactionLedger(settings.data_dir / "options.sqlite3")
+                inserted = 0
+                parsed = 0
+                failures = []
+                processed_files = 0
+
+                progress = st.progress(0.0, text="Preparando notas...")
+                status = st.empty()
+
+                def process_note_path(note_path: Path, display_name: str) -> None:
+                    nonlocal inserted, parsed, processed_files
+                    try:
+                        transactions = BrokerageNoteParser().parse(note_path)
+                        parsed += len(transactions)
+                        inserted += ledger.append(transactions)
+                    except Exception as exc:
+                        failures.append(f"{display_name}: {exc}")
+                    finally:
+                        processed_files += 1
+
+                if zip_files:
+                    archive_path = _temp_path(zip_files[0])
+                    try:
+                        with zipfile.ZipFile(archive_path) as archive:
+                            members = [
+                                info for info in archive.infolist()
+                                if not info.is_dir() and info.filename.lower().endswith(".pdf")
+                            ]
+                            if not members:
+                                raise ValueError("ZIP não contém arquivos PDF.")
+                            if len(members) > MAX_ARCHIVE_PDFS:
+                                raise ValueError(
+                                    f"ZIP contém {len(members)} PDFs; máximo suportado por lote é "
+                                    f"{MAX_ARCHIVE_PDFS}."
+                                )
+                            total_uncompressed = sum(info.file_size for info in members)
+                            if total_uncompressed > MAX_ARCHIVE_UNCOMPRESSED_BYTES:
+                                raise ValueError(
+                                    "ZIP excede o limite de 100 MB descompactados."
+                                )
+
+                            total_files = len(members)
+                            for index, info in enumerate(members, start=1):
+                                status.write(f"Processando {index}/{total_files}: {Path(info.filename).name}")
+                                suffix = Path(info.filename).suffix or ".pdf"
+                                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as handle:
+                                    with archive.open(info) as source:
+                                        while True:
+                                            chunk = source.read(1024 * 1024)
+                                            if not chunk:
+                                                break
+                                            handle.write(chunk)
+                                    note_path = Path(handle.name)
+                                try:
+                                    process_note_path(note_path, info.filename)
+                                finally:
+                                    note_path.unlink(missing_ok=True)
+                                progress.progress(
+                                    index / total_files,
+                                    text=f"Processadas {index}/{total_files} notas",
+                                )
+                    except Exception as exc:
+                        failures.append(f"{zip_files[0].name}: {exc}")
+                    finally:
+                        archive_path.unlink(missing_ok=True)
+                else:
+                    total_files = len(direct_pdfs)
+                    for index, uploaded in enumerate(direct_pdfs, start=1):
+                        status.write(f"Processando {index}/{total_files}: {uploaded.name}")
+                        note_path = _temp_path(uploaded)
+                        try:
+                            process_note_path(note_path, uploaded.name)
+                        finally:
+                            note_path.unlink(missing_ok=True)
+                        progress.progress(
+                            index / total_files,
+                            text=f"Processadas {index}/{total_files} notas",
+                        )
+
+                st.session_state.transactions = ledger.list_all()
+                st.session_state.options_status = (
+                    f"✓ Ledger — {len(st.session_state.transactions)} transactions "
+                    f"({inserted} new / {parsed} parsed / {processed_files} files)"
+                )
+                progress.empty()
+                status.empty()
+
+                if failures:
+                    preview = failures[:10]
+                    extra = len(failures) - len(preview)
+                    message = " | ".join(preview)
+                    if extra > 0:
+                        message += f" | ... e mais {extra} erro(s)"
+                    st.session_state.load_error = message
+                else:
+                    st.success(
+                        f"Lote concluído: {processed_files} arquivo(s), "
+                        f"{parsed} operações lidas, {inserted} novas."
+                    )
 
     st.divider()
     st.markdown("#### Data status")
