@@ -220,6 +220,20 @@ with tab_options:
         "Yes" if intelligence.capital_risk.fully_cash_secured else "No",
     )
     st.dataframe(option_df, use_container_width=True, hide_index=True)
+    expiration_rows = [
+        {
+            "Vencimento": item.expiration_date,
+            "Opções": item.option_count,
+            "Short puts": item.short_put_count,
+            "Short calls": item.short_call_count,
+            "Capital assignment": item.assignment_capital,
+            "Ações entregáveis": item.deliverable_shares,
+        }
+        for item in intelligence.expiration_risk
+    ]
+    if expiration_rows:
+        st.markdown("#### Risk by expiration")
+        st.dataframe(pd.DataFrame(expiration_rows), use_container_width=True, hide_index=True)
     st.caption("Valores vêm do PortfolioContext; nenhum multiplicador ou contrato é inferido pelo dashboard.")
 
 with tab_opportunities:
@@ -256,7 +270,16 @@ with tab_intelligence:
         for e in getattr(intelligence, "exposures", ())
     ]
     if exposures:
-        st.dataframe(pd.DataFrame(exposures), use_container_width=True, hide_index=True)
+        exposure_df = pd.DataFrame(exposures)
+        st.markdown("#### Economic exposure")
+        st.dataframe(exposure_df, use_container_width=True, hide_index=True)
+        concentrated = exposure_df.sort_values("Peso", ascending=False).head(5)
+        st.markdown("#### Top 5 concentration")
+        st.dataframe(
+            concentrated[["Ticker", "Valor líquido", "Peso", "Assignment capital", "Call coverage"]],
+            use_container_width=True,
+            hide_index=True,
+        )
     else:
         st.info("Nenhuma exposição calculada.")
 
