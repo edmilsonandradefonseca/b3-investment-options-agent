@@ -1,0 +1,167 @@
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
+export type JsonObject = { [key: string]: JsonValue };
+
+export type ApiErrorPayload = {
+  detail?: string;
+  error?: string | null;
+};
+
+export type HealthResponse = {
+  status: string;
+  service: string;
+  workflow_configured: boolean;
+  llm_enabled: boolean;
+  runtime: {
+    embedding_url: string;
+    qdrant_url: string;
+    neo4j_uri: string;
+    qdrant_collection: string;
+    oplab_token_configured: boolean;
+  };
+};
+
+export type VersionResponse = {
+  service: string;
+  version: string;
+};
+
+export type OrchestrateRequest = {
+  task: string;
+  ticker?: string | null;
+  context?: Record<string, unknown>;
+};
+
+export type OrchestrateResponse = {
+  status: string;
+  result: Record<string, unknown>;
+  sources: string[];
+  audit: Array<Record<string, unknown>>;
+  error: string | null;
+};
+
+export type TransactionRequest = {
+  action: string;
+  instrument_type: string;
+  ticker: string;
+  quantity: number;
+  price: number;
+  executed_at?: string | null;
+  broker?: string;
+};
+
+export type TransactionResponse = {
+  transaction_id: string;
+  executed_at: string;
+  action: string;
+  instrument_type: string;
+  ticker: string;
+  quantity: number;
+  price: number;
+  broker: string;
+  source_ref: string;
+};
+
+export type SnapshotImportResponse = {
+  status: string;
+  file: string;
+  active_file: string;
+  message: string;
+};
+
+export type BrokerageNoteImportResponse = {
+  status: string;
+  file: string;
+  active_file: string;
+  note_number: string | null;
+  trade_date: string | null;
+  parsed_count: number;
+  inserted_count: number;
+  transaction_ids: string[];
+  message: string;
+};
+
+export type BrokerageBatchImportResponse = Record<string, unknown>;
+
+export type DataRecord = {
+  instrument_id: string;
+  ticker: string;
+  observation_timestamp: string;
+  available_timestamp: string;
+  source: string;
+  ingested_at: string;
+  source_record_id: string;
+};
+
+export type StockMarketData = DataRecord & {
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  adjusted_close: number | null;
+  vwap: number | null;
+  currency: string;
+};
+
+export type OptionContract = {
+  option_id: string;
+  underlying_id: string;
+  underlying_ticker: string;
+  option_ticker: string;
+  option_type: string;
+  strike: number;
+  expiration_date: string;
+  exercise_style: string | null;
+  contract_multiplier: number;
+  currency: string;
+};
+
+export type OptionQuote = DataRecord & {
+  option_id: string;
+  bid: number | null;
+  ask: number | null;
+  last: number | null;
+  mid: number | null;
+  volume: number;
+  open_interest: number | null;
+  implied_volatility: number | null;
+  delta: number | null;
+  gamma: number | null;
+  theta: number | null;
+  vega: number | null;
+  rho: number | null;
+};
+
+export type OptionsAnalysis = {
+  puts: Array<Record<string, unknown>>;
+  calls: Array<Record<string, unknown>>;
+  source_refs: string[];
+  quality_status: "VALIDATED" | "WARNING" | "REJECTED";
+  assumptions: Record<string, unknown> | null;
+};
+
+export type LiveAnalysisResponse = {
+  ticker: string;
+  as_of: string;
+  source_refs: string[];
+  market: {
+    history_count: number;
+    latest: StockMarketData;
+  };
+  options: {
+    contract_count: number;
+    quote_count: number;
+    contracts: OptionContract[];
+    quotes: OptionQuote[];
+    analysis: OptionsAnalysis;
+  };
+};
+
+export type ResearchNewsResponse = {
+  ticker: string;
+  as_of: string;
+  excluded_future_count: number;
+  source_refs: string[];
+  events: Array<Record<string, unknown>>;
+};

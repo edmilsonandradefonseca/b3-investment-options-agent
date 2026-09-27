@@ -1,127 +1,115 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 
-type Page =
-  | "Overview"
-  | "Portfolio"
-  | "Options"
-  | "Opportunities"
-  | "Market Regime"
-  | "Experience & Learning"
-  | "Historical Similarity"
-  | "Risk & Stress"
-  | "Copilot";
+import { ApiError, b3Api } from "./api/client";
+import type { OrchestrateResponse } from "./api/contracts";
+import {
+  PAGE_DEFINITIONS,
+  getPageDefinition,
+  hashForPage,
+  pageFromHash,
+  type PageId,
+} from "./app/pages";
 
-type OrchestratorPayload = {
-  status?: string;
-  result?: Record<string, unknown>;
-  sources?: string[];
-  audit?: Array<Record<string, unknown>>;
-  error?: string | null;
-};
-
-const API_BASE = import.meta.env.VITE_ORCHESTRATOR_URL ?? "http://127.0.0.1:8000";
-
-const nav: { id: Page; icon: string; subtitle: string }[] = [
-  { id: "Overview", icon: "⌂", subtitle: "Visão consolidada V4" },
-  { id: "Portfolio", icon: "◫", subtitle: "Posições e exposição" },
-  { id: "Options", icon: "◈", subtitle: "Lifecycle e estruturas" },
-  { id: "Opportunities", icon: "◎", subtitle: "Ranking + contexto" },
-  { id: "Market Regime", icon: "◌", subtitle: "Regime e fatores" },
-  { id: "Experience & Learning", icon: "◇", subtitle: "Aprendizados e drift" },
-  { id: "Historical Similarity", icon: "≈", subtitle: "Precedentes similares" },
-  { id: "Risk & Stress", icon: "△", subtitle: "Cenários e stress" },
-  { id: "Copilot", icon: "✦", subtitle: "Racional conversacional" },
-];
-
-const pagePrompts: Record<Page, string> = {
-  Overview: "Resuma o estado atual do portfólio, mercado, riscos e principais mudanças.",
-  Portfolio: "Analise a composição, concentração, capital e exposições do meu portfólio.",
-  Options: "Analise minhas posições e operações de opções atuais, incluindo lifecycle e riscos.",
-  Opportunities: "Quais oportunidades atuais são elegíveis e como a experiência histórica as contextualiza?",
-  "Market Regime": "Qual é o regime de mercado atual e quais fatores o suportam?",
-  "Experience & Learning": "Quais aprendizados ativos, enfraquecendo ou em drift são relevantes agora?",
-  "Historical Similarity": "Quais experiências históricas são mais similares ao contexto atual e por quê?",
-  "Risk & Stress": "Mostre os principais riscos e cenários de stress relevantes para a carteira atual.",
-  Copilot: "Explique o racional consolidado para o contexto atual, com evidências e limitações.",
-};
-
-const pageDescription: Record<Page, string> = {
-  Overview: "Resumo executivo sem inventar dados ausentes.",
-  Portfolio: "Fonte: PortfolioContext e engines determinísticos.",
-  Options: "Posições, obrigações, assignment e estruturas.",
-  Opportunities: "Score determinístico separado de ExperienceAssessment.",
-  "Market Regime": "Classificação reproduzível e versionada.",
-  "Experience & Learning": "Evidências, confiança, aging, contradição e drift.",
-  "Historical Similarity": "Feature similarity + regime + aging + semântica.",
-  "Risk & Stress": "ScenarioDefinition → StressResult, sem previsão implícita.",
-  Copilot: "Síntese contextual; decisão final continua humana.",
-};
+function errorMessage(error: unknown): string {
+  if (error instanceof ApiError) return error.message;
+  if (error instanceof Error) return error.message;
+  return "erro desconhecido";
+}
 
 function App() {
-  const [page, setPage] = useState<Page>("Overview");
+  const [page, setPage] = useState<PageId>(() => pageFromHash());
   const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState<OrchestratorPayload | null>(null);
+  const [answer, setAnswer] = useState<OrchestrateResponse | null>(null);
   const [serverOnline, setServerOnline] = useState(false);
   const [asking, setAsking] = useState(false);
   const [importStatus, setImportStatus] = useState("");
 
   useEffect(() => {
-    fetch(`${API_BASE}/health`)
-      .then((response) => setServerOnline(response.ok))
-      .catch(() => setServerOnline(false));
+    const syncPageFromHash = () => setPage(pageFromHash());
+    window.addEventListener("hashchange", syncPageFromHash);
+    if (!window.location.hash) {
+      window.history.replaceState(null, "", hashForPage("Overview"));
+    }
+    return () => window.removeEventListener("hashchange", syncPageFromHash);
   }, []);
 
-  const suggestedPrompt = useMemo(() => pagePrompts[page], [page]);
+  useEffect(() => {
+    let active = true;
+    b3Api
+      .health()
+      .then((health) => {
+        if (active) setServerOnline(health.status === "ok");
+      })
+      .catch(() => {
+        if (active) setServerOnline(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const pageDefinition = useMemo(() => getPageDefinition(page), [page]);
+
+  function navigate(nextPage: PageId) {
+    window.location.hash = hashForPage(nextPage);
+    setPage(nextPage);
+    setAnswer(null);
+  }
 
   async function ask(event?: FormEvent) {
     event?.preventDefault();
-    const task = (question.trim() || suggestedPrompt).trim();
+    const task = (question.trim() || pageDefinition.prompt).trim();
     if (!task || asking) return;
+
     setAsking(true);
     setAnswer(null);
     try {
-      const response = await fetch(`${API_BASE}/orchestrate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          task,
-          context: {
-            client: "desktop-v4",
-            dashboard_page: page,
-          },
-        }),
+      const response = await b3Api.orchestrate({
+        task,
+        context: {
+          client: "react-production-v1",
+          dashboard_page: page,
+        },
       });
-      const data = (await response.json()) as OrchestratorPayload & { detail?: string };
-      if (!response.ok) throw new Error(data.detail ?? data.error ?? "Falha no orquestrador");
-      setAnswer(data);
+      setAnswer(response);
+      setServerOnline(true);
     } catch (error) {
       setAnswer({
         status: "ERROR",
-        error: error instanceof Error ? error.message : "erro desconhecido",
+        result: {},
+        sources: [],
+        audit: [],
+        error: errorMessage(error),
       });
+      setServerOnline(false);
     } finally {
       setAsking(false);
     }
   }
 
-  async function importExcel(event: ChangeEvent<HTMLInputElement>, kind: "portfolio" | "options") {
+  async function importExcel(
+    event: ChangeEvent<HTMLInputElement>,
+    kind: "portfolio" | "options",
+  ) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
 
-    setImportStatus(`Validando e carregando ${kind === "portfolio" ? "portfolio de ações" : "transações de opções"}…`);
+    setImportStatus(
+      `Validando e carregando ${kind === "portfolio" ? "portfolio de ações" : "transações de opções"}…`,
+    );
+
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const response = await fetch(`${API_BASE}/imports/${kind}`, {
-        method: "POST",
-        body: form,
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail ?? "Falha ao importar Excel");
-      setImportStatus(`✓ ${data.file} carregado. Snapshot atual substituído após validação.`);
+      const data =
+        kind === "portfolio"
+          ? await b3Api.importPortfolio(file)
+          : await b3Api.importOptions(file);
+      setImportStatus(
+        `✓ ${data.file} carregado. Snapshot atual substituído após validação.`,
+      );
+      setServerOnline(true);
     } catch (error) {
-      setImportStatus(`Erro: ${error instanceof Error ? error.message : "falha desconhecida"}`);
+      setImportStatus(`Erro: ${errorMessage(error)}`);
     }
   }
 
@@ -132,21 +120,23 @@ function App() {
           <span className="brand-mark">▮▮▮</span>
           <div>
             <strong>B3 Investment Copilot</strong>
-            <small>Architecture V4 · Continuous Learning</small>
+            <small>Production React · Architecture V4 frozen</small>
           </div>
         </div>
-        <div className="architecture-badge">SQLite/Parquet · Qdrant 768d · Neo4j</div>
+        <div className="architecture-badge">
+          SQLite/Parquet · Qdrant 768d hybrid · Neo4j
+        </div>
         <div className="user">EF&nbsp;&nbsp;Edmilson</div>
       </header>
 
       <div className="body">
         <aside className="sidebar">
           <nav>
-            {nav.map((item) => (
+            {PAGE_DEFINITIONS.map((item) => (
               <button
                 key={item.id}
                 className={page === item.id ? "nav-item active" : "nav-item"}
-                onClick={() => setPage(item.id)}
+                onClick={() => navigate(item.id)}
               >
                 <span className="nav-icon">{item.icon}</span>
                 <span>
@@ -165,7 +155,12 @@ function App() {
             </div>
             <label className="load">
               ↥ &nbsp; Carregar Excel de Ações
-              <input type="file" accept=".xlsx,.xlsm" hidden onChange={(event) => importExcel(event, "portfolio")} />
+              <input
+                type="file"
+                accept=".xlsx,.xlsm"
+                hidden
+                onChange={(event) => importExcel(event, "portfolio")}
+              />
             </label>
 
             <div className="connection">
@@ -174,7 +169,12 @@ function App() {
             </div>
             <label className="load secondary">
               ↥ &nbsp; Carregar Excel de Opções
-              <input type="file" accept=".xlsx,.xlsm" hidden onChange={(event) => importExcel(event, "options")} />
+              <input
+                type="file"
+                accept=".xlsx,.xlsm"
+                hidden
+                onChange={(event) => importExcel(event, "options")}
+              />
             </label>
             {importStatus && <small className="import-status">{importStatus}</small>}
           </section>
@@ -191,10 +191,10 @@ function App() {
           <div className="workspace-head">
             <div>
               <h1>{page}</h1>
-              <p>{pageDescription[page]}</p>
+              <p>{pageDefinition.description}</p>
             </div>
             <span className={serverOnline ? "server online" : "server"}>
-              ● Orchestrator {serverOnline ? "Connected" : "Offline"}
+              ● Backend {serverOnline ? "Connected" : "Offline"}
             </span>
           </div>
 
@@ -217,7 +217,7 @@ function App() {
             </div>
 
             <div className="panel insights">
-              <h2>Arquitetura ativa</h2>
+              <h2>Runtime contratado</h2>
               <div className="list-item">PIT / Quality Gates <span>Deterministic</span></div>
               <div className="list-item">Experience Retrieval <span>Hybrid</span></div>
               <div className="list-item">Learning Lifecycle <span>Drift-aware</span></div>
@@ -227,11 +227,11 @@ function App() {
           </section>
 
           <section className="panel lower">
-            <h2>What changed</h2>
+            <h2>Frontend contract</h2>
             <p>
-              A V4 usa AnalysisRun + Change Detection para comparar snapshots, regime, learnings,
-              oportunidades e riscos. Quando não houver histórico canônico suficiente, o dashboard
-              deve mostrar ausência de dados em vez de fabricar uma explicação.
+              O React consome apenas APIs existentes do backend congelado. Ausência,
+              UNKNOWN, LIMITED, qualidade, evidências e timestamps permanecem explícitos;
+              nenhuma métrica de investimento é recalculada ou inferida no navegador.
             </p>
           </section>
         </main>
@@ -249,11 +249,11 @@ function App() {
 
           <div className="copilot-intro">
             <h2>{page}</h2>
-            <p>{suggestedPrompt}</p>
+            <p>{pageDefinition.prompt}</p>
           </div>
 
           <div className="suggestions">
-            <button onClick={() => setQuestion(suggestedPrompt)}>
+            <button onClick={() => setQuestion(pageDefinition.prompt)}>
               Usar pergunta sugerida <span>›</span>
             </button>
             <button onClick={() => setQuestion("O que mudou desde a última análise?")}>
@@ -270,7 +270,7 @@ function App() {
             <textarea
               value={question}
               onChange={(event) => setQuestion(event.target.value)}
-              placeholder={suggestedPrompt}
+              placeholder={pageDefinition.prompt}
               rows={5}
             />
             <button disabled={asking}>{asking ? "…" : "➤"}</button>
@@ -285,8 +285,14 @@ function App() {
   );
 }
 
-function PageSurface({ page, answer }: { page: Page; answer: OrchestratorPayload | null }) {
-  const features: Record<Page, string[]> = {
+function PageSurface({
+  page,
+  answer,
+}: {
+  page: PageId;
+  answer: OrchestrateResponse | null;
+}) {
+  const features: Record<PageId, string[]> = {
     Overview: ["Portfolio", "Market Regime", "Learning", "Risk", "What changed"],
     Portfolio: ["Exposure", "Concentration", "Capital", "Assignment", "Portfolio impact"],
     Options: ["Lifecycle", "DTE", "Assignment", "Coverage", "Historical outcome"],
@@ -310,14 +316,14 @@ function PageSurface({ page, answer }: { page: Page; answer: OrchestratorPayload
         ))}
       </div>
       {answer ? (
-        <pre className="result-json">{JSON.stringify(answer.result ?? {}, null, 2)}</pre>
+        <pre className="result-json">{JSON.stringify(answer.result, null, 2)}</pre>
       ) : (
         <div className="empty-state">
           <div className="empty-icon">◇</div>
-          <h3>Nenhum resultado V4 carregado</h3>
+          <h3>Nenhum resultado canônico carregado</h3>
           <p>
-            Use “Atualizar inteligência” ou o Copilot. A interface não cria métricas substitutas
-            quando o runtime não fornece dados canônicos.
+            Use “Atualizar inteligência” ou o Copilot. A interface não cria métricas
+            substitutas quando o runtime não fornece dados.
           </p>
         </div>
       )}
@@ -325,23 +331,29 @@ function PageSurface({ page, answer }: { page: Page; answer: OrchestratorPayload
   );
 }
 
-function AnswerCard({ payload }: { payload: OrchestratorPayload }) {
+function AnswerCard({ payload }: { payload: OrchestrateResponse }) {
   return (
     <div className="answer-card">
-      <div className="answer-status">{payload.status ?? "UNKNOWN"}</div>
+      <div className="answer-status">{payload.status || "UNKNOWN"}</div>
       {payload.error ? (
         <p>{payload.error}</p>
       ) : (
-        <pre>{JSON.stringify(payload.result ?? {}, null, 2)}</pre>
+        <pre>{JSON.stringify(payload.result, null, 2)}</pre>
       )}
-      {!!payload.sources?.length && (
-        <small>Sources: {payload.sources.join(", ")}</small>
-      )}
+      {!!payload.sources.length && <small>Sources: {payload.sources.join(", ")}</small>}
     </div>
   );
 }
 
-function Metric({ title, value, detail }: { title: string; value: string; detail: string }) {
+function Metric({
+  title,
+  value,
+  detail,
+}: {
+  title: string;
+  value: string;
+  detail: string;
+}) {
   return (
     <div className="metric">
       <span>{title}</span>
