@@ -19,6 +19,7 @@ from .learning import (
 )
 from .experience import ExperienceAssessment, ExperienceMatch, ExperienceRetrievalResult, RetrievalTrace, RetrievalTraceItem
 from .usefulness import DecisionEvidenceOutcomeAttribution, HistoricalUsefulnessAssessment, OutcomeAssociation
+from .provenance import Claim, ClaimEvidenceLink, ClaimEvidenceDirection, ClaimStatus, SourceDocument
 
 __all__ = [
     "DataRecord",
@@ -54,6 +55,11 @@ __all__ = [
     "DecisionEvidenceOutcomeAttribution",
     "HistoricalUsefulnessAssessment",
     "OutcomeAssociation",
+    "SourceDocument",
+    "Claim",
+    "ClaimEvidenceLink",
+    "ClaimEvidenceDirection",
+    "ClaimStatus",
 ]
 
 from .scenario import PositionStress, ScenarioDefinition, StressResult

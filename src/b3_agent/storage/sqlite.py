@@ -103,6 +103,43 @@ CREATE INDEX IF NOT EXISTS idx_usefulness_attributions_evidence
 CREATE INDEX IF NOT EXISTS idx_usefulness_attributions_decision
     ON usefulness_attributions(decision_id);
 
+CREATE TABLE IF NOT EXISTS source_documents (
+    document_id TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    title TEXT NOT NULL,
+    retrieved_at TEXT NOT NULL,
+    published_at TEXT,
+    source_url TEXT,
+    content_hash TEXT,
+    version INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS claims (
+    claim_id TEXT PRIMARY KEY,
+    statement TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    status TEXT NOT NULL,
+    valid_from TEXT,
+    valid_to TEXT,
+    version INTEGER NOT NULL,
+    supersedes_claim_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS claim_evidence_links (
+    claim_id TEXT NOT NULL,
+    evidence_id TEXT NOT NULL,
+    document_id TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    observed_at TEXT NOT NULL,
+    confidence REAL NOT NULL,
+    PRIMARY KEY (claim_id, evidence_id, direction),
+    FOREIGN KEY (claim_id) REFERENCES claims(claim_id),
+    FOREIGN KEY (document_id) REFERENCES source_documents(document_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_claim_evidence_document
+    ON claim_evidence_links(document_id);
+
 CREATE TABLE IF NOT EXISTS dataset_references (
     dataset_id TEXT PRIMARY KEY,
     dataset_name TEXT NOT NULL UNIQUE,
