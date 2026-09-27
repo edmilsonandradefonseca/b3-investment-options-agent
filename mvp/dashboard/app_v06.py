@@ -68,6 +68,8 @@ for key, default in {
     "strategy_comparisons": (),
     "stress_results": (),
     "market_regime": None,
+    "factor_study": None,
+    "factor_walk_forward": (),
     "btg_status": "Not loaded",
     "options_status": "Not loaded",
     "load_error": None,
@@ -104,6 +106,8 @@ with st.sidebar:
                 st.session_state.strategy_comparisons = snapshot.strategy_comparisons
                 st.session_state.stress_results = snapshot.stress_results
                 st.session_state.market_regime = snapshot.market_regime
+                st.session_state.factor_study = snapshot.factor_study
+                st.session_state.factor_walk_forward = snapshot.factor_walk_forward
                 st.session_state.btg_status = (
                     f"✓ Loaded — {len(snapshot.portfolio.positions)} positions"
                 )
@@ -200,8 +204,8 @@ c3.metric("Stocks", len(stock_df))
 c4.metric("Options", len(option_df))
 
 st.divider()
-tab_portfolio, tab_options, tab_opportunities, tab_intelligence, tab_decision = st.tabs(
-    ["Portfolio", "Options Intelligence", "Opportunities", "Portfolio Intelligence", "Decision Context"]
+tab_portfolio, tab_options, tab_opportunities, tab_intelligence, tab_decision, tab_factors = st.tabs(
+    ["Portfolio", "Options Intelligence", "Opportunities", "Portfolio Intelligence", "Decision Context", "Factor Intelligence"]
 )
 
 with tab_portfolio:
@@ -373,6 +377,36 @@ with tab_decision:
         st.caption("Choques são inputs explícitos; o dashboard não infere previsão nem repricing de opções.")
     else:
         st.info("Nenhum cenário explícito foi carregado.")
+
+with tab_factors:
+    st.subheader("Factor Intelligence")
+    st.caption("UC-06 • statistical association only • no causal claim")
+    factor_study = st.session_state.factor_study
+    if factor_study is None:
+        st.info("Nenhuma série de fatores validada foi carregada.")
+    else:
+        st.dataframe(pd.DataFrame([{
+            "Factor": item.factor_id,
+            "N": item.sample_size,
+            "Train corr": item.train_correlation,
+            "Holdout corr": item.holdout_correlation,
+            "Adjusted p": item.adjusted_p_value,
+            "Direction stable": item.direction_stable,
+            "Significant": item.statistically_significant,
+            "Quality": item.quality_status,
+        } for item in factor_study.results]), use_container_width=True, hide_index=True)
+        st.caption(f"Multiple testing: {factor_study.correction_method} • alpha={factor_study.alpha:.2f}")
+        walk = st.session_state.factor_walk_forward
+        if walk:
+            st.markdown("#### Walk-forward robustness")
+            st.dataframe(pd.DataFrame([{
+                "Factor": item.factor_id,
+                "Folds": len(item.folds),
+                "Stable fold ratio": item.stable_fold_ratio,
+                "Median test corr": item.median_test_correlation,
+                "Quality": item.quality_status,
+            } for item in walk]), use_container_width=True, hide_index=True)
+        st.warning("Significância e correlação não demonstram causalidade nem constituem recomendação de investimento.")
 
 st.divider()
 st.caption(
