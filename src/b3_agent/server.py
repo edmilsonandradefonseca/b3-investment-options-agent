@@ -32,6 +32,7 @@ from b3_agent.orchestration import OrchestratorRequest, OrchestratorResponse, b3
 from b3_agent.orchestration.live_providers import LiveProviderService
 from b3_agent.providers.searxng_news import SearxngNewsAdapter
 from b3_agent.research_events import ResearchEventService
+from b3_agent.runtime import RuntimeManager
 
 
 class OrchestrateRequest(BaseModel):
@@ -406,6 +407,12 @@ def health() -> dict[str, Any]:
             "oplab_token_configured": bool(os.getenv("OPLAB_API_TOKEN")),
         },
     }
+
+
+@app.get("/runtime/status")
+def runtime_status() -> dict[str, Any]:
+    """Expose the operational runtime state through the Orchestrator."""
+    return RuntimeManager().status(health_override="ok")
 
 
 @app.get("/analysis/live/{ticker}")

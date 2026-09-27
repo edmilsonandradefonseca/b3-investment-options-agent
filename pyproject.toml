@@ -28,6 +28,9 @@ dependencies = [
     "neo4j>=6,<7",
 ]
 
+[project.scripts]
+b3-runtime = "b3_agent.runtime.cli:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8,<9",

@@ -99,3 +99,34 @@ def test_replace_validated_upload_preserves_excel_extension(monkeypatch, tmp_pat
     assert seen == {"suffix": ".xlsx", "content": "excel-bytes"}
     assert result["status"] == "replaced"
     assert (tmp_path / "portfolio.xlsx").read_bytes() == b"excel-bytes"
+
+
+def test_runtime_status_endpoint(monkeypatch, tmp_path: Path) -> None:
+    class FakeRuntimeManager:
+        def status(self, *, health_override: str | None = None):
+            assert health_override == "ok"
+            return {
+                "runtime": "running",
+                "runtime_root": str(tmp_path),
+                "health": "ok",
+                "resources": {
+                    "filesystem": "ok",
+                    "sqlite": "ok",
+                    "parquet": "ok",
+                },
+                "services": {
+                    "qdrant": {"state": "ok", "ownership": "shared_external"},
+                    "neo4j": {"state": "ok", "ownership": "shared_external"},
+                },
+                "process": {"running": True},
+            }
+
+    monkeypatch.setattr(server, "RuntimeManager", FakeRuntimeManager)
+    response = client.get("/runtime/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["runtime"] == "running"
+    assert body["health"] == "ok"
+    assert body["resources"]["sqlite"] == "ok"
+    assert body["services"]["qdrant"]["ownership"] == "shared_external"
