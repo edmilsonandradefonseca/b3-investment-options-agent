@@ -11,6 +11,13 @@ from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
 from b3_agent.schemas.opportunity import OpportunitySet
 from b3_agent.schemas.option_transaction import OptionTransaction
 from b3_agent.schemas.position import PortfolioContext
+from b3_agent.schemas.feature_snapshot import FeatureSnapshot
+from b3_agent.schemas.market_regime import MarketRegime
+from b3_agent.schemas.scenario import ScenarioDefinition, StressResult
+from b3_agent.schemas.strategy_comparison import StrategyAlternative, StrategyComparison
+from b3_agent.experience.regime_engine import MarketRegimeEngine
+from b3_agent.scenario import ScenarioStressEngine
+from b3_agent.strategy_comparison import StrategyComparisonEngine
 
 
 @dataclass(frozen=True)
@@ -19,6 +26,16 @@ class DashboardSnapshot:
     portfolio_intelligence: object
     option_transactions: tuple[OptionTransaction, ...]
     opportunities: OpportunitySet
+    strategy_comparisons: tuple[StrategyComparison, ...] = ()
+    stress_results: tuple[StressResult, ...] = ()
+    market_regime: MarketRegime | None = None
+
+
+@dataclass(frozen=True)
+class DashboardDecisionInputs:
+    strategy_pairs: tuple[tuple[StrategyAlternative, StrategyAlternative], ...] = ()
+    scenarios: tuple[ScenarioDefinition, ...] = ()
+    feature_snapshot: FeatureSnapshot | None = None
 
 
 @dataclass(frozen=True)
@@ -42,6 +59,7 @@ class DashboardE2EService:
         *,
         options_path: str | Path | None = None,
         opportunity_inputs: DashboardOpportunityInputs | None = None,
+        decision_inputs: DashboardDecisionInputs | None = None,
     ) -> DashboardSnapshot:
         portfolio = BtgRendaVariavelLoader().load(portfolio_path)
         transactions = (
@@ -65,9 +83,16 @@ class DashboardE2EService:
                     (*portfolio.source_refs, *opportunity_inputs.source_refs)
                 )),
             )
+        decision_inputs = decision_inputs or DashboardDecisionInputs()
+        strategy_comparisons = tuple(StrategyComparisonEngine().compare(left, right) for left, right in decision_inputs.strategy_pairs)
+        stress_results = tuple(ScenarioStressEngine().evaluate(portfolio, scenario) for scenario in decision_inputs.scenarios)
+        market_regime = MarketRegimeEngine().classify(decision_inputs.feature_snapshot) if decision_inputs.feature_snapshot is not None else None
         return DashboardSnapshot(
             portfolio=portfolio,
             portfolio_intelligence=intelligence,
             option_transactions=transactions,
             opportunities=opportunities,
+            strategy_comparisons=strategy_comparisons,
+            stress_results=stress_results,
+            market_regime=market_regime,
         )
