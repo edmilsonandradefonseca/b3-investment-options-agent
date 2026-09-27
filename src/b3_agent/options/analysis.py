@@ -83,24 +83,30 @@ class OptionsAnalysisEngine:
                 fair_value=fair_value,
             )
 
-            if option_type in {"P", "PUT"}:
-                puts.append(PutAnalysisEngine().analyze(**common))
-            elif option_type in {"C", "CALL"}:
-                current_price = current_prices.get(contract.underlying_ticker)
-                if current_price is None:
-                    rejected.append(f"missing_current_price:{quote.option_id}")
-                    continue
-                calls.append(
-                    CallAnalysisEngine().analyze(
-                        **common,
-                        current_price=current_price,
-                        min_annualized_premium_return=call_min_annualized_premium_return,
-                        min_total_return_if_assigned=call_min_total_return_if_assigned,
-                        max_upside_surrendered=call_max_upside_surrendered,
+            try:
+                if option_type in {"P", "PUT"}:
+                    puts.append(PutAnalysisEngine().analyze(**common))
+                elif option_type in {"C", "CALL"}:
+                    current_price = current_prices.get(contract.underlying_ticker)
+                    if current_price is None:
+                        rejected.append(f"missing_current_price:{quote.option_id}")
+                        continue
+                    calls.append(
+                        CallAnalysisEngine().analyze(
+                            **common,
+                            current_price=current_price,
+                            min_annualized_premium_return=call_min_annualized_premium_return,
+                            min_total_return_if_assigned=call_min_total_return_if_assigned,
+                            max_upside_surrendered=call_max_upside_surrendered,
+                        )
                     )
+                else:
+                    rejected.append(f"unsupported_option_type:{quote.option_id}")
+            except ValueError as exc:
+                rejected.append(
+                    f"invalid_contract:{quote.option_id}:{str(exc)}"
                 )
-            else:
-                rejected.append(f"unsupported_option_type:{quote.option_id}")
+                continue
 
         if rejected:
             assumptions_out["rejected_quotes"] = tuple(rejected)
