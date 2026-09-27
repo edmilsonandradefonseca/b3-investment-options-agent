@@ -14,11 +14,32 @@ import type {
 } from "./contracts";
 
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
+const STORAGE_KEY = "b3.apiBaseUrl";
 
-export const API_BASE_URL =
-  (import.meta.env.VITE_B3_API_URL as string | undefined) ??
-  (import.meta.env.VITE_ORCHESTRATOR_URL as string | undefined) ??
-  DEFAULT_API_BASE_URL;
+function envBaseUrl(): string | undefined {
+  return (
+    (import.meta.env.VITE_B3_API_URL as string | undefined) ??
+    (import.meta.env.VITE_ORCHESTRATOR_URL as string | undefined)
+  );
+}
+
+export function getApiBaseUrl(): string {
+  const stored = typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY) : null;
+  return (stored || envBaseUrl() || DEFAULT_API_BASE_URL).replace(/\/$/, "");
+}
+
+export function setApiBaseUrl(value: string): string {
+  const normalized = value.trim().replace(/\/$/, "");
+  if (!/^https?:\/\//i.test(normalized)) {
+    throw new Error("Backend URL must start with http:// or https://");
+  }
+  window.localStorage.setItem(STORAGE_KEY, normalized);
+  return normalized;
+}
+
+export function resetApiBaseUrl(): void {
+  window.localStorage.removeItem(STORAGE_KEY);
+}
 
 export class ApiError extends Error {
   readonly status: number;
@@ -33,7 +54,7 @@ export class ApiError extends Error {
 }
 
 function apiUrl(path: string): string {
-  return `${API_BASE_URL.replace(/\/$/, "")}${path}`;
+  return `${getApiBaseUrl()}${path}`;
 }
 
 async function readError(response: Response): Promise<ApiErrorPayload | null> {
@@ -66,43 +87,27 @@ async function upload<T>(path: string, file: File): Promise<T> {
 export const b3Api = {
   health: () => requestJson<HealthResponse>("/health"),
   version: () => requestJson<VersionResponse>("/version"),
-
   orchestrate: (request: OrchestrateRequest) =>
     requestJson<OrchestrateResponse>("/orchestrate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
     }),
-
   listTransactions: (limit = 100) =>
     requestJson<TransactionResponse[]>(`/transactions?limit=${encodeURIComponent(limit)}`),
-
   addTransaction: (request: TransactionRequest) =>
     requestJson<TransactionResponse>("/transactions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
     }),
-
-  importPortfolio: (file: File) =>
-    upload<SnapshotImportResponse>("/imports/portfolio", file),
-
-  importOptions: (file: File) =>
-    upload<SnapshotImportResponse>("/imports/options", file),
-
-  importBrokerageNote: (file: File) =>
-    upload<BrokerageNoteImportResponse>("/imports/brokerage-notes", file),
-
-  importBrokerageBatch: (file: File) =>
-    upload<BrokerageBatchImportResponse>("/imports/brokerage-notes/batch", file),
-
+  importPortfolio: (file: File) => upload<SnapshotImportResponse>("/imports/portfolio", file),
+  importOptions: (file: File) => upload<SnapshotImportResponse>("/imports/options", file),
+  importBrokerageNote: (file: File) => upload<BrokerageNoteImportResponse>("/imports/brokerage-notes", file),
+  importBrokerageBatch: (file: File) => upload<BrokerageBatchImportResponse>("/imports/brokerage-notes/batch", file),
   brokerageBatchUploadUrl: () => apiUrl("/imports/brokerage-notes/upload"),
-
   liveAnalysis: (ticker: string) =>
-    requestJson<LiveAnalysisResponse>(
-      `/analysis/live/${encodeURIComponent(ticker.trim().toUpperCase())}`,
-    ),
-
+    requestJson<LiveAnalysisResponse>(`/analysis/live/${encodeURIComponent(ticker.trim().toUpperCase())}`),
   researchNews: (ticker: string, limit = 20) =>
     requestJson<ResearchNewsResponse>(
       `/research/news/${encodeURIComponent(ticker.trim().toUpperCase())}?limit=${encodeURIComponent(limit)}`,
