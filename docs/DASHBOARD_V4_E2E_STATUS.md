@@ -41,3 +41,22 @@ Portfolio exposure alone is not treated as an opportunity signal. The Opportunit
 BTG XLSX → PortfolioContext → PortfolioIntelligence + optional Options Transactions → empty/sourced OpportunitySet
 
 This is covered by a realistic generated XLSX fixture. It proves integration without requiring the user's private workbook in CI and preserves the rule that missing analytical inputs cannot be invented.
+
+
+## Real BTG validation — 2026-09-27
+
+Validated against the user's newer BTG statement using only the authoritative
+`Renda Variavel` sections `Posição > Ações` and `Posição > Opções`.
+
+Observed real-world integration requirement: some BTG option `Ativo Ref.`
+identifiers use economic aliases such as `PETRPN`, `GGBRPN`, `BRADPN`
+and `CMIGPN`, while cash equities use `PETR4`, `GGBR4`, `BBDC4` and
+`CMIG4`.
+
+The source identifier remains untouched in `Position.underlying_ticker`.
+`InstrumentIdentityResolver` maps only the economic aggregation key used by
+Portfolio Intelligence and Capital Risk. This prevents false uncovered-call
+risk and split exposure buckets without corrupting broker provenance.
+
+The alias table is intentionally explicit and deterministic. Unknown symbols
+are preserved unchanged; no fuzzy or inferred ticker conversion is allowed.
