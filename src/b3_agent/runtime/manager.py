@@ -301,7 +301,8 @@ class RuntimeManager:
                 + "/".join(
                     f"{name}:{payload['state']}" for name, payload in services.items()
                 ),
-                f"api {s['api']['host']}:{s['api']['port']}",
+                f"api_bind {s['api']['host']}:{s['api']['port']}",
+                f"health_url {s['api']['local_health_url']}",
                 f"process running {str(process['running']).lower()}",
                 f"runtime_pid {process['runtime_pid'] or '-'}",
                 f"orchestrator_pid {process['orchestrator_pid'] or '-'}",
