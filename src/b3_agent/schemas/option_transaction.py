@@ -16,6 +16,29 @@ class OptionTransaction:
     total_cost: float | None = None
     as_of: date | datetime | None = None
     source_ref: str = ""
+    note_number: str | None = None
+    source_type: str = "UNKNOWN"
+    source_id: str | None = None
+
+    @property
+    def side(self) -> str:
+        """Transaction side derived from the source quantity sign."""
+        return "SELL" if self.quantity < 0 else "BUY"
+
+    @property
+    def execution_price(self) -> float | None:
+        """Unit execution price represented by the source execution-price field."""
+        return self.average_cost
+
+    @property
+    def total_amount(self) -> float | None:
+        """Signed transaction amount using the transaction-side convention."""
+        return self.total_cost
+
+    @property
+    def absolute_quantity(self) -> float:
+        """Quantity traded without the source-side sign."""
+        return abs(self.quantity)
 
     def __post_init__(self) -> None:
         if not self.transaction_id.strip():
