@@ -88,7 +88,7 @@ for key, default in {
 
 with st.sidebar:
     st.header("DATA & COPILOT")
-    st.caption("Prototype V0.6")
+    st.caption("V4 E2E • read-only")
 
     st.markdown("#### Load Excel")
     btg_file = st.file_uploader("BTG Portfolio", type=["xlsx", "xlsm"], key="v06_btg")
@@ -134,9 +134,9 @@ with st.sidebar:
 
     st.divider()
     st.markdown("#### Knowledge")
-    st.write("🟡 Obsidian")
-    st.write("🟡 RAG")
-    st.write("⚪ Neo4j — future integration")
+    st.write("🟢 Structured state — SQLite / Parquet")
+    st.write("🟡 RAG — Qdrant projection")
+    st.write("🟡 Relationships — Neo4j projection")
 
     st.divider()
     st.markdown("#### Copilot")
@@ -185,7 +185,7 @@ stock_value = float(stock_df["Valor de mercado"].fillna(0).sum())
 option_value = float(option_df["Valor de mercado"].fillna(0).sum())
 
 st.title("B3 Investment Copilot")
-st.caption("V0.6 prototype • deterministic facts • read-only")
+st.caption("V4 E2E • deterministic facts • read-only")
 
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Market value", f"R$ {market_value:,.2f}")
@@ -220,8 +220,9 @@ with tab_opportunities:
     c1.metric("Eligible", len(opportunity_set.ranked_opportunities))
     c2.metric("Rejected", len(opportunity_set.rejected_opportunities))
     st.info(
-        "Opportunity producers ainda não estão conectados a esta UI. "
-        "Nenhuma oportunidade é inventada a partir da exposição do portfolio."
+        "Nenhum input analítico de oportunidade foi carregado nesta sessão. "
+        "A V4 não converte exposição de portfolio em oportunidade sem dados "
+        "determinísticos upstream (market/valuation/options analysis)."
     )
 
 with tab_intelligence:
