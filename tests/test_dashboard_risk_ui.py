@@ -12,6 +12,7 @@ def test_dashboard_surfaces_deterministic_option_risk_metrics():
 
 def test_brokerage_note_validation_message_is_preserved():
     source = Path("mvp/dashboard/app_v06.py").read_text(encoding="utf-8")
-    assert "Selecione uma ou mais notas de corretagem em PDF." in source
+    assert "Selecione PDFs ou um ZIP com notas de corretagem." in source
     assert "if failures:" in source
-    assert 'st.session_state.load_error = " | ".join(failures)' in source
+    assert "preview = failures[:10]" in source
+    assert 'st.session_state.load_error = message' in source
