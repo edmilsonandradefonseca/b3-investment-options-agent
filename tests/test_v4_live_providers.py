@@ -71,6 +71,7 @@ class FakeOptionsProvider:
                 last=1.1,
                 mid=1.1,
                 volume=1000,
+                open_interest=5000,
             ),
             OptionQuote(
                 instrument_id="PETRJ320",
@@ -85,6 +86,7 @@ class FakeOptionsProvider:
                 last=0.9,
                 mid=0.9,
                 volume=900,
+                open_interest=4500,
             ),
         ]
 
