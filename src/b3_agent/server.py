@@ -9,12 +9,17 @@ from uuid import uuid4
 from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
 
 from b3_agent.config import settings
 from b3_agent.options.transactions import OptionsTransactionLoader
 from b3_agent.options.brokerage_notes import BrokerageNoteParser
+from b3_agent.options.brokerage_batch import (
+    BrokerageBatchIngestionError,
+    BrokerageBatchIngestionService,
+)
 from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
 from b3_agent.repositories.transaction import TransactionRepository
 from b3_agent.repositories.option_ledger import OptionTransactionLedger
@@ -302,6 +307,72 @@ def import_brokerage_note(file: UploadFile = File(...)) -> dict[str, Any]:
     result = _store_brokerage_note(file)
     _configure_runtime.cache_clear()
     return result
+
+
+@app.post("/imports/brokerage-notes/batch")
+def import_brokerage_note_batch(file: UploadFile = File(...)) -> dict[str, Any]:
+    """Process a ZIP of brokerage-note PDFs sequentially from disk."""
+    if not file.filename or not file.filename.lower().endswith(".zip"):
+        raise HTTPException(status_code=400, detail="lote deve ser ZIP (.zip)")
+
+    temp_path: Path | None = None
+    try:
+        with NamedTemporaryFile(
+            prefix=".brokerage-batch.",
+            suffix=".zip",
+            dir=_import_dir(),
+            delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            while True:
+                chunk = file.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                handle.write(chunk)
+
+        result = BrokerageBatchIngestionService(settings.data_dir).ingest_zip(
+            temp_path
+        )
+        _configure_runtime.cache_clear()
+        return result
+    except BrokerageBatchIngestionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"lote de notas inválido: {exc}",
+        ) from exc
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink(missing_ok=True)
+
+
+@app.get("/imports/brokerage-notes/upload", response_class=HTMLResponse)
+def brokerage_note_batch_upload_page() -> HTMLResponse:
+    """Minimal direct-to-FastAPI upload page for large brokerage-note batches."""
+    return HTMLResponse(
+        """
+        <!doctype html>
+        <html lang="pt-BR">
+          <head>
+            <meta charset="utf-8">
+            <title>B3 Brokerage Notes Batch Import</title>
+          </head>
+          <body style="font-family: sans-serif; max-width: 720px; margin: 40px auto;">
+            <h2>B3 — Importar ZIP de notas de corretagem</h2>
+            <p>
+              O arquivo é enviado diretamente ao backend B3 e processado
+              sequencialmente em disco. O ZIP não passa pela sessão do Streamlit.
+            </p>
+            <form method="post" action="/imports/brokerage-notes/batch"
+                  enctype="multipart/form-data">
+              <input type="file" name="file" accept=".zip,application/zip" required>
+              <button type="submit">Importar ZIP</button>
+            </form>
+          </body>
+        </html>
+        """
+    )
 
 
 def _response_to_model(response: OrchestratorResponse) -> OrchestrateResponse:
