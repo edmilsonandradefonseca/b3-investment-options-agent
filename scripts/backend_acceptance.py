@@ -12,6 +12,7 @@ from b3_agent.config import settings
 from b3_agent.knowledge.embeddings import HttpEmbeddingProvider
 from b3_agent.knowledge.neo4j_store import Neo4jKnowledgeGraphStore
 from b3_agent.knowledge.qdrant_store import QdrantVectorStore
+from b3_agent.knowledge.runtime_projection import RuntimeProjectionService
 from b3_agent.orchestration.live_providers import LiveProviderService
 from b3_agent.portfolio.snapshot import load_active_snapshots
 from b3_agent.providers.searxng_news import SearxngNewsAdapter
@@ -88,16 +89,19 @@ def run_acceptance(*, ticker: str = "PETR4") -> dict[str, object]:
         neo4j_uri,
         auth=(neo4j_user, neo4j_password),
     )
-    try:
-        driver.verify_connectivity()
-        graph = Neo4jKnowledgeGraphStore(driver)
-        neo4j_entities = graph.count_entities()
-        neo4j_relations = graph.count_relations()
-    finally:
-        driver.close()
+    driver.verify_connectivity()
+    graph = Neo4jKnowledgeGraphStore(driver)
+    neo4j_entities_before = graph.count_entities()
+    neo4j_relations_before = graph.count_relations()
     print(
-        f"NEO4J OK B3Entity entities={neo4j_entities} "
-        f"relations={neo4j_relations}"
+        f"NEO4J OK B3Entity entities={neo4j_entities_before} "
+        f"relations={neo4j_relations_before}"
+    )
+
+    projection = RuntimeProjectionService(
+        graph=graph,
+        vector_store=qdrant_store,
+        embeddings=embeddings,
     )
 
     snapshots = load_active_snapshots(settings.data_dir)
@@ -107,9 +111,12 @@ def run_acceptance(*, ticker: str = "PETR4") -> dict[str, object]:
         portfolio_positions = 0
     else:
         portfolio_positions = len(portfolio.positions)
+        portfolio_projection = projection.project_portfolio(portfolio)
         print(
             f"PORTFOLIO OK positions={portfolio_positions} "
-            f"as_of={portfolio.as_of.isoformat()} cash_known={portfolio.cash_is_known}"
+            f"as_of={portfolio.as_of.isoformat()} cash_known={portfolio.cash_is_known} "
+            f"projected_entities={portfolio_projection['entities']} "
+            f"projected_relations={portfolio_projection['relations']}"
         )
 
     ledger_path = settings.data_dir / "options.sqlite3"
@@ -138,12 +145,28 @@ def run_acceptance(*, ticker: str = "PETR4") -> dict[str, object]:
         news_records,
         as_of=datetime.now(timezone.utc),
     )
+    research_projection = projection.project_research(research)
     print(
         f"RESEARCH OK records={len(news_records)} "
         f"pit_events={len(research.events)} "
-        f"future_excluded={research.excluded_future_count}"
+        f"future_excluded={research.excluded_future_count} "
+        f"qdrant_chunks={research_projection['qdrant_chunks']}"
     )
 
+    qdrant_count = qdrant_store.count()
+    neo4j_entities = graph.count_entities()
+    neo4j_relations = graph.count_relations()
+    driver.close()
+
+    if research.events and qdrant_count < 1:
+        raise RuntimeError("Qdrant projection remained empty after live research projection")
+    if research.events and neo4j_entities < 2:
+        raise RuntimeError("Neo4j projection remained empty after live research projection")
+
+    print(
+        f"PROJECTIONS OK qdrant_count={qdrant_count} "
+        f"neo4j_entities={neo4j_entities} neo4j_relations={neo4j_relations}"
+    )
     print("===== B3 BACKEND ACCEPTANCE PASSED =====")
     return {
         "ticker": normalized_ticker,
