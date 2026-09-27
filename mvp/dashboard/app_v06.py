@@ -50,9 +50,15 @@ st.markdown(
 
 def _temp_path(uploaded_file) -> Path:
     suffix = Path(uploaded_file.name).suffix or ".xlsx"
+    uploaded_file.seek(0)
     handle = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-    handle.write(uploaded_file.getvalue())
+    while True:
+        chunk = uploaded_file.read(1024 * 1024)
+        if not chunk:
+            break
+        handle.write(chunk)
     handle.close()
+    uploaded_file.seek(0)
     return Path(handle.name)
 
 
