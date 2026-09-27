@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from dataclasses import asdict
 import hashlib
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -27,6 +29,7 @@ from b3_agent.repositories.source_manifest import SourceManifestRecord, SourceMa
 from b3_agent.schemas.transaction import Transaction
 from b3_agent.storage.sqlite import SQLiteStore
 from b3_agent.orchestration import OrchestratorRequest, OrchestratorResponse, b3_orchestrator, configure_default_workflow
+from b3_agent.orchestration.live_providers import LiveProviderService
 
 
 class OrchestrateRequest(BaseModel):
@@ -387,14 +390,51 @@ def _response_to_model(response: OrchestratorResponse) -> OrchestrateResponse:
 
 @app.get("/health")
 def health() -> dict[str, Any]:
-    """Return server health without forcing the investment workflow to initialize."""
+    """Return application/configuration health without mutating shared services."""
     return {
         "status": "ok",
         "service": "b3-orchestrator-server",
         "workflow_configured": _configure_runtime.cache_info().currsize > 0,
-        "obsidian_configured": settings.obsidian_vault is not None,
         "llm_enabled": settings.llm_enabled,
+        "runtime": {
+            "embedding_url": os.getenv("B3_EMBEDDING_URL", "http://127.0.0.1:8093"),
+            "qdrant_url": os.getenv("B3_QDRANT_URL", "http://127.0.0.1:6333"),
+            "neo4j_uri": os.getenv("B3_NEO4J_URI", "bolt://127.0.0.1:7687"),
+            "qdrant_collection": "b3_evidence_768_hybrid",
+            "oplab_token_configured": bool(os.getenv("OPLAB_API_TOKEN")),
+        },
     }
+
+
+@app.get("/analysis/live/{ticker}")
+def live_analysis(ticker: str) -> dict[str, Any]:
+    """Return normalized live market/options analytics for one B3 underlying."""
+    try:
+        snapshot = LiveProviderService().load(ticker)
+        latest = max(
+            snapshot.market_records,
+            key=lambda item: item.observation_timestamp,
+        )
+        return {
+            "ticker": snapshot.ticker,
+            "as_of": snapshot.as_of.isoformat(),
+            "source_refs": list(snapshot.source_refs),
+            "market": {
+                "history_count": len(snapshot.market_records),
+                "latest": asdict(latest),
+            },
+            "options": {
+                "contract_count": len(snapshot.option_contracts),
+                "quote_count": len(snapshot.option_quotes),
+                "contracts": [asdict(item) for item in snapshot.option_contracts],
+                "quotes": [asdict(item) for item in snapshot.option_quotes],
+                "analysis": asdict(snapshot.options_analysis),
+            },
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (RuntimeError, OSError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.get("/version")
