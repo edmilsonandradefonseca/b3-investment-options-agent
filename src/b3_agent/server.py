@@ -30,6 +30,8 @@ from b3_agent.schemas.transaction import Transaction
 from b3_agent.storage.sqlite import SQLiteStore
 from b3_agent.orchestration import OrchestratorRequest, OrchestratorResponse, b3_orchestrator, configure_default_workflow
 from b3_agent.orchestration.live_providers import LiveProviderService
+from b3_agent.providers.searxng_news import SearxngNewsAdapter
+from b3_agent.research_events import ResearchEventService
 
 
 class OrchestrateRequest(BaseModel):
@@ -430,6 +432,30 @@ def live_analysis(ticker: str) -> dict[str, Any]:
                 "quotes": [asdict(item) for item in snapshot.option_quotes],
                 "analysis": asdict(snapshot.options_analysis),
             },
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (RuntimeError, OSError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/research/news/{ticker}")
+def research_news(ticker: str, limit: int = 20) -> dict[str, Any]:
+    """Acquire live web/news evidence and normalize it through UC-10 PIT rules."""
+    if not 1 <= limit <= 100:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 100")
+    try:
+        as_of = datetime.now(timezone.utc)
+        records = SearxngNewsAdapter(
+            base_url=os.getenv("B3_SEARXNG_URL", "http://127.0.0.1:8080")
+        ).search(ticker, limit=limit)
+        snapshot = ResearchEventService().build(records, as_of=as_of)
+        return {
+            "ticker": ticker.upper().strip(),
+            "as_of": snapshot.as_of.isoformat(),
+            "excluded_future_count": snapshot.excluded_future_count,
+            "source_refs": list(snapshot.source_refs),
+            "events": [asdict(item) for item in snapshot.events],
         }
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
