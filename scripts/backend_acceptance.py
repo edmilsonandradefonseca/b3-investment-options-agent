@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from neo4j import GraphDatabase
@@ -17,7 +17,7 @@ from b3_agent.orchestration.live_providers import LiveProviderService
 from b3_agent.portfolio.snapshot import load_active_snapshots
 from b3_agent.providers.searxng_news import SearxngNewsAdapter
 from b3_agent.providers.brapi.fundamentals import BrapiFundamentalsAdapter
-from b3_agent.providers.bcb_sgs import BcbSgsAdapter
+from b3_agent.jobs.macro_refresh import MacroRefreshJob, local_today
 from b3_agent.repositories.option_ledger import OptionTransactionLedger
 from b3_agent.research_events import ResearchEventService
 
@@ -147,17 +147,17 @@ def run_acceptance(*, ticker: str = "PETR4") -> dict[str, object]:
         f"metrics={len(fundamental_records)} dividends={len(dividend_records)}"
     )
 
-    macro_end = datetime.now(timezone.utc).date()
-    macro_start = macro_end - timedelta(days=90)
-    macro_snapshot = BcbSgsAdapter().get_core_snapshot(
-        start=macro_start,
-        end=macro_end,
+    macro_refresh = MacroRefreshJob(lookback_days=120).run(
+        as_of=local_today()
     )
     print(
         "MACRO OK "
+        f"fetched={macro_refresh.fetched} "
+        f"inserted={macro_refresh.inserted} "
+        f"duplicates={macro_refresh.duplicates} "
         + " ".join(
-            f"{name}={item.value}"
-            for name, item in sorted(macro_snapshot.items())
+            f"{name}={value}"
+            for name, value in sorted(macro_refresh.latest_values.items())
         )
     )
 
@@ -205,7 +205,9 @@ def run_acceptance(*, ticker: str = "PETR4") -> dict[str, object]:
         "option_quotes": len(live.option_quotes),
         "fundamental_metrics": len(fundamental_records),
         "dividend_records": len(dividend_records),
-        "macro_indicators": len(macro_snapshot),
+        "macro_indicators": len(macro_refresh.latest_values),
+        "macro_inserted": macro_refresh.inserted,
+        "macro_duplicates": macro_refresh.duplicates,
         "research_events": len(research.events),
     }
 
