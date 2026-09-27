@@ -69,7 +69,8 @@ BTG XLSX
   -> PortfolioContext
   -> Portfolio Intelligence / Options Intelligence
 
-Brokerage Note PDFs
+Brokerage Note PDFs / ZIP batch
+  -> bounded upload / per-PDF extraction
   -> BrokerageNoteParser
   -> OptionTransactionLedger
   -> historical BUY/SELL prices
@@ -85,9 +86,9 @@ The current runtime gate is:
 1. open Streamlit
 2. upload a real BTG portfolio XLSX
 3. confirm only `Posição > Ações` and `Posição > Opções` were loaded
-4. upload one or more real brokerage-note PDFs
+4. upload up to 10 brokerage-note PDFs, or one ZIP for a larger historical batch
 5. confirm BUY/SELL rows and execution prices appear in Options Intelligence
-6. repeat the same note upload and confirm the ledger remains idempotent
+6. repeat the same PDF/ZIP batch and confirm the ledger remains idempotent
 7. validate reconciliation and historical operation reconstruction
 
 ## Run locally
