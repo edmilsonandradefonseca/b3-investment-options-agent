@@ -1,5 +1,6 @@
 from datetime import date, datetime, timezone
 import openpyxl
+import pytest
 from b3_agent.dashboard_e2e import DashboardDecisionInputs, DashboardE2EService
 from b3_agent.schemas.feature_snapshot import FeatureDomain, FeatureSnapshot, FeatureValue
 from b3_agent.schemas.scenario import ScenarioDefinition
@@ -24,7 +25,7 @@ def test_dashboard_e2e_converges_uc04_uc05(tmp_path):
         FeatureValue("sma_50",140000,FeatureDomain.MARKET,observed), FeatureValue("volatility_20d",.18,FeatureDomain.RISK,observed),
         FeatureValue("foreign_flow_5d",1.0,FeatureDomain.FLOW,observed)),source_refs=("market-features",))
     result=DashboardE2EService().load(path,decision_inputs=DashboardDecisionInputs(strategy_pairs=((left,right),),scenarios=(scenario,),feature_snapshot=features))
-    assert result.strategy_comparisons[0].expected_return_delta == .07
+    assert result.strategy_comparisons[0].expected_return_delta == pytest.approx(.07)
     assert result.strategy_comparisons[0].assumptions["ranking"] == "not_applied"
     assert result.stress_results[0].portfolio_pnl == -4000
     labels={item.name.value:item.label for item in result.market_regime.dimensions}
