@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+import os
 
 from b3_agent.config import settings
 from b3_agent.copilot_context import CopilotContextBuilder
@@ -35,7 +36,7 @@ def main() -> None:
         raise SystemExit(f"missing real portfolio: {portfolio_path}")
 
     portfolio = BtgRendaVariavelLoader().load(portfolio_path)
-    ticker = _primary_ticker(portfolio)
+    ticker = _acceptance_ticker(portfolio)
     live = LiveProviderService().load(ticker)
     now = datetime.now(timezone.utc)
 
@@ -158,11 +159,19 @@ def main() -> None:
     print("===== B3 REAL UC ACCEPTANCE COMPLETED =====")
 
 
-def _primary_ticker(portfolio) -> str:
-    for position in portfolio.positions:
-        ticker = position.underlying_ticker or position.ticker
-        if ticker:
-            return ticker.upper()
+def _acceptance_ticker(portfolio) -> str:
+    requested = os.getenv("B3_ACCEPTANCE_TICKER", "PETR4").upper().strip()
+    portfolio_tickers = {
+        (position.underlying_ticker or position.ticker).upper()
+        for position in portfolio.positions
+        if (position.underlying_ticker or position.ticker)
+    }
+    if requested in portfolio_tickers:
+        return requested
+    if "PETR4" in portfolio_tickers:
+        return "PETR4"
+    if portfolio_tickers:
+        return sorted(portfolio_tickers)[0]
     raise RuntimeError("portfolio contains no ticker")
 
 
