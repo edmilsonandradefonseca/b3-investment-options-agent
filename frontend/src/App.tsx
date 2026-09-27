@@ -1,6 +1,6 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 
-import { ApiError, b3Api } from "./api/client";
+import { ApiError, b3Api, getApiBaseUrl, setApiBaseUrl } from "./api/client";
 import type { OrchestrateResponse } from "./api/contracts";
 import {
   PAGE_DEFINITIONS,
@@ -8,7 +8,9 @@ import {
   hashForPage,
   pageFromHash,
   type PageId,
+  type PageTab,
 } from "./app/pages";
+import { ResultSurface } from "./components/ResultSurface";
 
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) return error.message;
@@ -18,57 +20,67 @@ function errorMessage(error: unknown): string {
 
 function App() {
   const [page, setPage] = useState<PageId>(() => pageFromHash());
+  const [activeTab, setActiveTab] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState<OrchestrateResponse | null>(null);
   const [serverOnline, setServerOnline] = useState(false);
   const [asking, setAsking] = useState(false);
   const [importStatus, setImportStatus] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [backendUrl, setBackendUrl] = useState(() => getApiBaseUrl());
 
   useEffect(() => {
     const syncPageFromHash = () => setPage(pageFromHash());
     window.addEventListener("hashchange", syncPageFromHash);
-    if (!window.location.hash) {
-      window.history.replaceState(null, "", hashForPage("Overview"));
-    }
+    if (!window.location.hash) window.history.replaceState(null, "", hashForPage("Overview"));
     return () => window.removeEventListener("hashchange", syncPageFromHash);
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    b3Api
-      .health()
-      .then((health) => {
-        if (active) setServerOnline(health.status === "ok");
-      })
-      .catch(() => {
-        if (active) setServerOnline(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
   const pageDefinition = useMemo(() => getPageDefinition(page), [page]);
+  const selectedTab: PageTab | null = useMemo(() => {
+    const tabs = pageDefinition.tabs ?? [];
+    return tabs.find((tab) => tab.id === activeTab) ?? tabs[0] ?? null;
+  }, [pageDefinition, activeTab]);
+
+  const prompt = selectedTab?.prompt ?? pageDefinition.prompt;
+  const description = selectedTab?.description ?? pageDefinition.description;
+  const useCases = selectedTab?.useCases ?? pageDefinition.useCases;
+
+  async function checkBackend() {
+    try {
+      const health = await b3Api.health();
+      setServerOnline(health.status === "ok");
+      return true;
+    } catch {
+      setServerOnline(false);
+      return false;
+    }
+  }
+
+  useEffect(() => {
+    checkBackend();
+  }, []);
 
   function navigate(nextPage: PageId) {
     window.location.hash = hashForPage(nextPage);
     setPage(nextPage);
+    setActiveTab(null);
     setAnswer(null);
+    setQuestion("");
   }
 
-  async function ask(event?: FormEvent) {
-    event?.preventDefault();
-    const task = (question.trim() || pageDefinition.prompt).trim();
-    if (!task || asking) return;
-
+  async function runAnalysis(task = prompt) {
+    if (!task.trim() || asking) return;
     setAsking(true);
     setAnswer(null);
     try {
       const response = await b3Api.orchestrate({
-        task,
+        task: task.trim(),
         context: {
-          client: "react-production-v1",
+          client: "windows-react-production-v1",
           dashboard_page: page,
+          dashboard_tab: selectedTab?.id ?? null,
+          use_cases: useCases,
         },
       });
       setAnswer(response);
@@ -87,6 +99,11 @@ function App() {
     }
   }
 
+  async function ask(event?: FormEvent) {
+    event?.preventDefault();
+    await runAnalysis(question.trim() || prompt);
+  }
+
   async function importExcel(
     event: ChangeEvent<HTMLInputElement>,
     kind: "portfolio" | "options",
@@ -94,22 +111,27 @@ function App() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-
-    setImportStatus(
-      `Validando e carregando ${kind === "portfolio" ? "portfolio de ações" : "transações de opções"}…`,
-    );
-
+    setImportStatus(`Loading ${kind === "portfolio" ? "portfolio" : "options"} snapshot…`);
     try {
-      const data =
-        kind === "portfolio"
-          ? await b3Api.importPortfolio(file)
-          : await b3Api.importOptions(file);
-      setImportStatus(
-        `✓ ${data.file} carregado. Snapshot atual substituído após validação.`,
-      );
+      const data = kind === "portfolio"
+        ? await b3Api.importPortfolio(file)
+        : await b3Api.importOptions(file);
+      setImportStatus(`✓ ${data.file} validated and activated.`);
       setServerOnline(true);
     } catch (error) {
-      setImportStatus(`Erro: ${errorMessage(error)}`);
+      setImportStatus(`Error: ${errorMessage(error)}`);
+    }
+  }
+
+  async function saveBackend(event: FormEvent) {
+    event.preventDefault();
+    try {
+      const normalized = setApiBaseUrl(backendUrl);
+      setBackendUrl(normalized);
+      const ok = await checkBackend();
+      if (ok) setSettingsOpen(false);
+    } catch (error) {
+      setImportStatus(`Backend URL: ${errorMessage(error)}`);
     }
   }
 
@@ -120,13 +142,14 @@ function App() {
           <span className="brand-mark">▮▮▮</span>
           <div>
             <strong>B3 Investment Copilot</strong>
-            <small>Production React · Architecture V4 frozen</small>
+            <small>Windows 11 · React + Tauri · V4 frozen</small>
           </div>
         </div>
-        <div className="architecture-badge">
-          SQLite/Parquet · Qdrant 768d hybrid · Neo4j
-        </div>
-        <div className="user">EF&nbsp;&nbsp;Edmilson</div>
+        <div className="architecture-badge">SQLite/Parquet · Qdrant 768d hybrid · Neo4j</div>
+        <button className="backend-button" onClick={() => setSettingsOpen(true)}>
+          <span className={serverOnline ? "online-dot" : "offline-dot"}>●</span>
+          {serverOnline ? "Backend online" : "Configure backend"}
+        </button>
       </header>
 
       <div className="body">
@@ -148,41 +171,22 @@ function App() {
           </nav>
 
           <section className="connections">
-            <label>DADOS</label>
-            <div className="connection">
-              <b>Portfolio atual</b>
-              <span className="status">● Snapshot substitutivo</span>
-            </div>
+            <label>REAL DATA</label>
             <label className="load">
-              ↥ &nbsp; Carregar Excel de Ações
-              <input
-                type="file"
-                accept=".xlsx,.xlsm"
-                hidden
-                onChange={(event) => importExcel(event, "portfolio")}
-              />
+              ↥ &nbsp; BTG Portfolio Excel
+              <input type="file" accept=".xlsx,.xlsm" hidden onChange={(event) => importExcel(event, "portfolio")} />
             </label>
-
-            <div className="connection">
-              <b>Operações / Opções</b>
-              <span className="status">● Import validado</span>
-            </div>
             <label className="load secondary">
-              ↥ &nbsp; Carregar Excel de Opções
-              <input
-                type="file"
-                accept=".xlsx,.xlsm"
-                hidden
-                onChange={(event) => importExcel(event, "options")}
-              />
+              ↥ &nbsp; Options Excel
+              <input type="file" accept=".xlsx,.xlsm" hidden onChange={(event) => importExcel(event, "options")} />
             </label>
             {importStatus && <small className="import-status">{importStatus}</small>}
           </section>
 
           <section className="knowledge-status">
-            <label>MEMÓRIA V4</label>
+            <label>RUNTIME</label>
             <span>▦ Structured <i>SQLite / Parquet</i></span>
-            <span>◉ Semantic <i>Qdrant 768d</i></span>
+            <span>◉ Semantic <i>Qdrant hybrid</i></span>
             <span>● Relational <i>Neo4j</i></span>
           </section>
         </aside>
@@ -190,170 +194,119 @@ function App() {
         <main className="workspace">
           <div className="workspace-head">
             <div>
+              <div className="uc-row">{useCases.map((uc) => <span key={uc}>{uc}</span>)}</div>
               <h1>{page}</h1>
-              <p>{pageDefinition.description}</p>
+              <p>{description}</p>
             </div>
-            <span className={serverOnline ? "server online" : "server"}>
-              ● Backend {serverOnline ? "Connected" : "Offline"}
-            </span>
+            <button className="refresh" onClick={() => runAnalysis()} disabled={asking}>
+              {asking ? "Loading real runtime…" : "Refresh"}
+            </button>
           </div>
 
-          <section className="cards">
-            <Metric title="Current State" value="Canonical only" detail="Sem números fictícios" />
-            <Metric title="Market Regime" value="On demand" detail="Versionado e PIT" />
-            <Metric title="Experience" value="Hybrid retrieval" detail="Recency ≠ regime" />
-            <Metric title="Learning" value="Lifecycle aware" detail="Support + contradiction" />
-          </section>
-
-          <section className="main-grid">
-            <div className="panel hero-panel">
-              <div className="panel-title">
-                <h2>{page}</h2>
-                <button className="refresh" onClick={() => ask()} disabled={asking}>
-                  {asking ? "Consultando…" : "Atualizar inteligência"}
+          {!!pageDefinition.tabs?.length && (
+            <div className="workspace-tabs">
+              {pageDefinition.tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  className={selectedTab?.id === tab.id ? "selected" : ""}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    setAnswer(null);
+                    setQuestion("");
+                  }}
+                >
+                  {tab.label}
+                  <small>{tab.useCases.join(" · ")}</small>
                 </button>
-              </div>
-              <PageSurface page={page} answer={answer} />
+              ))}
             </div>
+          )}
 
-            <div className="panel insights">
-              <h2>Runtime contratado</h2>
-              <div className="list-item">PIT / Quality Gates <span>Deterministic</span></div>
-              <div className="list-item">Experience Retrieval <span>Hybrid</span></div>
-              <div className="list-item">Learning Lifecycle <span>Drift-aware</span></div>
-              <div className="list-item">Risk Validation <span>Downstream</span></div>
-              <div className="list-item">Order Execution <span>Disabled</span></div>
-            </div>
+          <section className="cards">
+            <Metric title="Authority" value="Backend" detail="No calculations in React" />
+            <Metric title="Freshness" value="as_of" detail="Always preserved when supplied" />
+            <Metric title="Data gaps" value="Explicit" detail="UNKNOWN / LIMITED visible" />
+            <Metric title="Execution" value="Disabled" detail="Decision support only" />
           </section>
 
-          <section className="panel lower">
-            <h2>Frontend contract</h2>
-            <p>
-              O React consome apenas APIs existentes do backend congelado. Ausência,
-              UNKNOWN, LIMITED, qualidade, evidências e timestamps permanecem explícitos;
-              nenhuma métrica de investimento é recalculada ou inferida no navegador.
-            </p>
+          <section className="panel production-panel">
+            <div className="panel-title">
+              <div>
+                <h2>Canonical intelligence</h2>
+                <span>{useCases.join(" · ")}</span>
+              </div>
+              <span className={serverOnline ? "server online" : "server"}>
+                ● {serverOnline ? getApiBaseUrl() : "backend offline"}
+              </span>
+            </div>
+            <ResultSurface response={answer} />
           </section>
         </main>
 
         <aside className="copilot">
           <div className="copilot-head">
             <div>
-              <strong>AI Copilot</strong>
-              <small>Contexto determinístico + experiência + evidência</small>
+              <strong>Copilot</strong>
+              <small>Same frozen backend, contextual query</small>
             </div>
-            <span className={serverOnline ? "online-dot" : "offline-dot"}>
-              ● {serverOnline ? "Online" : "Offline"}
-            </span>
+            <span className={serverOnline ? "online-dot" : "offline-dot"}>●</span>
           </div>
 
           <div className="copilot-intro">
-            <h2>{page}</h2>
-            <p>{pageDefinition.prompt}</p>
+            <h2>{selectedTab?.label ?? page}</h2>
+            <p>{prompt}</p>
           </div>
 
           <div className="suggestions">
-            <button onClick={() => setQuestion(pageDefinition.prompt)}>
-              Usar pergunta sugerida <span>›</span>
-            </button>
-            <button onClick={() => setQuestion("O que mudou desde a última análise?")}>
-              O que mudou? <span>›</span>
-            </button>
-            <button onClick={() => setQuestion("Quais aprendizados contradizem a análise atual?")}>
-              Evidência contraditória <span>›</span>
-            </button>
+            <button onClick={() => setQuestion(prompt)}>Use workspace query <span>›</span></button>
+            <button onClick={() => setQuestion("O que mudou desde a última análise? Preserve as_of e fontes.")}>What changed? <span>›</span></button>
+            <button onClick={() => setQuestion("Quais dados estão LIMITED, UNKNOWN ou ausentes e como isso limita a análise?")}>Data limitations <span>›</span></button>
           </div>
 
-          {answer && <AnswerCard payload={answer} />}
+          {answer?.error && <div className="answer-card"><p>{answer.error}</p></div>}
 
           <form onSubmit={ask} className="chat-form">
             <textarea
               value={question}
               onChange={(event) => setQuestion(event.target.value)}
-              placeholder={pageDefinition.prompt}
+              placeholder="Ask about this workspace…"
               rows={5}
             />
             <button disabled={asking}>{asking ? "…" : "➤"}</button>
           </form>
 
-          <small className="disclaimer">
-            Sem execução de ordens. Experiência histórica contextualiza; não substitui cálculo determinístico.
-          </small>
+          <small className="disclaimer">No order execution. Human remains final decision authority.</small>
         </aside>
       </div>
-    </div>
-  );
-}
 
-function PageSurface({
-  page,
-  answer,
-}: {
-  page: PageId;
-  answer: OrchestrateResponse | null;
-}) {
-  const features: Record<PageId, string[]> = {
-    Overview: ["Portfolio", "Market Regime", "Learning", "Risk", "What changed"],
-    Portfolio: ["Exposure", "Concentration", "Capital", "Assignment", "Portfolio impact"],
-    Options: ["Lifecycle", "DTE", "Assignment", "Coverage", "Historical outcome"],
-    Opportunities: ["Deterministic score", "ExperienceAssessment", "Evidence", "Risk"],
-    "Market Regime": ["Trend", "Volatility", "Risk appetite", "Rates", "Foreign flow", "Commodity"],
-    "Experience & Learning": ["Status", "Confidence", "Recent vs long-term", "Contradictions", "Drift"],
-    "Historical Similarity": ["Feature similarity", "Regime similarity", "Temporal score", "Semantic score"],
-    "Risk & Stress": ["ScenarioDefinition", "Portfolio P&L", "Assignment capital", "Concentration", "Sensitivities"],
-    Copilot: ["Synthesis", "Rationale", "Evidence refs", "Limitations", "Human decision"],
-  };
-
-  return (
-    <div className="surface">
-      <div className="feature-grid">
-        {features[page].map((feature) => (
-          <div className="feature-card" key={feature}>
-            <span>{feature}</span>
-            <strong>—</strong>
-            <small>Aguardando dado canônico</small>
+      {settingsOpen && (
+        <div className="modal-backdrop" onClick={() => setSettingsOpen(false)}>
+          <div className="transaction-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="panel-title">
+              <div>
+                <h2>Backend connection</h2>
+                <span>Windows app → real B3 backend instance</span>
+              </div>
+              <button onClick={() => setSettingsOpen(false)}>×</button>
+            </div>
+            <form className="transaction-form" onSubmit={saveBackend}>
+              <label>Backend URL</label>
+              <input
+                value={backendUrl}
+                onChange={(event) => setBackendUrl(event.target.value)}
+                placeholder="http://ubuntu:8000"
+                autoFocus
+              />
+              <button type="submit">Save and test connection</button>
+            </form>
           </div>
-        ))}
-      </div>
-      {answer ? (
-        <pre className="result-json">{JSON.stringify(answer.result, null, 2)}</pre>
-      ) : (
-        <div className="empty-state">
-          <div className="empty-icon">◇</div>
-          <h3>Nenhum resultado canônico carregado</h3>
-          <p>
-            Use “Atualizar inteligência” ou o Copilot. A interface não cria métricas
-            substitutas quando o runtime não fornece dados.
-          </p>
         </div>
       )}
     </div>
   );
 }
 
-function AnswerCard({ payload }: { payload: OrchestrateResponse }) {
-  return (
-    <div className="answer-card">
-      <div className="answer-status">{payload.status || "UNKNOWN"}</div>
-      {payload.error ? (
-        <p>{payload.error}</p>
-      ) : (
-        <pre>{JSON.stringify(payload.result, null, 2)}</pre>
-      )}
-      {!!payload.sources.length && <small>Sources: {payload.sources.join(", ")}</small>}
-    </div>
-  );
-}
-
-function Metric({
-  title,
-  value,
-  detail,
-}: {
-  title: string;
-  value: string;
-  detail: string;
-}) {
+function Metric({ title, value, detail }: { title: string; value: string; detail: string }) {
   return (
     <div className="metric">
       <span>{title}</span>
