@@ -81,3 +81,58 @@ def test_brokerage_upload_endpoint_parses_and_persists_note(monkeypatch, tmp_pat
 
     ledger = OptionTransactionLedger(tmp_path / "options.sqlite3")
     assert len(ledger.list_all()) == 3
+
+
+
+def test_brokerage_batch_endpoint_processes_zip(monkeypatch, tmp_path):
+    from io import BytesIO
+    import zipfile
+    from fastapi.testclient import TestClient
+    from b3_agent import server
+
+    monkeypatch.setattr(
+        server,
+        "settings",
+        type("TestSettings", (), {"data_dir": tmp_path})(),
+    )
+
+    expected = {
+        "status": "processed",
+        "files_total": 2,
+        "files_processed": 2,
+        "files_failed": 0,
+        "parsed_count": 4,
+        "inserted_count": 4,
+        "processed": [],
+        "failures": [],
+    }
+
+    monkeypatch.setattr(
+        server.BrokerageBatchIngestionService,
+        "ingest_zip",
+        lambda self, path: expected,
+    )
+
+    payload = BytesIO()
+    with zipfile.ZipFile(payload, "w") as archive:
+        archive.writestr("nota1.pdf", b"%PDF-1.4 fake")
+        archive.writestr("nota2.pdf", b"%PDF-1.4 fake")
+
+    response = TestClient(server.app).post(
+        "/imports/brokerage-notes/batch",
+        files={"file": ("notas.zip", payload.getvalue(), "application/zip")},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == expected
+
+
+def test_brokerage_batch_upload_page_is_available():
+    from fastapi.testclient import TestClient
+    from b3_agent import server
+
+    response = TestClient(server.app).get("/imports/brokerage-notes/upload")
+
+    assert response.status_code == 200
+    assert "Importar ZIP de notas de corretagem" in response.text
+    assert 'action="/imports/brokerage-notes/batch"' in response.text
