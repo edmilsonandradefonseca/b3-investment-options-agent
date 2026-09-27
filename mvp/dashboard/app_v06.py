@@ -246,11 +246,32 @@ with tab_opportunities:
     c1, c2 = st.columns(2)
     c1.metric("Eligible", len(opportunity_set.ranked_opportunities) if opportunity_set else 0)
     c2.metric("Rejected", len(opportunity_set.rejected_opportunities) if opportunity_set else 0)
-    st.info(
-        "Nenhum input analítico de oportunidade foi carregado nesta sessão. "
-        "A V4 não converte exposição de portfolio em oportunidade sem dados "
-        "determinísticos upstream (market/valuation/options analysis)."
-    )
+    if opportunity_set and opportunity_set.ranked_opportunities:
+        opportunity_rows = [
+            {
+                "Ticker": item.ticker,
+                "Ação": item.action,
+                "Atratividade": item.attractiveness,
+                "Retorno esperado": item.expected_return,
+                "Capital requerido": item.capital_requirement,
+                "Valuation ref": item.valuation_range_ref,
+                "Options ref": item.options_analysis_ref,
+                "Quant ref": item.quant_features_ref,
+                "Fontes": ", ".join(item.source_refs),
+            }
+            for item in opportunity_set.ranked_opportunities
+        ]
+        st.dataframe(pd.DataFrame(opportunity_rows), use_container_width=True, hide_index=True)
+        st.caption(
+            f"Ranking policy {opportunity_set.ranking_policy_version} • "
+            f"Quality {opportunity_set.quality_status}"
+        )
+    else:
+        st.info(
+            "Nenhum input analítico de oportunidade foi carregado nesta sessão. "
+            "A V4 não converte exposição de portfolio em oportunidade sem dados "
+            "determinísticos upstream (market/valuation/options analysis)."
+        )
 
 with tab_intelligence:
     st.subheader("Portfolio Intelligence")
