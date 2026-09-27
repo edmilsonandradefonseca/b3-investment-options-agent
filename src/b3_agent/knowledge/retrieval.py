@@ -1,28 +1,56 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
+from .embeddings import EmbeddingProvider
 from .obsidian import ObsidianKnowledgeStore
+from .qdrant_store import QdrantVectorStore
 
 
 @dataclass(frozen=True)
 class RetrievedEvidence:
-    """A bounded piece of investor knowledge retrieved from Obsidian."""
+    """A bounded piece of retrieved investor evidence."""
 
     source_ref: str
     relative_path: str
     snippet: str
-    score: int
+    score: float
+
+
+class VectorEvidenceRetriever:
+    """V4 production retriever over the B3-owned Qdrant hybrid collection."""
+
+    def __init__(self, store: QdrantVectorStore, embeddings: EmbeddingProvider) -> None:
+        self.store = store
+        self.embeddings = embeddings
+
+    def retrieve(self, query: str, *, top_k: int = 5) -> tuple[RetrievedEvidence, ...]:
+        if not query.strip():
+            raise ValueError("query must not be empty")
+        if top_k < 1:
+            raise ValueError("top_k must be positive")
+
+        embedding = self.embeddings.embed((query.strip(),))[0]
+        if self.store.hybrid:
+            results = self.store.hybrid_search(
+                query.strip(), embedding, top_k=top_k, prefetch_k=max(top_k * 4, top_k)
+            )
+        else:
+            results = self.store.search(embedding, top_k=top_k)
+
+        return tuple(
+            RetrievedEvidence(
+                source_ref=str(item.metadata.get("source") or item.evidence_id),
+                relative_path=str(item.metadata.get("document_id") or item.metadata.get("canonical_id") or item.chunk_id),
+                snippet=item.content[:800],
+                score=float(item.score),
+            )
+            for item in results
+        )
 
 
 class ObsidianRetriever:
-    """Deterministic local retriever over the investor's Obsidian vault.
-
-    This is the MVP retrieval contract. It deliberately keeps retrieval
-    provider-independent so semantic/vector retrieval can replace the ranking
-    implementation without changing the graph or agents.
-    """
+    """Legacy deterministic retriever retained only for compatibility/tests."""
 
     def __init__(self, store: ObsidianKnowledgeStore):
         self.store = store
@@ -49,7 +77,7 @@ class ObsidianRetriever:
                     source_ref=f"obsidian:{relative_path.as_posix()}",
                     relative_path=relative_path.as_posix(),
                     snippet=snippet,
-                    score=score,
+                    score=float(score),
                 )
             )
 

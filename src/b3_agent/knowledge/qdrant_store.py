@@ -45,6 +45,7 @@ class QdrantVectorStore:
 
     def _ensure_collection(self) -> None:
         if self.client.collection_exists(self.collection_name):
+            self._validate_existing_collection()
             return
         if self.hybrid:
             self.client.create_collection(
@@ -67,6 +68,42 @@ class QdrantVectorStore:
                 distance=models.Distance.COSINE,
             ),
         )
+
+    def _validate_existing_collection(self) -> None:
+        """Fail fast if an existing collection violates this adapter contract."""
+        info = self.client.get_collection(self.collection_name)
+        params = info.config.params
+        vectors = params.vectors
+        sparse_vectors = getattr(params, "sparse_vectors", None)
+
+        if self.hybrid:
+            if not isinstance(vectors, dict) or "dense" not in vectors:
+                raise RuntimeError(
+                    f"Qdrant collection {self.collection_name} is not hybrid: missing named dense vector"
+                )
+            dense = vectors["dense"]
+            if int(dense.size) != self.vector_size:
+                raise RuntimeError(
+                    f"Qdrant collection {self.collection_name} dense dimension "
+                    f"is {dense.size}; expected {self.vector_size}"
+                )
+            if not sparse_vectors or "sparse" not in sparse_vectors:
+                raise RuntimeError(
+                    f"Qdrant collection {self.collection_name} is not hybrid: missing sparse vector"
+                )
+            return
+
+        size = getattr(vectors, "size", None)
+        if size is None:
+            raise RuntimeError(
+                f"Qdrant collection {self.collection_name} uses named vectors; "
+                "dense-only adapter expected an unnamed vector"
+            )
+        if int(size) != self.vector_size:
+            raise RuntimeError(
+                f"Qdrant collection {self.collection_name} dimension is {size}; "
+                f"expected {self.vector_size}"
+            )
 
     def upsert(
         self,
