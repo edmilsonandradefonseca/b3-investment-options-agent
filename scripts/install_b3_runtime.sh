@@ -42,6 +42,7 @@ User=$TARGET_USER
 Group=$TARGET_GROUP
 WorkingDirectory=$ROOT
 EnvironmentFile=-$ENV_FILE
+EnvironmentFile=-$RUNTIME_ROOT/b3.env
 ExecStart=$ROOT/.venv/bin/python -m b3_agent.runtime.service
 Restart=on-failure
 RestartSec=3
@@ -59,6 +60,7 @@ sudo systemctl enable b3-runtime.service
 echo "Installed b3-runtime"
 echo "service: $SERVICE_FILE"
 echo "env:     $ENV_FILE"
+echo "secrets: $RUNTIME_ROOT/b3.env (if present)"
 echo "cli:     /usr/local/bin/b3-runtime"
 echo "bind:    $API_HOST:$API_PORT"
 echo
