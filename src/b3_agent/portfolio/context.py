@@ -35,12 +35,11 @@ class PortfolioIntelligenceEngine:
         self.capital_risk_engine = capital_risk_engine or CapitalRiskEngine()
 
     def build(self, portfolio: PortfolioContext) -> PortfolioIntelligence:
+        assessments = self.assessment_engine.assess(portfolio.positions, as_of=portfolio.as_of)
         return PortfolioIntelligence(
             as_of=portfolio.as_of,
-            assessments=self.assessment_engine.assess(portfolio.positions, as_of=portfolio.as_of),
+            assessments=assessments,
             exposures=self.exposure_engine.build_exposures(portfolio),
             capital_risk=self.capital_risk_engine.assess(portfolio),
-            expiration_risk=summarize_expiration_risk(
-                self.assessment_engine.assess(portfolio.positions, as_of=portfolio.as_of)
-            ),
+            expiration_risk=summarize_expiration_risk(assessments),
         )
