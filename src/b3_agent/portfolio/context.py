@@ -6,6 +6,7 @@ from datetime import date
 from .capital_risk import CapitalRiskEngine, CapitalRiskSnapshot
 from .intelligence import PositionExposure, PositionIntelligenceEngine as ExposureEngine
 from .position_intelligence import PositionAssessment, PositionIntelligenceEngine as AssessmentEngine
+from .expiration_risk import ExpirationRisk, summarize_expiration_risk
 from ..schemas.position import PortfolioContext
 
 
@@ -17,6 +18,7 @@ class PortfolioIntelligence:
     assessments: tuple[PositionAssessment, ...]
     exposures: tuple[PositionExposure, ...]
     capital_risk: CapitalRiskSnapshot
+    expiration_risk: tuple[ExpirationRisk, ...] = ()
 
 
 class PortfolioIntelligenceEngine:
@@ -38,4 +40,7 @@ class PortfolioIntelligenceEngine:
             assessments=self.assessment_engine.assess(portfolio.positions, as_of=portfolio.as_of),
             exposures=self.exposure_engine.build_exposures(portfolio),
             capital_risk=self.capital_risk_engine.assess(portfolio),
+            expiration_risk=summarize_expiration_risk(
+                self.assessment_engine.assess(portfolio.positions, as_of=portfolio.as_of)
+            ),
         )
