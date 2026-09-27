@@ -11,5 +11,6 @@ def test_dashboard_v4_e2e_has_no_obsidian_runtime_reference():
 
 def test_dashboard_does_not_fabricate_opportunities_from_portfolio():
     source = Path("mvp/dashboard/app_v06.py").read_text(encoding="utf-8")
-    assert "OpportunityIntelligenceEngine().assess(())" in source
+    assert "DashboardE2EService().load(" in source
+    assert "opportunity_set = st.session_state.opportunities" in source
     assert "não converte exposição de portfolio em oportunidade" in source
