@@ -56,6 +56,22 @@ load_env() {
   export B3_ACCEPTANCE_TICKERS="${B3_ACCEPTANCE_TICKERS:-PETR4,VALE3,ITUB4,WEGE3,BBAS3}"
 }
 
+backend_acceptance_gate() {
+  local out="/tmp/b3-backend-acceptance-full-validation.txt"
+  if ! .venv/bin/python scripts/backend_acceptance.py >"$out" 2>&1; then
+    cat "$out"
+    return 1
+  fi
+  cat "$out"
+
+  local warning_count
+  warning_count="$(grep -Ec ' WARNING ' "$out" || true)"
+  if [[ "$warning_count" -gt 0 ]]; then
+    warn "Backend acceptance emitted $warning_count runtime warning(s); inspect canonical data availability above"
+  fi
+  return 0
+}
+
 uc_acceptance_gate() {
   local out="/tmp/b3-uc-real-acceptance-full-validation.txt"
   if ! .venv/bin/python scripts/uc_real_acceptance.py >"$out" 2>&1; then
@@ -73,6 +89,10 @@ uc_acceptance_gate() {
   fi
   if [[ "$limited" -gt 0 ]]; then
     warn "UC acceptance has $limited LIMITED use case(s); backend code passed but real-data completeness is not yet full"
+  fi
+
+  if grep -Eq '^UC-03 PASS .*rejected=0([[:space:]]|$)' "$out"; then
+    warn "UC-03 passes functionally but rejected=0 indicates opportunity filtering/ranking calibration still needs review"
   fi
   return 0
 }
@@ -239,7 +259,7 @@ run_gate "GATE 1 - FULL PYTEST REGRESSION" \
 load_env
 
 run_gate "GATE 2 - REAL SHARED BACKEND ACCEPTANCE" \
-  .venv/bin/python scripts/backend_acceptance.py
+  backend_acceptance_gate
 
 run_gate "GATE 3 - REAL UC01..UC12 ACCEPTANCE" \
   uc_acceptance_gate
