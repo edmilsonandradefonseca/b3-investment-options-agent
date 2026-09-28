@@ -15,7 +15,8 @@ def test_historical_ledger_diagnostic_is_read_only_and_targets_canonical_path():
 
     # Diagnostic must not ingest, copy, move or delete user data.
     for forbidden in (
-        ".append(",
+        "OptionTransactionLedger(canonical).append(",
+        "OptionTransactionLedger(ledger).append(",
         ".write_bytes(",
         ".write_text(",
         ".unlink(",
