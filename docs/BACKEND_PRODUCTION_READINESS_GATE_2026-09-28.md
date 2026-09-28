@@ -149,3 +149,35 @@ only after:
 - PR #61 validation evidence is recorded.
 
 No architecture V4.0 redesign is required.
+
+## 6. Final Ubuntu gate evidence — 2026-09-28 19:49 -03
+
+Final command: `bash scripts/backend_full_validation.sh`
+
+Result:
+
+- **Failures: 0**
+- **Warnings: 2**
+- **Final status: PASS WITH WARNINGS**
+- full pytest regression: PASS;
+- shared backend acceptance: PASS;
+- canonical historical ledger readiness: PASS;
+- UC acceptance: **9 PASS / 3 LIMITED / 0 FAIL**;
+- UC-07: **PASS transactions=1 operations=1 outcomes=0**;
+- Fast Router HTTP E2E: PASS;
+- B3 runtime service: active;
+- OpenClaw gateway: active;
+- João scheduler: intentionally inactive;
+- macro timer: enabled;
+- nightly intelligence timer: enabled;
+- DeepSeek local runtime: PASS;
+- OpenClaw/Luna transport: PASS;
+- runtime error scan: no 429/quota/Traceback/ERROR;
+- final health: OK.
+
+Accepted non-blocking warnings:
+
+1. UC-06 / UC-08 / UC-09 remain LIMITED due real-data maturity (multi-factor history, finalized outcomes, accumulated experience corpus).
+2. UC-03 currently returns `rejected=0`; ranking/filter calibration remains a product-quality follow-up, not a backend-readiness blocker.
+
+**Release decision:** BACKEND PRODUCTION READY FOR FRONTEND INTEGRATION.
