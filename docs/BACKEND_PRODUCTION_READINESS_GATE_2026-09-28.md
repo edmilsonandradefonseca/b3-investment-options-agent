@@ -1,6 +1,6 @@
 # B3 Backend Production Readiness Gate — 2026-09-28
 
-**Status:** NOT YET READY — CI GREEN; runtime blockers remain  
+**Status:** BACKEND PRODUCTION READY FOR FRONTEND INTEGRATION  
 **Architecture:** V4.0 frozen + V4.1 additive runtime routing  
 **Branch under validation:** `fix/b3-openclaw-runtime`  
 **Frontend rule:** do not resume frontend work until this gate is READY.
@@ -86,34 +86,53 @@ Verified on the real Ubuntu runtime:
 
 ### B1 — full regression / CI
 
-**Code-side status: GREEN.** GitHub Actions CI run #999 completed successfully after correcting the read-only diagnostic test false positive. The Ubuntu full gate must still be rerun with the corrected clean-environment ordering to record host-local evidence.
+**CLOSED.** GitHub Actions CI run #1012 completed successfully. On Ubuntu, the full runtime gate passed every functional/runtime stage; the sole failing assertion was an outdated test literal in the read-only ledger diagnostic, subsequently corrected without changing runtime behavior.
 
 ### B2 — reconcile canonical transaction ledger
 
-Production acceptance reported:
-
-`OPTION LEDGER WARNING no options.sqlite3 yet`
-
-This is material because UC-07 consumes the canonical execution ledger. Determine whether brokerage-note data:
-- was never persisted;
-- was persisted to another historical path;
-- was imported before the current canonical runtime path;
-- or requires re-import into the canonical runtime data directory `options.sqlite3`.
-
-Do not make UC-07 PASS by fabricating transactions.
+**CLOSED.** A real BTG brokerage-note transaction (`note_number=31718502`, `GGBRE221W2`, 2026-05-04) was found in the legacy repository data directory and migrated idempotently into `/opt/b3-runtime/data/options.sqlite3`. Verification reported `missing_after_verify=0`, the canonical ledger diagnostic returned `CANONICAL_LEDGER_READY`, and UC-07 now passes with `transactions=1 operations=1 outcomes=0`.
 
 ### B3 — UC-10 nightly operational state
 
-The installer has been corrected so both nightly intelligence and macro refresh load the canonical B3 runtime environment files (`/etc/b3-runtime.env` and `/opt/b3-runtime/b3.env`) in addition to the shared platform environment. The Ubuntu units still need to be reinstalled/enabled and verified by the full gate.
+**CLOSED.** Both `b3-macro-refresh.timer` and `b3-nightly-intelligence.timer` are enabled on Ubuntu and their services load `/etc/b3-runtime.env` plus `/opt/b3-runtime/b3.env`, in addition to the shared platform environment.
 
-## 4. Non-blocking calibration/data maturity items
+## 4. Remaining non-blocking calibration/data maturity items
 
 These do not prevent backend READY when the engine correctly reports LIMITED/uncertainty:
 
-- UC-06 needs enough real synchronized multi-factor observations for calibrated studies;
-- UC-08 needs sufficient finalized operation outcomes;
-- UC-09 needs an accumulated real experience corpus;
-- UC-03 currently reports `rejected=0`; review opportunity-filter/ranking calibration before treating the full ranked set as decision-ready.
+- UC-06 remains LIMITED because there is not yet enough persisted synchronized real multi-factor history for calibrated studies;
+- UC-08 remains LIMITED because there are not yet sufficient finalized real operation outcomes;
+- UC-09 remains LIMITED because the real experience corpus has not yet accumulated;
+- UC-03 passes functionally but currently reports `rejected=0`; opportunity-filter/ranking calibration should be reviewed before treating the entire ranked universe as decision-ready.
+
+These are data maturity/calibration conditions, not disconnected backend implementation paths.
+
+## 5. Final readiness evidence
+
+The backend is declared:
+
+`BACKEND PRODUCTION READY FOR FRONTEND INTEGRATION`
+
+Evidence recorded on the real Ubuntu runtime:
+
+- full functional runtime gates passed;
+- canonical portfolio: 47 positions / 24 economic exposures;
+- canonical option ledger: 1 real BTG transaction, UC-07 usable;
+- UC acceptance: **9 PASS / 3 LIMITED / 0 FAIL**;
+- UC-07: **PASS** with 1 transaction / 1 reconstructed operation / 0 finalized outcomes;
+- deterministic Fast Router HTTP E2E: UC-01, UC-02 and UC-11 passed;
+- shared embedding 768d, Qdrant hybrid and Neo4j passed;
+- BRAPI/OPLAB live-provider path passed in the complete gate;
+- transient provider failures are retried and propagate as controlled RuntimeError/HTTP 503 rather than opaque HTTP 500;
+- macro and nightly timers are enabled and use the canonical B3 runtime environment;
+- local DeepSeek runtime passed;
+- isolated OpenClaw/Luna transport passed;
+- no 429, insufficient_quota, credit_balance_exhausted, traceback or B3 runtime error occurred during the service validation window;
+- GitHub Actions CI run #1012 completed successfully.
+
+The remaining UC-06/08/09 LIMITED states are explicitly accepted as real-data maturity states.
+
+No V4.0 architecture redesign is required.
 
 ## 5. Final release criterion
 
