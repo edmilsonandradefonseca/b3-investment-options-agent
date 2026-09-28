@@ -5,15 +5,50 @@ import os
 import sqlite3
 from pathlib import Path
 
-from b3_agent.config import settings
 from b3_agent.repositories.option_ledger import OptionTransactionLedger
 from b3_agent.repositories.source_manifest import SourceManifestRepository
 
 
+RUNTIME_ENV_FILES = (
+    Path("/etc/b3-runtime.env"),
+    Path("/opt/b3-runtime/b3.env"),
+)
+DEFAULT_RUNTIME_DATA = Path("/opt/b3-runtime/data")
+
+
+def _env_file_values(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not path.is_file():
+        return values
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key:
+            values[key] = value.strip().strip('"').strip("'")
+    return values
+
+
+def _canonical_data_dir() -> Path:
+    configured = os.getenv("B3_AGENT_DATA_DIR")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    merged: dict[str, str] = {}
+    for path in RUNTIME_ENV_FILES:
+        merged.update(_env_file_values(path))
+    configured = merged.get("B3_AGENT_DATA_DIR")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    return DEFAULT_RUNTIME_DATA.resolve()
+
+
 def _candidate_data_dirs() -> tuple[Path, ...]:
     repo_root = Path(__file__).resolve().parent.parent
+    canonical_data_dir = _canonical_data_dir()
     values = [
-        settings.data_dir,
+        canonical_data_dir,
         repo_root / "data",
         Path("/opt/b3-runtime/data"),
         Path("/opt/b3-investment-options-agent/data"),
@@ -43,12 +78,13 @@ def _sqlite_row_count(path: Path, table: str) -> int | None:
 
 def main() -> int:
     print("===== B3 HISTORICAL LEDGER DIAGNOSTIC =====")
-    print(f"settings.data_dir={settings.data_dir}")
+    canonical_data_dir = _canonical_data_dir()
+    print(f"canonical_data_dir={canonical_data_dir}")
     print(f"B3_AGENT_DATA_DIR={os.getenv('B3_AGENT_DATA_DIR') or '<unset>'}")
     print()
 
-    canonical = settings.data_dir / "options.sqlite3"
-    canonical_manifest = settings.data_dir / "source_manifest.sqlite3"
+    canonical = canonical_data_dir / "options.sqlite3"
+    canonical_manifest = canonical_data_dir / "source_manifest.sqlite3"
 
     for data_dir in _candidate_data_dirs():
         ledger = data_dir / "options.sqlite3"
@@ -121,9 +157,9 @@ def main() -> int:
     other_ledgers = [
         data_dir / "options.sqlite3"
         for data_dir in _candidate_data_dirs()
-        if data_dir != settings.data_dir and (data_dir / "options.sqlite3").is_file()
+        if data_dir != canonical_data_dir and (data_dir / "options.sqlite3").is_file()
     ]
-    canonical_pdfs = settings.data_dir / "imports" / "brokerage_notes"
+    canonical_pdfs = canonical_data_dir / "imports" / "brokerage_notes"
     if other_ledgers:
         print("DIAGNOSIS=LEDGER_EXISTS_OUTSIDE_CANONICAL_DATA_DIR")
         for item in other_ledgers:
