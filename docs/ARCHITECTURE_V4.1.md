@@ -1,7 +1,7 @@
 # B3 Investment & Options Agent — Architecture V4.1
 
 **Version:** 4.1  
-**Status:** PROPOSED ADDITIVE EXTENSION  
+**Status:** IMPLEMENTED CORE / PILOT VALIDATED  
 **Date:** 2026-09-28  
 **Base architecture:** V4.0 APPROVED / FROZEN  
 **Scope:** Fast Router + Local Background Reasoning + Senior LLM Escalation  
@@ -535,3 +535,152 @@ B3 V4.1 adopts:
 - **no small LLM router in V4.1**.
 
 This is an additive runtime/intelligence extension and does not reopen the frozen V4.0 domain architecture.
+
+
+---
+
+## 16. As-built status — 2026-09-28
+
+This section records what is actually implemented and validated after the V4.1 proposal. It does not reopen the frozen V4.0 domain architecture.
+
+### 16.1 Fast Router implemented
+
+Implemented under:
+- `src/b3_agent/routing/models.py`;
+- `src/b3_agent/routing/router.py`;
+- `src/b3_agent/routing/__init__.py`;
+- smoke coverage in `scripts/router_smoke.py`;
+- unit coverage in `tests/test_fast_router.py`.
+
+Validated real routes include:
+- market price lookup -> deterministic market provider / UC-01;
+- options metrics -> deterministic options engine / UC-02;
+- stress scenario -> deterministic stress engine / UC-11;
+- complex analysis -> OpenClaw;
+- unknown/ambiguous -> OpenClaw;
+- scheduled nightly news intelligence -> DeepSeek R1 8B / UC-10.
+
+The Fast Router remains code-only.
+
+### 16.2 UC-10 nightly intelligence implemented
+
+The first V4.1 local-reasoning pilot is implemented for UC-10 Research, News & Event Intelligence.
+
+Implemented behavior:
+- deterministic news/research retrieval;
+- material-event prefilter before LLM use;
+- freshness hardening;
+- DeepSeek invoked only when material evidence exists;
+- per-ticker isolation;
+- bounded material-event payload;
+- sequential execution;
+- capped DeepSeek calls per batch;
+- manifest with completed/skipped/deferred/failed counts;
+- model unload after each inference;
+- low-priority systemd execution support.
+
+Real validation showed two important operating modes:
+- no material event -> fast skip with no DeepSeek load;
+- material event -> bounded local synthesis.
+
+### 16.3 Current B3 intelligence hierarchy
+
+```text
+React / API / Scheduler / CLI
+          |
+          v
+   deterministic Fast Router
+          |
+    +-----+------------------+
+    |                        |
+    v                        v
+canonical engines      ambiguous / complex
+BRAPI / OPLAB / BCB          |
+portfolio/options/etc.       v
+    |                   OpenClaw / Luna
+    |
+    +--> scheduled/background material research
+                     |
+                     v
+              DeepSeek R1 8B
+                     |
+                     v
+              derived intelligence
+```
+
+Authority remains:
+- deterministic/statistical engines for market/portfolio/options facts;
+- SQLite/Parquet for canonical structured truth;
+- Qdrant/Neo4j for retrieval and relationship projections;
+- DeepSeek for bounded derived research synthesis;
+- OpenClaw/Luna for senior reasoning and ambiguity;
+- human for investment decisions.
+
+### 16.4 Host/runtime reality
+
+The local DeepSeek model shares the Ubuntu host with João Resolve and common infrastructure.
+
+Resource policy:
+- DeepSeek is not synchronous routing;
+- local reasoning is background only;
+- bounded context/input;
+- bounded concurrency;
+- model unload after use;
+- no uncontrolled fan-out;
+- B3 and João retain separate canonical domain state.
+
+Shared physical services do not imply shared domain authority.
+
+### 16.5 João/B3 orchestration boundary
+
+João and B3 may share:
+- host;
+- Ollama daemon;
+- embedding service;
+- Qdrant / Neo4j physical infrastructure with logical separation.
+
+They do not share:
+- canonical SQLite truth;
+- domain rules;
+- B3 numerical authority;
+- execution authorization.
+
+If B3 needs senior reasoning, it may route to OpenClaw/Luna, but canonical financial facts must be supplied by B3 deterministic services.
+
+### 16.6 Frontend direction
+
+The production frontend direction is React.
+
+V4.1 intelligence should be exposed to React through typed backend contracts rather than embedding LLM logic in the frontend.
+
+The frontend must display provenance, freshness and authority boundaries where relevant.
+
+### 16.7 Current implementation boundary
+
+Implemented/validated:
+- deterministic Fast Router;
+- router smoke tests on real runtime;
+- UC-10 local DeepSeek pilot;
+- material-event prefilter;
+- freshness hardening;
+- production batch controls;
+- systemd installer/timer pattern.
+
+Still not considered complete:
+- broad DeepSeek expansion beyond UC-10;
+- fully generalized escalation queue for all B3 use cases;
+- final React integration for V4.1 intelligence;
+- shared host-level arbitration between B3 and João DeepSeek jobs;
+- final production observability for local-reasoning load.
+
+### 16.8 Architecture decision remains unchanged
+
+V4.1 remains an additive runtime/intelligence layer.
+
+It does not reopen:
+- UC-01..UC-12 deterministic/statistical baseline;
+- PIT correctness;
+- canonical data contracts;
+- learning authority;
+- no-autonomous-trading rule;
+- human final decision authority.
