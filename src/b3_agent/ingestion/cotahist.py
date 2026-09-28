@@ -40,9 +40,10 @@ def parse_cotahist_line(line: bytes, tickers: set[str], ingested_at: datetime) -
     close = price(108, 121)
     if close <= 0:
         raise ValueError(f"invalid closing price for {ticker}")
-    # Publication time is not in COTAHIST; the following midnight is a
-    # conservative approximation and is explicitly flagged below.
-    observed = datetime.combine(observed_date, time(23, 59, 59), _SAO_PAULO).astimezone(timezone.utc)
+    # COTAHIST has no publication time. Use an estimated post-close time that
+    # remains on the trading date after conversion to UTC. Availability is
+    # conservatively set to the following São Paulo midnight.
+    observed = datetime.combine(observed_date, time(18, 0), _SAO_PAULO).astimezone(timezone.utc)
     available = datetime.combine(observed_date + timedelta(days=1), time.min, _SAO_PAULO).astimezone(timezone.utc)
     return StockMarketData(
         instrument_id=ticker,
@@ -95,9 +96,21 @@ def import_cotahist_zip(
     repository = MarketDataRepository(archive_dir)
     for ticker, records in parsed.items():
         old = {
-            record.observation_timestamp.date(): record
+            _record_market_date(record): record
             for record in repository.read(ticker)
         }
         old.update(records)
         repository.write([old[day] for day in sorted(old)])
     return counts
+
+
+def _record_market_date(record: StockMarketData) -> date:
+    """Return the exchange date, correcting older UTC-shifted archive rows."""
+    if record.source == "b3_cotahist" and record.source_record_id:
+        parts = record.source_record_id.split(":", 2)
+        if len(parts) == 3:
+            try:
+                return date.fromisoformat(parts[1])
+            except ValueError:
+                pass
+    return record.observation_timestamp.date()
