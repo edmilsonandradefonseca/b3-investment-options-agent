@@ -48,3 +48,11 @@ def test_backend_full_validation_surfaces_limited_use_cases():
     assert 'run_gate "GATE 3 - REAL UC01..UC12 ACCEPTANCE"' in source
     assert "uc_acceptance_gate" in source
     assert "LIMITED use case(s)" in source
+
+
+def test_backend_full_validation_counts_runtime_and_calibration_warnings():
+    source = Path("scripts/backend_full_validation.sh").read_text(encoding="utf-8")
+    assert "backend_acceptance_gate" in source
+    assert "runtime warning(s)" in source
+    assert "rejected=0" in source
+    assert "calibration still needs review" in source
