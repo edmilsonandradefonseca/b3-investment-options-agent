@@ -39,6 +39,25 @@ class FastRouter:
                 "B3_MACRO_REFRESH_V1", meta,
             )
 
+        # Explicitly complex intent always wins over dashboard metadata.
+        if self._contains_any(
+            normalized,
+            (
+                "compare",
+                "comparar",
+                "melhor estratégia",
+                "melhor estrategia",
+                "roll",
+                "tese",
+                "vale a pena",
+            ),
+        ):
+            return self._decision(
+                "complex_analysis", None, "sync", "senior_llm",
+                RouteTarget.OPENCLAW, MatchClass.MATCH_STRONG,
+                "B3_COMPLEX_ANALYSIS_V1", meta,
+            )
+
         if self._contains_any(normalized, ("preço", "preco", "cotação", "cotacao", "quote")) and meta.get("ticker"):
             return self._decision(
                 "market_price_lookup", "UC-01", "sync", "deterministic",
@@ -47,7 +66,21 @@ class FastRouter:
             )
 
         if self._contains_any(normalized, ("carteira", "portfolio", "portfólio")) and self._contains_any(
-            normalized, ("como está", "como esta", "snapshot", "posição", "posicao", "concentração", "concentracao")
+            normalized,
+            (
+                "como está",
+                "como esta",
+                "estado atual",
+                "resuma",
+                "resumo",
+                "snapshot",
+                "posição",
+                "posicao",
+                "posições",
+                "posicoes",
+                "concentração",
+                "concentracao",
+            ),
         ):
             return self._decision(
                 "portfolio_snapshot", "UC-01", "sync", "deterministic",
@@ -69,11 +102,31 @@ class FastRouter:
                 "B3_STRESS_SCENARIO_V1", meta,
             )
 
-        if self._contains_any(normalized, ("compare", "comparar", "melhor estratégia", "melhor estrategia", "roll", "tese", "vale a pena")):
+        # React/Tauri sends canonical page/use-case metadata. Use it only after
+        # checking explicit user intent so a complex question can still
+        # escalate to senior reasoning.
+        dashboard_page = str(meta.get("dashboard_page") or "").strip().lower()
+        use_cases = self._use_cases(meta.get("use_cases"))
+
+        if dashboard_page == "portfolio" and use_cases == ("UC-01",):
             return self._decision(
-                "complex_analysis", None, "sync", "senior_llm",
-                RouteTarget.OPENCLAW, MatchClass.MATCH_STRONG,
-                "B3_COMPLEX_ANALYSIS_V1", meta,
+                "portfolio_snapshot", "UC-01", "sync", "deterministic",
+                RouteTarget.PORTFOLIO_ENGINE, MatchClass.MATCH_EXACT,
+                "B3_DASHBOARD_UC01_V1", meta,
+            )
+
+        if dashboard_page == "options" and use_cases == ("UC-02",):
+            return self._decision(
+                "options_positions", "UC-02", "sync", "deterministic",
+                RouteTarget.OPTIONS_ENGINE, MatchClass.MATCH_EXACT,
+                "B3_DASHBOARD_UC02_V1", meta,
+            )
+
+        if dashboard_page == "risk & stress" and use_cases == ("UC-11",):
+            return self._decision(
+                "risk_stress_snapshot", "UC-11", "sync", "deterministic",
+                RouteTarget.STRESS_ENGINE, MatchClass.MATCH_EXACT,
+                "B3_DASHBOARD_UC11_V1", meta,
             )
 
         return self._decision(
@@ -84,6 +137,12 @@ class FastRouter:
     @staticmethod
     def _contains_any(text: str, values: tuple[str, ...]) -> bool:
         return any(value in text for value in values)
+
+    @staticmethod
+    def _use_cases(value: Any) -> tuple[str, ...]:
+        if not isinstance(value, (list, tuple)):
+            return ()
+        return tuple(str(item).upper().strip() for item in value if str(item).strip())
 
     @staticmethod
     def _extract_ticker(text: str) -> str | None:
