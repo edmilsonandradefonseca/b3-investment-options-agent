@@ -1,8 +1,9 @@
 ﻿from datetime import date, datetime, timezone
-import json
 import os
 import urllib.parse
 import urllib.request
+
+from b3_agent.providers.http_retry import request_json
 
 from b3_agent.schemas.market import StockMarketData
 
@@ -49,8 +50,13 @@ class BrapiAdapter:
             headers=self._headers(),
         )
 
-        with urllib.request.urlopen(request, timeout=15) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        payload = request_json(
+            request,
+            provider="brapi",
+            timeout_env="B3_BRAPI_TIMEOUT_SECONDS",
+            default_timeout=20.0,
+            retry_http_codes={404, 408, 425, 429, 500, 502, 503, 504},
+        )
 
         results = payload.get("results", [])
 
