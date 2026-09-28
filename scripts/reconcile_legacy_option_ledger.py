@@ -2,13 +2,50 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
-from b3_agent.config import settings
 from b3_agent.repositories.option_ledger import OptionTransactionLedger
 
 
 DEFAULT_LEGACY = Path("/opt/b3-investment-options-agent/data/options.sqlite3")
+DEFAULT_RUNTIME_DATA = Path("/opt/b3-runtime/data")
+RUNTIME_ENV_FILES = (
+    Path("/etc/b3-runtime.env"),
+    Path("/opt/b3-runtime/b3.env"),
+)
+
+
+def _env_file_values(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not path.is_file():
+        return values
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key:
+            continue
+        values[key] = value.strip().strip('"').strip("'")
+    return values
+
+
+def _canonical_data_dir() -> Path:
+    configured = os.getenv("B3_AGENT_DATA_DIR")
+    if configured:
+        return Path(configured).expanduser().resolve()
+
+    merged: dict[str, str] = {}
+    for env_file in RUNTIME_ENV_FILES:
+        merged.update(_env_file_values(env_file))
+
+    configured = merged.get("B3_AGENT_DATA_DIR")
+    if configured:
+        return Path(configured).expanduser().resolve()
+
+    return DEFAULT_RUNTIME_DATA.resolve()
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -22,6 +59,12 @@ def _parser() -> argparse.ArgumentParser:
         help="legacy options.sqlite3 path",
     )
     parser.add_argument(
+        "--target",
+        type=Path,
+        default=None,
+        help="explicit canonical options.sqlite3 path; default resolves from B3 runtime env",
+    )
+    parser.add_argument(
         "--apply",
         action="store_true",
         help="append validated rows to the canonical ledger; default is dry-run",
@@ -32,7 +75,11 @@ def _parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = _parser().parse_args()
     source = args.source.expanduser().resolve()
-    target = (settings.data_dir / "options.sqlite3").resolve()
+    target = (
+        args.target.expanduser().resolve()
+        if args.target is not None
+        else (_canonical_data_dir() / "options.sqlite3").resolve()
+    )
 
     print("===== B3 LEGACY OPTION LEDGER RECONCILIATION =====")
     print(f"mode={'APPLY' if args.apply else 'DRY_RUN'}")
