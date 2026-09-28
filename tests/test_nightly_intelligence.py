@@ -24,7 +24,7 @@ class FakeNews:
             ticker=ticker,
             available_timestamp=now,
             observation_timestamp=now,
-            published_date=None,
+            published_date=now.date(),
             source_record_id="x",
             source="test",
             headline=headline,
