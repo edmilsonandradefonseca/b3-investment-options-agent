@@ -23,6 +23,10 @@ def main() -> int:
     print(json.dumps({
         "ticker_count": result["ticker_count"],
         "completed": result["completed"],
+        "skipped": result["skipped"],
+        "deferred": result["deferred"],
+        "failed": result["failed"],
+        "deepseek_calls": result["deepseek_calls"],
         "as_of": result["as_of"],
     }, ensure_ascii=False))
     return 0
