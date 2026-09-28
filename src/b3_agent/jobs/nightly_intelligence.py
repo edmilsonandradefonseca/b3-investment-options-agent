@@ -69,12 +69,13 @@ class NightlyIntelligenceJob:
             raise RuntimeError("no portfolio tickers available for nightly intelligence")
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        as_of = datetime.now(timezone.utc)
+        run_started_at = datetime.now(timezone.utc)
         results: list[dict[str, Any]] = []
 
         for ticker in selected:
             records = self.news.search(ticker, limit=self.news_limit)
-            snapshot = ResearchEventService().build(records, as_of=as_of)
+            snapshot_as_of = datetime.now(timezone.utc)
+            snapshot = ResearchEventService().build(records, as_of=snapshot_as_of)
             events = [_event_payload(event) for event in snapshot.events]
             if not events:
                 results.append({"ticker": ticker, "status": "no_events", "event_count": 0})
@@ -84,7 +85,7 @@ class NightlyIntelligenceJob:
             item = {
                 "ticker": ticker,
                 "status": "completed",
-                "as_of": as_of.isoformat(),
+                "as_of": snapshot_as_of.isoformat(),
                 "event_count": len(events),
                 "source_refs": list(snapshot.source_refs),
                 "model": llm_result.model,
@@ -101,7 +102,8 @@ class NightlyIntelligenceJob:
             )
 
         manifest = {
-            "as_of": as_of.isoformat(),
+            "as_of": datetime.now(timezone.utc).isoformat(),
+            "run_started_at": run_started_at.isoformat(),
             "ticker_count": len(selected),
             "completed": sum(1 for item in results if item["status"] == "completed"),
             "results": results,
