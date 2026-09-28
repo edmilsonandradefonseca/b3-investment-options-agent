@@ -32,6 +32,7 @@ class OllamaClient:
             "model": self.model,
             "messages": [{"role": "user", "content": clean}],
             "stream": False,
+            "keep_alive": 0,
             "options": {"temperature": 0},
         }
         req = Request(
