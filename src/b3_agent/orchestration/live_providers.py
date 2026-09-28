@@ -6,6 +6,8 @@ from typing import Sequence
 
 from b3_agent.options.analysis import OptionsAnalysis, OptionsAnalysisEngine
 from b3_agent.providers.brapi.adapter import BrapiAdapter
+from b3_agent.providers.brapi.cache import CachedBrapiAdapter
+from b3_agent.config import settings
 from b3_agent.providers.oplab.options import OplabOptionsAdapter
 from b3_agent.schemas.market import StockMarketData
 from b3_agent.schemas.option import OptionContract, OptionQuote
@@ -33,13 +35,15 @@ class LiveProviderService:
     def __init__(
         self,
         *,
-        market_provider: BrapiAdapter | None = None,
+        market_provider: BrapiAdapter | CachedBrapiAdapter | None = None,
         options_provider: OplabOptionsAdapter | None = None,
         history_days: int = 120,
     ) -> None:
         if history_days < 1:
             raise ValueError("history_days must be positive")
-        self.market_provider = market_provider or BrapiAdapter()
+        self.market_provider = market_provider or CachedBrapiAdapter(
+            settings.data_dir / "cache" / "brapi_daily"
+        )
         self.options_provider = options_provider or OplabOptionsAdapter()
         self.history_days = history_days
 

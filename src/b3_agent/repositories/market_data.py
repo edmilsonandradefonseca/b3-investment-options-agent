@@ -2,6 +2,8 @@
 
 import pyarrow as pa
 import pyarrow.parquet as pq
+import os
+import tempfile
 
 from b3_agent.schemas.market import StockMarketData
 
@@ -70,11 +72,13 @@ class MarketDataRepository:
 
         table = pa.Table.from_pylist(rows)
 
-        pq.write_table(
-            table,
-            output_path,
-            compression="zstd",
-        )
+        with tempfile.NamedTemporaryFile(dir=output_dir, suffix=".parquet", delete=False) as temp:
+            temporary_path = Path(temp.name)
+        try:
+            pq.write_table(table, temporary_path, compression="zstd")
+            os.replace(temporary_path, output_path)
+        finally:
+            temporary_path.unlink(missing_ok=True)
 
         return output_path
 
@@ -110,5 +114,4 @@ class MarketDataRepository:
             )
             for row in rows
         ]
-
 
