@@ -1,6 +1,7 @@
 from datetime import date, datetime, timezone
 
 from b3_agent.providers.local_market_history import LocalFirstMarketDataAdapter
+from b3_agent.providers.http_retry import ProviderRequestError
 from b3_agent.repositories.market_data import MarketDataRepository
 from b3_agent.schemas.market import StockMarketData
 
@@ -90,6 +91,19 @@ def test_old_archive_does_not_suppress_brapi_for_uncovered_window(tmp_path):
 
 def test_local_history_survives_no_new_brapi_quote(tmp_path):
     provider = RecordingProvider(error=ValueError("no new data"))
+    repository = MarketDataRepository(tmp_path / "archive")
+    repository.write([record(date(2026, 9, 1)), record(date(2026, 9, 25))])
+
+    rows = adapter(tmp_path, provider).get_market_data(
+        "PETR4", date(2026, 9, 1), date(2026, 9, 28)
+    )
+
+    assert len(rows) == 2
+    assert rows[-1].source == "b3_cotahist"
+
+
+def test_local_history_survives_wrapped_provider_request_failure(tmp_path):
+    provider = RecordingProvider(error=ProviderRequestError("brapi request failed"))
     repository = MarketDataRepository(tmp_path / "archive")
     repository.write([record(date(2026, 9, 1)), record(date(2026, 9, 25))])
 
