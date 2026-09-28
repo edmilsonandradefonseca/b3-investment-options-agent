@@ -70,6 +70,7 @@ def portfolio_tickers() -> list[str]:
     portfolio = snapshots.get("portfolio_context")
     if portfolio is None:
         return []
+
     tickers: list[str] = []
     for position in portfolio.positions:
         value = (
@@ -122,9 +123,7 @@ def _select_material_events(events: tuple[Any, ...]) -> list[Any]:
     selected: list[Any] = []
     seen: set[str] = set()
     for event in events:
-        if _looks_static(event):
-            continue
-        if not _looks_material(event):
+        if _looks_static(event) or not _looks_material(event):
             continue
         key = " ".join((event.headline or "").lower().split())
         if key in seen:
@@ -148,9 +147,22 @@ def _prompt(ticker: str, events: list[dict[str, Any]]) -> str:
 
 
 class NightlyIntelligenceJob:
-    def __init__(self, *, news_limit: int = 8, output_dir: str | Path | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        news_limit: int = 8,
+        max_deepseek_calls: int | None = None,
+        output_dir: str | Path | None = None,
+    ) -> None:
         self.news_limit = news_limit
-        self.output_dir = Path(output_dir or settings.data_dir / "derived" / "nightly_intelligence")
+        self.max_deepseek_calls = (
+            max_deepseek_calls
+            if max_deepseek_calls is not None
+            else int(os.getenv("B3_NIGHTLY_MAX_DEEPSEEK_CALLS", "5"))
+        )
+        self.output_dir = Path(
+            output_dir or settings.data_dir / "derived" / "nightly_intelligence"
+        )
         self.news = SearxngNewsAdapter(
             base_url=os.getenv("B3_SEARXNG_URL", "http://127.0.0.1:8080")
         )
@@ -164,48 +176,23 @@ class NightlyIntelligenceJob:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         run_started_at = datetime.now(timezone.utc)
         results: list[dict[str, Any]] = []
+        deepseek_calls = 0
 
         for ticker in selected:
-            query = f"{ticker} notícias fato relevante resultados dividendos mercado"
-            records = self.news.search(ticker, query=query, limit=self.news_limit)
-            recent_records = _recent_dated_records(records)
-            snapshot_as_of = datetime.now(timezone.utc)
-            snapshot = ResearchEventService().build(recent_records, as_of=snapshot_as_of)
-            material_events = _select_material_events(snapshot.events)
-            if not material_events:
+            try:
+                result = self._process_ticker(
+                    ticker=ticker,
+                    deepseek_allowed=deepseek_calls < self.max_deepseek_calls,
+                )
+                if result["status"] == "completed":
+                    deepseek_calls += 1
+                results.append(result)
+            except Exception as exc:
                 results.append({
                     "ticker": ticker,
-                    "status": "skipped_no_material_events",
-                    "raw_result_count": len(records),
-                    "dated_recent_count": len(recent_records),
-                    "raw_result_count": len(records),
-                "dated_recent_count": len(recent_records),
-                "raw_event_count": len(snapshot.events),
-                    "material_event_count": 0,
+                    "status": "failed",
+                    "error": f"{type(exc).__name__}: {exc}",
                 })
-                continue
-
-            events = [_event_payload(event) for event in material_events]
-            llm_result = self.llm.ask(_prompt(ticker, events))
-            item = {
-                "ticker": ticker,
-                "status": "completed",
-                "as_of": snapshot_as_of.isoformat(),
-                "raw_event_count": len(snapshot.events),
-                "material_event_count": len(events),
-                "source_refs": [event["source_ref"] for event in events],
-                "model": llm_result.model,
-                "analysis": llm_result.content,
-                "thinking_chars": len(llm_result.thinking),
-                "total_duration_ns": llm_result.total_duration_ns,
-                "eval_count": llm_result.eval_count,
-                "eval_duration_ns": llm_result.eval_duration_ns,
-            }
-            results.append(item)
-            (self.output_dir / f"{ticker}.json").write_text(
-                json.dumps(item, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
 
         manifest = {
             "as_of": datetime.now(timezone.utc).isoformat(),
@@ -213,6 +200,10 @@ class NightlyIntelligenceJob:
             "ticker_count": len(selected),
             "completed": sum(1 for item in results if item["status"] == "completed"),
             "skipped": sum(1 for item in results if item["status"].startswith("skipped_")),
+            "deferred": sum(1 for item in results if item["status"] == "deferred_deepseek_budget"),
+            "failed": sum(1 for item in results if item["status"] == "failed"),
+            "deepseek_calls": deepseek_calls,
+            "max_deepseek_calls": self.max_deepseek_calls,
             "results": results,
         }
         (self.output_dir / "latest.json").write_text(
@@ -220,3 +211,52 @@ class NightlyIntelligenceJob:
             encoding="utf-8",
         )
         return manifest
+
+    def _process_ticker(self, *, ticker: str, deepseek_allowed: bool) -> dict[str, Any]:
+        query = f"{ticker} notícias fato relevante resultados dividendos mercado"
+        records = self.news.search(ticker, query=query, limit=self.news_limit)
+        recent_records = _recent_dated_records(records)
+        snapshot_as_of = datetime.now(timezone.utc)
+        snapshot = ResearchEventService().build(recent_records, as_of=snapshot_as_of)
+        material_events = _select_material_events(snapshot.events)
+
+        base = {
+            "ticker": ticker,
+            "as_of": snapshot_as_of.isoformat(),
+            "raw_result_count": len(records),
+            "dated_recent_count": len(recent_records),
+            "raw_event_count": len(snapshot.events),
+            "material_event_count": len(material_events),
+        }
+
+        if not material_events:
+            return {
+                **base,
+                "status": "skipped_no_material_events",
+            }
+
+        if not deepseek_allowed:
+            return {
+                **base,
+                "status": "deferred_deepseek_budget",
+                "source_refs": [event.source_ref for event in material_events],
+            }
+
+        events = [_event_payload(event) for event in material_events]
+        llm_result = self.llm.ask(_prompt(ticker, events))
+        item = {
+            **base,
+            "status": "completed",
+            "source_refs": [event["source_ref"] for event in events],
+            "model": llm_result.model,
+            "analysis": llm_result.content,
+            "thinking_chars": len(llm_result.thinking),
+            "total_duration_ns": llm_result.total_duration_ns,
+            "eval_count": llm_result.eval_count,
+            "eval_duration_ns": llm_result.eval_duration_ns,
+        }
+        (self.output_dir / f"{ticker}.json").write_text(
+            json.dumps(item, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return item

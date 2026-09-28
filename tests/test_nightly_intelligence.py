@@ -73,3 +73,20 @@ def test_nightly_job_skips_static_non_material_page(tmp_path):
     assert result["completed"] == 0
     assert result["skipped"] == 1
     assert job.llm.calls == 0
+
+
+def test_nightly_job_defers_after_deepseek_budget(tmp_path):
+    job = NightlyIntelligenceJob(
+        output_dir=tmp_path,
+        max_deepseek_calls=1,
+    )
+    job.news = FakeNews(material=True)
+    job.llm = FakeLLM()
+
+    result = job.run(tickers=["PETR4", "VALE3"])
+
+    assert result["completed"] == 1
+    assert result["deferred"] == 1
+    assert result["deepseek_calls"] == 1
+    assert job.llm.calls == 1
+    assert result["results"][1]["status"] == "deferred_deepseek_budget"
