@@ -1,6 +1,6 @@
 # B3 Backend Production Readiness Gate — 2026-09-28
 
-**Status:** NOT YET READY — blocking verification remains  
+**Status:** NOT YET READY — CI GREEN; runtime blockers remain  
 **Architecture:** V4.0 frozen + V4.1 additive runtime routing  
 **Branch under validation:** `fix/b3-openclaw-runtime`  
 **Frontend rule:** do not resume frontend work until this gate is READY.
@@ -84,9 +84,9 @@ Verified on the real Ubuntu runtime:
 
 ## 3. Remaining blockers before READY
 
-### B1 — rerun full regression with corrected environment isolation
+### B1 — full regression / CI
 
-The first full-gate regression produced three false failures because production environment values were loaded before tests that intentionally validate defaults. The gate has been corrected to run pytest before loading production runtime env. A clean rerun is required.
+**Code-side status: GREEN.** GitHub Actions CI run #999 completed successfully after correcting the read-only diagnostic test false positive. The Ubuntu full gate must still be rerun with the corrected clean-environment ordering to record host-local evidence.
 
 ### B2 — reconcile canonical transaction ledger
 
@@ -104,7 +104,7 @@ Do not make UC-07 PASS by fabricating transactions.
 
 ### B3 — UC-10 nightly operational state
 
-`b3-nightly-intelligence.timer` was not enabled during the gate. Validate service/timer configuration and enable only after confirming bounded DeepSeek behavior and no shared-host conflict.
+The installer has been corrected so both nightly intelligence and macro refresh load the canonical B3 runtime environment files (`/etc/b3-runtime.env` and `/opt/b3-runtime/b3.env`) in addition to the shared platform environment. The Ubuntu units still need to be reinstalled/enabled and verified by the full gate.
 
 ## 4. Non-blocking calibration/data maturity items
 
