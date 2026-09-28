@@ -20,6 +20,7 @@ def _portfolio() -> PortfolioContext:
                 ticker="PETR4",
                 instrument_type="STOCK",
                 quantity=100,
+                average_cost=35.0,
                 market_price=40.0,
                 market_value=4000.0,
                 source_ref="BTG:Renda Variavel:Acoes",
@@ -34,6 +35,7 @@ def _portfolio() -> PortfolioContext:
                 option_type="PUT",
                 underlying_ticker="PETR4",
                 contract_multiplier=100,
+                average_cost=2.5,
                 market_price=2.0,
                 market_value=-200.0,
                 source_ref="BTG:Renda Variavel:Opcoes",
@@ -65,6 +67,9 @@ def test_portfolio_dashboard_is_served_without_llm(monkeypatch):
     assert response.status == "COMPLETED"
     assert response.result["fast_route"]["target"] == "portfolio_engine"
     assert len(response.result["portfolio_context"]["positions"]) == 2
+    pnl = {item["position_id"]: item for item in response.result["position_pnl"]}
+    assert pnl["PETR4-STOCK"]["unrealized_pnl"] == pytest.approx(500.0)
+    assert pnl["PETR4-PUT"]["unrealized_pnl"] == pytest.approx(50.0)
     assert response.audit[0]["event"] == "fast_router_dispatch"
 
 
