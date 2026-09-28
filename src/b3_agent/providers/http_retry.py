@@ -24,6 +24,7 @@ def request_json(
     retry_http_codes: Iterable[int] = DEFAULT_RETRY_HTTP_CODES,
     attempts_env: str = "B3_PROVIDER_HTTP_ATTEMPTS",
     default_attempts: int = 3,
+    opener=urlopen,
 ) -> object:
     attempts = max(1, int(os.getenv(attempts_env, str(default_attempts))))
     timeout = max(1.0, float(os.getenv(timeout_env, str(default_timeout))))
@@ -36,7 +37,7 @@ def request_json(
     last_error: BaseException | None = None
     for attempt in range(1, attempts + 1):
         try:
-            with urlopen(request, timeout=timeout) as response:
+            with opener(request, timeout=timeout) as response:
                 return json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:
             last_error = exc
