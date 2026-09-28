@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -106,6 +106,16 @@ def _looks_static(event: Any) -> bool:
 def _looks_material(event: Any) -> bool:
     text = f"{event.headline or ''} {event.summary or ''}".lower()
     return any(term in text for term in _MATERIAL_TERMS)
+
+
+def _recent_dated_records(records: tuple[Any, ...], *, days: int = 3) -> tuple[Any, ...]:
+    cutoff = date.today() - timedelta(days=days)
+    return tuple(
+        record
+        for record in records
+        if getattr(record, "published_date", None) is not None
+        and record.published_date >= cutoff
+    )
 
 
 def _select_material_events(events: tuple[Any, ...]) -> list[Any]:
