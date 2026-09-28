@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from b3_agent.routing.models import MatchClass, RouteDecision, RouteTarget
-
-_TICKER_RE = re.compile(r"\\b([A-Z]{4}[0-9]{1,2})\\b", re.IGNORECASE)
 
 
 class FastRouter:
@@ -22,9 +19,11 @@ class FastRouter:
         raw = (text or "").strip()
         normalized = " ".join(raw.lower().split())
         meta = dict(metadata or {})
-        ticker_match = _TICKER_RE.search(raw.upper())
-        if ticker_match:
-            meta.setdefault("ticker", ticker_match.group(1).upper())
+        meta.setdefault("source", source)
+
+        ticker = self._extract_ticker(raw)
+        if ticker:
+            meta.setdefault("ticker", ticker)
 
         if task_type in {"b3.news.nightly", "b3.research.nightly", "nightly_ticker_intelligence"}:
             return self._decision(
@@ -63,7 +62,7 @@ class FastRouter:
                 "B3_OPTIONS_METRICS_V1", meta,
             )
 
-        if self._contains_any(normalized, ("stress", "cenário", "cenario")) and re.search(r"[-+]?\\d+(?:[.,]\\d+)?\\s*%", normalized):
+        if self._contains_any(normalized, ("stress", "cenário", "cenario")) and self._has_percentage(normalized):
             return self._decision(
                 "stress_scenario", "UC-11", "sync", "deterministic",
                 RouteTarget.STRESS_ENGINE, MatchClass.MATCH_STRONG,
@@ -85,6 +84,22 @@ class FastRouter:
     @staticmethod
     def _contains_any(text: str, values: tuple[str, ...]) -> bool:
         return any(value in text for value in values)
+
+    @staticmethod
+    def _extract_ticker(text: str) -> str | None:
+        cleaned = "".join(ch if ch.isalnum() else " " for ch in text.upper())
+        for token in cleaned.split():
+            if len(token) not in {5, 6}:
+                continue
+            letters = token[:4]
+            digits = token[4:]
+            if letters.isalpha() and digits.isdigit():
+                return token
+        return None
+
+    @staticmethod
+    def _has_percentage(text: str) -> bool:
+        return "%" in text and any(ch.isdigit() for ch in text)
 
     @staticmethod
     def _decision(
