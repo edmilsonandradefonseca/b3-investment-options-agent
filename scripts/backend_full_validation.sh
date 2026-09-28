@@ -261,6 +261,9 @@ load_env
 run_gate "GATE 2 - REAL SHARED BACKEND ACCEPTANCE" \
   backend_acceptance_gate
 
+run_gate "GATE 2B - HISTORICAL LEDGER READINESS" \
+  .venv/bin/python scripts/historical_ledger_diagnostic.py
+
 run_gate "GATE 3 - REAL UC01..UC12 ACCEPTANCE" \
   uc_acceptance_gate
 
