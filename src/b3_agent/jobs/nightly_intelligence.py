@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -108,6 +108,16 @@ def _looks_material(event: Any) -> bool:
     return any(term in text for term in _MATERIAL_TERMS)
 
 
+def _recent_dated_records(records: tuple[Any, ...], *, days: int = 3) -> tuple[Any, ...]:
+    cutoff = date.today() - timedelta(days=days)
+    return tuple(
+        record
+        for record in records
+        if getattr(record, "published_date", None) is not None
+        and record.published_date >= cutoff
+    )
+
+
 def _select_material_events(events: tuple[Any, ...]) -> list[Any]:
     selected: list[Any] = []
     seen: set[str] = set()
@@ -128,6 +138,8 @@ def _prompt(ticker: str, events: list[dict[str, Any]]) -> str:
     return (
         "You are the B3 local background analyst. Analyze only supplied evidence. "
         "Do not invent prices, facts, recommendations, probabilities or causal claims. "
+        "Every factual claim must be directly supported by supplied evidence. "
+        "Do not infer price moves, causes, dates, amounts or events not literally present. "
         "Return concise sections: Summary; Material events; Risks; Catalysts; "
         "Contradictions; Escalation needed. "
         f"Ticker: {ticker}\nEvidence JSON:\n"
@@ -156,14 +168,19 @@ class NightlyIntelligenceJob:
         for ticker in selected:
             query = f"{ticker} notícias fato relevante resultados dividendos mercado"
             records = self.news.search(ticker, query=query, limit=self.news_limit)
+            recent_records = _recent_dated_records(records)
             snapshot_as_of = datetime.now(timezone.utc)
-            snapshot = ResearchEventService().build(records, as_of=snapshot_as_of)
+            snapshot = ResearchEventService().build(recent_records, as_of=snapshot_as_of)
             material_events = _select_material_events(snapshot.events)
             if not material_events:
                 results.append({
                     "ticker": ticker,
                     "status": "skipped_no_material_events",
-                    "raw_event_count": len(snapshot.events),
+                    "raw_result_count": len(records),
+                    "dated_recent_count": len(recent_records),
+                    "raw_result_count": len(records),
+                "dated_recent_count": len(recent_records),
+                "raw_event_count": len(snapshot.events),
                     "material_event_count": 0,
                 })
                 continue
