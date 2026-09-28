@@ -43,6 +43,27 @@ load_env() {
   export B3_ACCEPTANCE_TICKERS="${B3_ACCEPTANCE_TICKERS:-PETR4,VALE3,ITUB4,WEGE3,BBAS3}"
 }
 
+uc_acceptance_gate() {
+  local out="/tmp/b3-uc-real-acceptance-full-validation.txt"
+  if ! .venv/bin/python scripts/uc_real_acceptance.py >"$out" 2>&1; then
+    cat "$out"
+    return 1
+  fi
+  cat "$out"
+
+  local limited failed
+  limited="$(grep -Ec '^UC-[0-9]+ LIMITED ' "$out" || true)"
+  failed="$(grep -Ec '^UC-[0-9]+ FAIL ' "$out" || true)"
+
+  if [[ "$failed" -gt 0 ]]; then
+    return 1
+  fi
+  if [[ "$limited" -gt 0 ]]; then
+    warn "UC acceptance has $limited LIMITED use case(s); backend code passed but real-data completeness is not yet full"
+  fi
+  return 0
+}
+
 http_assertions() {
   local base="${B3_API_URL:-http://127.0.0.1:8000}"
 
