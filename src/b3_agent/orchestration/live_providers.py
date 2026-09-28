@@ -7,6 +7,7 @@ from typing import Sequence
 from b3_agent.options.analysis import OptionsAnalysis, OptionsAnalysisEngine
 from b3_agent.providers.brapi.adapter import BrapiAdapter
 from b3_agent.providers.brapi.cache import CachedBrapiAdapter
+from b3_agent.providers.local_market_history import LocalFirstMarketDataAdapter
 from b3_agent.config import settings
 from b3_agent.providers.oplab.options import OplabOptionsAdapter
 from b3_agent.schemas.market import StockMarketData
@@ -27,22 +28,23 @@ class LiveProviderSnapshot:
 class LiveProviderService:
     """Acquire current provider data and normalize it for deterministic engines.
 
-    The service performs no investment recommendation and no LLM reasoning.
-    BRAPI supplies stock history/current-price context while OPLAB supplies the
-    current B3 option chain and quote/Greeks fields available in the response.
+    COTAHIST supplies the locally archived daily history. Cached BRAPI fills
+    uncovered dates and recent updates; OPLAB supplies the current option chain.
+    The service performs no investment recommendation or LLM reasoning.
     """
 
     def __init__(
         self,
         *,
-        market_provider: BrapiAdapter | CachedBrapiAdapter | None = None,
+        market_provider: BrapiAdapter | CachedBrapiAdapter | LocalFirstMarketDataAdapter | None = None,
         options_provider: OplabOptionsAdapter | None = None,
         history_days: int = 120,
     ) -> None:
         if history_days < 1:
             raise ValueError("history_days must be positive")
-        self.market_provider = market_provider or CachedBrapiAdapter(
-            settings.data_dir / "cache" / "brapi_daily"
+        self.market_provider = market_provider or LocalFirstMarketDataAdapter(
+            settings.data_dir / "archive" / "cotahist_raw",
+            settings.data_dir / "cache" / "brapi_daily",
         )
         self.options_provider = options_provider or OplabOptionsAdapter()
         self.history_days = history_days
@@ -77,12 +79,14 @@ class LiveProviderService:
             market_records,
             key=lambda item: item.observation_timestamp,
         )
+        market_sources = tuple(dict.fromkeys(record.source for record in market_records))
+        source_refs = tuple(dict.fromkeys((*market_sources, self.options_provider.name)))
         analysis = OptionsAnalysisEngine().analyze_quotes(
             contracts=contracts,
             quotes=quotes,
             as_of=end,
             current_prices={normalized: latest.close},
-            source_refs=(self.market_provider.name, self.options_provider.name),
+            source_refs=source_refs,
             assumptions={
                 "live_provider_snapshot": True,
                 "market_history_start": start.isoformat(),
@@ -97,7 +101,5 @@ class LiveProviderService:
             option_contracts=contracts,
             option_quotes=quotes,
             options_analysis=analysis,
-            source_refs=tuple(dict.fromkeys(
-                (self.market_provider.name, self.options_provider.name)
-            )),
+            source_refs=source_refs,
         )
