@@ -49,11 +49,18 @@ def _fake_llm():
 def _configure(monkeypatch, vault):
     monkeypatch.setattr(
         "b3_agent.config.settings",
-        replace(settings, obsidian_vault=vault, llm_enabled=True, llm_model="test-model"),
+        replace(
+            settings,
+            obsidian_vault=vault,
+            llm_enabled=True,
+            llm_provider="openclaw",
+            openclaw_agent="b3-test",
+            openclaw_model="openai/test-model",
+        ),
     )
     import b3_agent.orchestration.runtime as runtime
     monkeypatch.setattr(runtime, "settings", __import__("b3_agent.config", fromlist=["settings"]).settings)
-    monkeypatch.setattr(runtime, "OpenAIResponsesClient", lambda model: _fake_llm())
+    monkeypatch.setattr(runtime, "OpenClawStructuredClient", lambda **kwargs: _fake_llm())
 
 
 def test_default_runtime_composes_orchestrator_with_langgraph(monkeypatch, tmp_path: Path):
