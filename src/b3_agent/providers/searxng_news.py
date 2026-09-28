@@ -49,6 +49,8 @@ class SearxngNewsAdapter:
                 "safesearch": 1,
                 "categories": "news",
                 "time_range": "day",
+                "categories": "news",
+                "time_range": "day",
             }
         )
         request = urllib.request.Request(
