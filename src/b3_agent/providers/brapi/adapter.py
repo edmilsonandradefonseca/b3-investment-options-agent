@@ -56,6 +56,7 @@ class BrapiAdapter:
             timeout_env="B3_BRAPI_TIMEOUT_SECONDS",
             default_timeout=20.0,
             retry_http_codes={404, 408, 425, 429, 500, 502, 503, 504},
+            opener=urllib.request.urlopen,
         )
 
         results = payload.get("results", [])
