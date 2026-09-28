@@ -45,7 +45,19 @@ class OplabOptionsAdapter:
     def get_options(self, ticker: str, as_of: datetime) -> list[OptionContract]:
         """Retrieve the current option chain for an underlying."""
         ticker = ticker.upper().strip()
+        return self._parse_options(ticker, self._get_payload(ticker))
+
+    def get_snapshot(self, ticker: str, as_of: datetime) -> tuple[list[OptionContract], list[OptionQuote]]:
+        """Retrieve contracts and quotes from one consistent provider response."""
+        ticker = ticker.upper().strip()
         payload = self._get_payload(ticker)
+        ingested_at = datetime.now(timezone.utc)
+        return (
+            self._parse_options(ticker, payload),
+            self._parse_quotes(ticker, as_of, payload, ingested_at),
+        )
+
+    def _parse_options(self, ticker: str, payload: list[dict]) -> list[OptionContract]:
         records: list[OptionContract] = []
 
         for item in payload:
@@ -91,6 +103,11 @@ class OplabOptionsAdapter:
         ticker = ticker.upper().strip()
         payload = self._get_payload(ticker)
         ingested_at = datetime.now(timezone.utc)
+        return self._parse_quotes(ticker, as_of, payload, ingested_at)
+
+    def _parse_quotes(
+        self, ticker: str, as_of: datetime, payload: list[dict], ingested_at: datetime
+    ) -> list[OptionQuote]:
         quotes: list[OptionQuote] = []
 
         for item in payload:

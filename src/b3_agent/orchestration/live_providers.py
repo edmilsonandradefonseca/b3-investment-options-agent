@@ -59,10 +59,15 @@ class LiveProviderService:
         if not market_records:
             raise ValueError(f"no market data returned for {normalized}")
 
-        contracts = tuple(self.options_provider.get_options(normalized, effective_as_of))
-        quotes = tuple(
-            self.options_provider.get_option_quotes(normalized, effective_as_of)
-        )
+        if isinstance(self.options_provider, OplabOptionsAdapter):
+            option_contracts, option_quotes = self.options_provider.get_snapshot(
+                normalized, effective_as_of
+            )
+        else:
+            option_contracts = self.options_provider.get_options(normalized, effective_as_of)
+            option_quotes = self.options_provider.get_option_quotes(normalized, effective_as_of)
+        contracts = tuple(option_contracts)
+        quotes = tuple(option_quotes)
 
         latest = max(
             market_records,

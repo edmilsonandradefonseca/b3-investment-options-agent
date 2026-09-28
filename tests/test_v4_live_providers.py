@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone, date
 
 from b3_agent.orchestration.live_providers import LiveProviderService
+from b3_agent.providers.oplab.options import OplabOptionsAdapter
 from b3_agent.schemas.market import StockMarketData
 from b3_agent.schemas.option import OptionContract, OptionQuote
 
@@ -109,3 +110,20 @@ def test_live_provider_service_builds_deterministic_options_analysis():
     assert len(result.options_analysis.calls) == 1
     assert result.options_analysis.calls[0].current_price == 29.0
     assert result.options_analysis.assumptions["live_provider_snapshot"] is True
+
+
+def test_live_provider_fetches_oplab_chain_once(monkeypatch):
+    as_of = datetime(2026, 9, 27, 16, 0, tzinfo=timezone.utc)
+    calls = []
+    payload = [{
+        "symbol": "PETRJ320", "type": "CALL", "strike": 32.0,
+        "due_date": "2026-10-16", "bid": 0.8, "ask": 1.0, "last": 0.9,
+    }]
+    adapter = OplabOptionsAdapter()
+    monkeypatch.setattr(adapter, "_get_payload", lambda ticker: calls.append(ticker) or payload)
+    result = LiveProviderService(
+        market_provider=FakeMarketProvider(), options_provider=adapter
+    ).load("PETR4", as_of=as_of)
+    assert calls == ["PETR4"]
+    assert result.option_contracts[0].option_id == result.option_quotes[0].option_id
+    assert len(result.options_analysis.calls) == 1
