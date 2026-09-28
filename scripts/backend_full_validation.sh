@@ -32,6 +32,19 @@ run_gate() {
   fi
 }
 
+pytest_clean_gate() (
+  # Unit/regression tests must validate code defaults, not production env overrides.
+  while IFS='=' read -r name _; do
+    case "$name" in
+      B3_AGENT_*|B3_OPENCLAW_*|B3_ALLOW_OPENAI_API_FALLBACK)
+        unset "$name"
+        ;;
+    esac
+  done < <(env)
+
+  .venv/bin/python -m pytest -q
+)
+
 load_env() {
   set -a
   [[ -r /etc/b3-runtime.env ]] && source /etc/b3-runtime.env
@@ -207,7 +220,7 @@ log_gate() {
     echo "$bad"
     return 1
   fi
-  echo "No 429/quota/Traceback/ERROR in b3-runtime during validation."
+  echo "No 429/quota/Traceback/ERROR in b3-runtime service calls during validation."
 }
 
 section "B3 BACKEND FULL VALIDATION"
@@ -217,14 +230,19 @@ echo "Branch: $(git branch --show-current)"
 echo "Commit: $(git log -1 --oneline)"
 echo "Log: $LOG"
 
-load_env
 VALIDATION_STARTED_AT="$(date '+%Y-%m-%d %H:%M:%S')"
 
-run_gate "GATE 1 - FULL PYTEST REGRESSION"   .venv/bin/python -m pytest -q
+run_gate "GATE 1 - FULL PYTEST REGRESSION" \
+  pytest_clean_gate
 
-run_gate "GATE 2 - REAL SHARED BACKEND ACCEPTANCE"   .venv/bin/python scripts/backend_acceptance.py
+# Production/runtime values are loaded only after code-default regression passes.
+load_env
 
-run_gate "GATE 3 - REAL UC01..UC12 ACCEPTANCE"   .venv/bin/python scripts/uc_real_acceptance.py
+run_gate "GATE 2 - REAL SHARED BACKEND ACCEPTANCE" \
+  .venv/bin/python scripts/backend_acceptance.py
+
+run_gate "GATE 3 - REAL UC01..UC12 ACCEPTANCE" \
+  uc_acceptance_gate
 
 run_gate "GATE 4 - FAST ROUTER HTTP E2E"   http_assertions
 
