@@ -9,6 +9,7 @@ from b3_agent.config import settings
 from b3_agent.orchestration.contracts import OrchestratorResponse
 from b3_agent.orchestration.live_providers import LiveProviderService
 from b3_agent.portfolio.context import PortfolioIntelligenceEngine
+from b3_agent.portfolio.pnl import PnlEngine
 from b3_agent.portfolio.snapshot import load_active_snapshots
 from b3_agent.routing import FastRouter, RouteDecision, RouteTarget
 from b3_agent.scenario import ScenarioStressEngine
@@ -79,6 +80,7 @@ class FastRouteDispatcher:
     def _portfolio_snapshot(self, decision: RouteDecision) -> OrchestratorResponse:
         portfolio = self._portfolio()
         intelligence = PortfolioIntelligenceEngine().build(portfolio)
+        pnl_rows = self._position_pnl(portfolio)
         return self._response(
             decision,
             status="COMPLETED",
@@ -87,6 +89,14 @@ class FastRouteDispatcher:
                 "quality_status": portfolio.quality_status,
                 "portfolio_context": asdict(portfolio),
                 "portfolio_intelligence": asdict(intelligence),
+                "position_pnl": pnl_rows,
+                "limitations": (
+                    []
+                    if len(pnl_rows) == len(portfolio.positions)
+                    else [
+                        "P&L is returned only for positions with both average_cost and market_price; missing values are not inferred."
+                    ]
+                ),
             },
             sources=portfolio.source_refs,
         )
@@ -257,6 +267,31 @@ class FastRouteDispatcher:
             },
             sources=tuple(dict.fromkeys((*portfolio.source_refs, *stress.source_refs))),
         )
+
+    @staticmethod
+    def _position_pnl(portfolio: PortfolioContext) -> list[dict[str, Any]]:
+        engine = PnlEngine()
+        rows: list[dict[str, Any]] = []
+        for position in portfolio.positions:
+            if position.average_cost is None or position.market_price is None:
+                continue
+            if position.instrument_type.upper() == "OPTION":
+                pnl = engine.option_from_quotes(
+                    position_id=position.position_id,
+                    quantity=position.quantity,
+                    opening_price=position.average_cost,
+                    current_price=position.market_price,
+                    contract_multiplier=position.contract_multiplier,
+                )
+            else:
+                pnl = engine.stock_unrealized(
+                    position_id=position.position_id,
+                    quantity=position.quantity,
+                    average_cost=position.average_cost,
+                    market_price=position.market_price,
+                )
+            rows.append(asdict(pnl))
+        return rows
 
     @staticmethod
     def _shock_map(value: Any) -> dict[str, float]:
