@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from dataclasses import replace
+from datetime import date, datetime, timezone
 from pathlib import Path
 import zipfile
 
@@ -50,6 +51,7 @@ def test_parser_reads_fixed_width_raw_prices_and_quotation_factor():
     assert record.adjusted_close is None
     assert record.quality_flags == ("UNADJUSTED", "AVAILABILITY_ESTIMATED")
     assert record.available_timestamp > record.observation_timestamp
+    assert record.observation_timestamp.date() == date(2026, 9, 25)
     assert parse_cotahist_line(quote(market="070"), {"PETR4"}, now) is None
     assert parse_cotahist_line(quote(), {"VALE3"}, now) is None
 
@@ -66,6 +68,27 @@ def test_zip_import_is_offline_dry_run_then_idempotent(tmp_path):
     assert len(rows) == 1
     assert rows[0].close == 30.0
     assert rows[0].source == "b3_cotahist"
+    assert rows[0].observation_timestamp.date() == date(2026, 9, 25)
+
+
+def test_reimport_replaces_legacy_utc_shifted_record(tmp_path):
+    source = tmp_path / "COTAHIST_A2026.ZIP"
+    annual_zip(source, quote())
+    archive = tmp_path / "archive"
+    previous = parse_cotahist_line(
+        quote(), {"PETR4"}, datetime(2026, 9, 28, tzinfo=timezone.utc)
+    )
+    # Recreate the previous importer behavior: 23:59 São Paulo became Sep 26 UTC.
+    legacy = replace(
+        previous,
+        observation_timestamp=datetime(2026, 9, 26, 2, 59, 59, tzinfo=timezone.utc),
+    )
+    MarketDataRepository(archive).write([legacy])
+
+    import_cotahist_zip(source, {"PETR4"}, archive, dry_run=False)
+    rows = MarketDataRepository(archive).read("PETR4")
+    assert len(rows) == 1
+    assert rows[0].observation_timestamp.date() == date(2026, 9, 25)
 
 
 def test_import_rejects_incomplete_archive(tmp_path):
