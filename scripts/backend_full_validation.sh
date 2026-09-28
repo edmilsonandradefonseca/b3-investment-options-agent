@@ -227,8 +227,23 @@ service_checks() {
       pass "$timer enabled"
       systemctl list-timers "$timer" --no-pager || true
     else
-      warn "$timer is not enabled"
+      fail "$timer is not enabled"
     fi
+  done
+
+  for service in b3-macro-refresh.service b3-nightly-intelligence.service; do
+    unit="$(systemctl cat "$service" --no-pager 2>/dev/null || true)"
+    if [[ -z "$unit" ]]; then
+      fail "$service is not installed"
+      continue
+    fi
+    for env_file in /etc/b3-runtime.env /opt/b3-runtime/b3.env; do
+      if grep -Fq "EnvironmentFile=-$env_file" <<<"$unit"; then
+        pass "$service loads $env_file"
+      else
+        fail "$service does not load canonical runtime env $env_file"
+      fi
+    done
   done
 }
 
