@@ -40,6 +40,7 @@ class OplabOptionsAdapter:
             timeout_env="B3_OPLAB_TIMEOUT_SECONDS",
             default_timeout=30.0,
             retry_http_codes={408, 425, 429, 500, 502, 503, 504},
+            opener=urllib.request.urlopen,
         )
 
         if not isinstance(payload, list):
