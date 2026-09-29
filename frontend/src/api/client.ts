@@ -1,6 +1,7 @@
 import type {
   ApiErrorPayload,
   CapitalProfile,
+  BrokerageLedger,
   PortfolioSnapshot,
   BrokerageBatchImportResponse,
   BrokerageNoteImportResponse,
@@ -89,6 +90,7 @@ async function upload<T>(path: string, file: File): Promise<T> {
 export const b3Api = {
   health: () => requestJson<HealthResponse>("/health"),
   portfolio: () => requestJson<PortfolioSnapshot>("/portfolio/current"),
+  optionLedger: () => requestJson<BrokerageLedger>("/options/ledger"),
   capital: () => requestJson<CapitalProfile>("/capital-profile"),
   saveCapital: (available_capital: number, minimum_reserve: number) => requestJson<CapitalProfile>("/capital-profile", {
     method: "POST", headers: { "Content-Type": "application/json" },
