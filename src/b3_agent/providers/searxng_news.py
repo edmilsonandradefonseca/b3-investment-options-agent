@@ -107,7 +107,11 @@ class SearxngNewsAdapter:
                 fallback_results = _results(fallback)
                 all_unresponsive.extend(_unresponsive_engines(fallback))
 
-        merged = _deduplicate_results([*primary_results, *fallback_results])
+        if fallback_used and primary_results and not primary_has_dated_evidence:
+            merge_order = [*fallback_results, *primary_results]
+        else:
+            merge_order = [*primary_results, *fallback_results]
+        merged = _deduplicate_results(merge_order)
         records = _normalize_results(
             merged[:limit],
             ticker=normalized,
