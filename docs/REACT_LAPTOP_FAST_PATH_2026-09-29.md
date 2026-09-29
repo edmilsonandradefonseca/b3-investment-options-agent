@@ -13,14 +13,20 @@ Branch: `feat/react-functional-v1-laptop`. Base funcional: `docs/FRONTEND_FUNCTI
 
 ## 1. Executar o frontend no Windows
 
-No PowerShell, com Node.js instalado:
+Como o repositório já existe em `C:\\Users\\Edmilson\\Projects\\b3-investment-options-agent`, **não faça outro clone**. No PowerShell:
 
 ```powershell
-git clone -b feat/react-functional-v1-laptop https://github.com/edmilsonandradefonseca/b3-investment-options-agent.git
-cd b3-investment-options-agent/frontend
+Set-Location 'C:\\Users\\Edmilson\\Projects\\b3-investment-options-agent'
+git status --short
+git fetch origin
+git switch feat/react-functional-v1-laptop
+git pull --ff-only origin feat/react-functional-v1-laptop
+Set-Location .\\frontend
 npm ci
 npm run dev
 ```
+
+Se `git status --short` mostrar alterações locais, preserve-as antes de trocar de branch. Se `git switch` falhar porque a branch local não existe, execute `git switch --track origin/feat/react-functional-v1-laptop` e continue. `npm ci` e `npm run dev` devem ser executados em `frontend`, onde estão `package.json` e `package-lock.json`.
 
 Abra `http://localhost:5173`. Em **Configurar backend**, informe `http://IP_DO_UBUNTU:8000` e teste a conexão. O React é servido no Windows; todas as consultas financeiras são enviadas à API do Ubuntu.
 
