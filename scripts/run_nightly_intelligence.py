@@ -25,11 +25,12 @@ def main() -> int:
         "completed": result["completed"],
         "skipped": result["skipped"],
         "deferred": result["deferred"],
+        "coverage_insufficient": result["coverage_insufficient"],
         "failed": result["failed"],
         "deepseek_calls": result["deepseek_calls"],
         "as_of": result["as_of"],
     }, ensure_ascii=False))
-    return 0
+    return 0 if not result["failed"] and not result["coverage_insufficient"] else 2
 
 
 if __name__ == "__main__":
