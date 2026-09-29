@@ -1,4 +1,5 @@
 from datetime import date
+from dataclasses import replace
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -10,12 +11,14 @@ client = TestClient(server.app)
 
 
 def test_capital_profile_persists_and_validates_reserve(tmp_path, monkeypatch):
-    monkeypatch.setattr(server.settings, "data_dir", tmp_path)
+    monkeypatch.setattr(server, "settings", replace(server.settings, data_dir=tmp_path))
     assert client.get("/capital-profile").json()["status"] == "NOT_AVAILABLE"
     assert client.post("/capital-profile", json={"available_capital": 1000, "minimum_reserve": 1200}).status_code == 400
     response = client.post("/capital-profile", json={"available_capital": 1000, "minimum_reserve": 200})
     assert response.status_code == 200
     assert client.get("/capital-profile").json()["usable_capital"] == 800
+    assert (tmp_path / "b3_agent.db").exists()
+    assert not (tmp_path / "capital_profile.sqlite3").exists()
 
 
 def test_portfolio_read_preserves_canonical_values(tmp_path, monkeypatch):
@@ -31,3 +34,4 @@ def test_portfolio_read_preserves_canonical_values(tmp_path, monkeypatch):
     assert response.status_code == 200
     assert response.json()["positions"][0]["quantity"] == -7000
     assert response.json()["positions"][0]["market_value"] == -105000
+    assert response.json()["intelligence"]["as_of"] == "2026-09-29"
