@@ -32,14 +32,14 @@ Abra `http://localhost:5173`. Em **Configurar backend**, informe `http://IP_DO_U
 
 ## 2. Atualizar somente a API no Ubuntu (uma vez)
 
-Faça esta etapa para habilitar a leitura do snapshot BTG e a persistência do capital. Confirme primeiro que a árvore em `/opt/b3-investment-options-agent` está limpa (`git status --short`); preserve alterações locais antes de trocar de branch.
+Faça esta etapa para habilitar a leitura do snapshot BTG, a persistência do capital e CORS na porta 5174. A branch de API `fix/react-portfolio-api` parte da branch de runtime `fix/b3-openclaw-runtime` e preserva seu roteamento recente. Confirme primeiro que a árvore em `/opt/b3-investment-options-agent` está limpa (`git status --short`); preserve alterações locais antes de trocar de branch.
 
 ```bash
 cd /opt/b3-investment-options-agent
 git status --short
 git fetch origin
-git switch feat/react-functional-v1-laptop
-git pull --ff-only origin feat/react-functional-v1-laptop
+git switch fix/react-portfolio-api
+git pull --ff-only origin fix/react-portfolio-api
 ./.venv/bin/python -m pip install -e .
 sudo systemctl restart b3-runtime.service
 curl -fsS http://127.0.0.1:8000/health
