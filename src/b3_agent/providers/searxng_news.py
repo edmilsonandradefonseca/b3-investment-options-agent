@@ -12,11 +12,11 @@ from b3_agent.schemas.news import NewsEvidence
 
 
 _RELATIVE_PT = re.compile(
-    r"^h[áa]\\s+(?P<value>\\d+)\\s+(?P<unit>minuto|minutos|hora|horas|dia|dias)$",
+    r"^h[áa]\s+(?P<value>\d+)\s+(?P<unit>minuto|minutos|hora|horas|dia|dias)$",
     re.IGNORECASE,
 )
 _RELATIVE_EN = re.compile(
-    r"^(?P<value>\\d+)\\s+(?P<unit>minute|minutes|hour|hours|day|days)\\s+ago$",
+    r"^(?P<value>\d+)\s+(?P<unit>minute|minutes|hour|hours|day|days)\s+ago$",
     re.IGNORECASE,
 )
 
