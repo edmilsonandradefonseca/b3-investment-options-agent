@@ -80,12 +80,21 @@ class SearxngNewsAdapter:
         fallback_used = False
         fallback_strategy: str | None = None
         fallback_results: list[dict] = []
+        primary_normalized = _normalize_results(
+            primary_results[:limit],
+            ticker=normalized,
+            ingested_at=ingested_at,
+            source=self.name,
+        )
+        primary_has_dated_evidence = any(
+            record.published_at is not None for record in primary_normalized
+        )
 
         # V4.2 fallback policy:
         # 1) NEWS without time_range to retain all news-capable engines.
-        # 2) GENERAL + day when NEWS is empty.
+        # 2) GENERAL + day when NEWS is empty or has no parseable dates.
         # 3) GENERAL without time_range only if the bounded fallback is also empty.
-        if not primary_results:
+        if not primary_results or not primary_has_dated_evidence:
             fallback_used = True
             fallback_strategy = "general_day"
             fallback = self._request(q=q, category="general", time_range="day")
