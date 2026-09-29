@@ -93,6 +93,7 @@ export type PortfolioPosition = {
 export type PortfolioSnapshot = {
   status: string; as_of: string | null; updated_at: string | null;
   source_refs?: string[]; positions: PortfolioPosition[];
+  intelligence?: { as_of: string; capital_risk: { assignment_capital: number; cash_after_assignment: number | null; fully_cash_secured: boolean | null; uncovered_call_shares: number } };
 };
 export type CapitalProfile = {
   status: string; account: string; available_capital: number | null;
