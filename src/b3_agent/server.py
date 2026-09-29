@@ -277,7 +277,7 @@ def save_capital_profile(request: CapitalProfileRequest) -> dict[str, Any]:
     if request.minimum_reserve > request.available_capital:
         raise HTTPException(status_code=400, detail="reserva mínima excede capital disponível")
     with _capital_connection() as connection:
-        connection.execute("INSERT INTO capital_profile VALUES (?, ?, ?, ?) ON CONFLICT(account) DO UPDATE SET available=excluded.available, reserve=excluded.reserve, updated_at=excluded.updated_at", ("BTG", request.available_capital, request.minimum_reserve, datetime.now(timezone.utc).isoformat()))
+        connection.execute("INSERT INTO capital_profile (account, available, reserve, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(account) DO UPDATE SET available=excluded.available, reserve=excluded.reserve, updated_at=excluded.updated_at", ("BTG", request.available_capital, request.minimum_reserve, datetime.now(timezone.utc).isoformat()))
     return get_capital_profile()
 
 
