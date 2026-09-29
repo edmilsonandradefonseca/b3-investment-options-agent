@@ -2,6 +2,7 @@ import type {
   ApiErrorPayload,
   CapitalProfile,
   BrokerageLedger,
+  PilotAnalysis,
   PortfolioSnapshot,
   BrokerageBatchImportResponse,
   BrokerageNoteImportResponse,
@@ -91,6 +92,7 @@ export const b3Api = {
   health: () => requestJson<HealthResponse>("/health"),
   portfolio: () => requestJson<PortfolioSnapshot>("/portfolio/current"),
   optionLedger: () => requestJson<BrokerageLedger>("/options/ledger"),
+  pilotAnalysis: (ticker: string) => requestJson<PilotAnalysis>(`/intelligence/pilot/${encodeURIComponent(ticker.trim().toUpperCase())}`),
   capital: () => requestJson<CapitalProfile>("/capital-profile"),
   saveCapital: (available_capital: number, minimum_reserve: number) => requestJson<CapitalProfile>("/capital-profile", {
     method: "POST", headers: { "Content-Type": "application/json" },
