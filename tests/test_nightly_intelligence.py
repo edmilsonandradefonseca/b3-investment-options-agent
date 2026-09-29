@@ -90,3 +90,52 @@ def test_nightly_job_defers_after_deepseek_budget(tmp_path):
     assert result["deepseek_calls"] == 1
     assert job.llm.calls == 1
     assert result["results"][1]["status"] == "deferred_deepseek_budget"
+
+
+class FakeEmptyNews:
+    last_diagnostics = SimpleNamespace(
+        unresponsive_engines=(("bing news", "parsing error"),),
+        fallback_used=True,
+        fallback_strategy="general_unbounded",
+        primary_raw_result_count=0,
+        fallback_raw_result_count=0,
+    )
+
+    def search(self, ticker, *, query=None, limit=8):
+        return ()
+
+
+def test_nightly_job_distinguishes_insufficient_coverage_from_no_material(tmp_path):
+    job = NightlyIntelligenceJob(output_dir=tmp_path)
+    job.news = FakeEmptyNews()
+    job.llm = FakeLLM()
+
+    result = job.run(tickers=["WEGE3"])
+
+    assert result["completed"] == 0
+    assert result["skipped"] == 0
+    assert result["coverage_insufficient"] == 1
+    assert job.llm.calls == 0
+
+    item = result["results"][0]
+    assert item["status"] == "coverage_insufficient"
+    assert item["acquisition_status"] == "DEGRADED"
+    assert item["evidence_conclusion"] == "COVERAGE_INSUFFICIENT"
+    assert item["engine_errors"] == [
+        {"engine": "bing news", "reason": "parsing error"}
+    ]
+
+
+def test_nightly_job_persists_coverage_metadata_for_no_material_result(tmp_path):
+    job = NightlyIntelligenceJob(output_dir=tmp_path)
+    job.news = FakeNews(material=False)
+    job.llm = FakeLLM()
+
+    result = job.run(tickers=["PETR4"])
+
+    item = result["results"][0]
+    assert item["status"] == "skipped_no_material_events"
+    assert item["acquisition_status"] == "SUCCESS"
+    assert item["evidence_conclusion"] == "NO_MATERIAL_FOUND"
+    assert item["dated_result_count"] == 1
+    assert item["dated_recent_count"] == 1
