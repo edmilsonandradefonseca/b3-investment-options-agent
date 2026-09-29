@@ -3,6 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from dataclasses import asdict
 import hashlib
+import json
 import os
 import sqlite3
 from datetime import datetime, timezone
@@ -562,6 +563,24 @@ def research_news(ticker: str, limit: int = 20) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except (RuntimeError, OSError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/intelligence/nightly/{ticker}")
+def nightly_ticker_intelligence(ticker: str) -> dict[str, Any]:
+    """Read the local DeepSeek research artifact with its evidence and timestamp."""
+    normalized = ticker.strip().upper()
+    if not normalized.isalnum() or not 5 <= len(normalized) <= 12:
+        raise HTTPException(status_code=400, detail="invalid B3 ticker")
+    path = settings.data_dir / "derived" / "nightly_intelligence" / f"{normalized}.json"
+    if not path.is_file():
+        return {"status": "NOT_AVAILABLE", "ticker": normalized}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail=f"nightly artifact unavailable: {exc}") from exc
+    if payload.get("ticker") != normalized or payload.get("status") != "completed":
+        raise HTTPException(status_code=503, detail="nightly artifact has inconsistent identity or status")
+    return payload
 
 
 @app.get("/version")
