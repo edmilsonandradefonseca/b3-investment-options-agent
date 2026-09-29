@@ -15,7 +15,7 @@ fi
 
 sudo tee /etc/systemd/system/b3-nightly-intelligence.service >/dev/null <<EOF
 [Unit]
-Description=B3 V4.1 nightly intelligence
+Description=B3 V4.2 nightly intelligence
 After=network-online.target ollama.service
 Wants=network-online.target
 
