@@ -83,6 +83,22 @@ export type BrokerageNoteImportResponse = {
 
 export type BrokerageBatchImportResponse = Record<string, unknown>;
 
+export type PortfolioPosition = {
+  position_id: string; ticker: string; instrument_type: "STOCK" | "OPTION";
+  quantity: number; average_cost: number | null; market_price: number | null;
+  market_value: number | null; underlying_ticker: string | null;
+  option_type: string | null; strike: number | null; expiration_date: string | null;
+  source_ref: string;
+};
+export type PortfolioSnapshot = {
+  status: string; as_of: string | null; updated_at: string | null;
+  source_refs?: string[]; positions: PortfolioPosition[];
+};
+export type CapitalProfile = {
+  status: string; account: string; available_capital: number | null;
+  minimum_reserve: number | null; usable_capital: number | null; updated_at: string | null;
+};
+
 export type DataRecord = {
   instrument_id: string;
   ticker: string;

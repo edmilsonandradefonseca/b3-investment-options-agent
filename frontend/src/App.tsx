@@ -1,319 +1,37 @@
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useState } from 'react';
+import { b3Api, getApiBaseUrl, setApiBaseUrl } from './api/client';
+import type { CapitalProfile, PortfolioSnapshot, OrchestrateResponse, TransactionResponse, LiveAnalysisResponse, ResearchNewsResponse } from './api/contracts';
 
-import { ApiError, b3Api, getApiBaseUrl, setApiBaseUrl } from "./api/client";
-import type { OrchestrateResponse } from "./api/contracts";
-import {
-  PAGE_DEFINITIONS,
-  getPageDefinition,
-  hashForPage,
-  pageFromHash,
-  type PageId,
-  type PageTab,
-} from "./app/pages";
-import { ResultSurface } from "./components/ResultSurface";
-
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "erro desconhecido";
+type Page = 'Portfolio'|'Options'|'Opportunities'|'Strategy Lab'|'Market Intelligence';
+const pages: Page[] = ['Portfolio','Options','Opportunities','Strategy Lab','Market Intelligence'];
+const brl = (n?: number|null) => n == null ? 'Indisponível' : new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n);
+const when = (s?:string|null) => s ? new Date(s).toLocaleString('pt-BR') : 'Indisponível';
+const err = (e:unknown) => e instanceof Error ? e.message : String(e);
+function Output({data}:{data:OrchestrateResponse|null}) { return data ? <div className="output"><b>{data.status}</b>{data.error && <p>{data.error}</p>}{Object.entries(data.result||{}).map(([k,v])=><details key={k} open><summary>{k.replaceAll('_',' ')}</summary><pre>{typeof v==='string'?v:JSON.stringify(v,null,2)}</pre></details>)}{data.sources?.length>0 && <details><summary>Fontes ({data.sources.length})</summary>{data.sources.map((s,i)=><p key={i}>{s}</p>)}</details>}</div> : <p className="muted">Consulte o backend para obter análise canônica.</p>; }
+export default function App(){
+ const [page,setPage]=useState<Page>('Portfolio'),[online,setOnline]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
+ const [portfolio,setPortfolio]=useState<PortfolioSnapshot|null>(null),[capital,setCapital]=useState<CapitalProfile|null>(null),[tx,setTx]=useState<TransactionResponse[]>([]);
+ const [url,setUrl]=useState(getApiBaseUrl()),[settings,setSettings]=useState(false),[capitalEdit,setCapitalEdit]=useState(false),[available,setAvailable]=useState(''),[reserve,setReserve]=useState('');
+ const [ticker,setTicker]=useState(''),[asset,setAsset]=useState(''),[filter,setFilter]=useState(''),[analysis,setAnalysis]=useState<OrchestrateResponse|null>(null);
+ const [live,setLive]=useState<LiveAnalysisResponse|null>(null),[news,setNews]=useState<ResearchNewsResponse|null>(null),[horizon,setHorizon]=useState('1M'),[assetView,setAssetView]=useState(false);
+ const [question,setQuestion]=useState(''),[chat,setChat]=useState<{q:string;r:OrchestrateResponse}[]>([]),[batch,setBatch]=useState<string>('');
+ const [left,setLeft]=useState(''),[right,setRight]=useState(''),[strategyA,setStrategyA]=useState('Comprar ação'),[strategyB,setStrategyB]=useState('Vender PUT'),[amount,setAmount]=useState('');
+ async function load(){setBusy(true);try{await b3Api.health();setOnline(true);const [p,c,t]=await Promise.allSettled([b3Api.portfolio(),b3Api.capital(),b3Api.listTransactions(500)]);if(p.status==='fulfilled')setPortfolio(p.value);if(c.status==='fulfilled'){setCapital(c.value);setAvailable(String(c.value.available_capital??''));setReserve(String(c.value.minimum_reserve??''));}if(t.status==='fulfilled')setTx(t.value);setNotice([p,c,t].some(x=>x.status==='rejected')?'Alguns dados não estão disponíveis nesta versão do backend.':'');}catch(e){setOnline(false);setNotice(`Backend indisponível: ${err(e)}`)}finally{setBusy(false)}}
+ useEffect(()=>{void load()},[]);
+ async function run(task:string,conversation=false){setBusy(true);try{const r=await b3Api.orchestrate({task,ticker:ticker||null,context:{workspace:page,selected_ticker:ticker||null,option_filter:filter||null,asset_view:assetView,horizon}});if(conversation){setChat(v=>[...v,{q:task,r}]);setQuestion('')}else setAnalysis(r)}catch(e){setNotice(`Análise: ${err(e)}`)}finally{setBusy(false)}}
+ async function importPortfolio(e:ChangeEvent<HTMLInputElement>){const f=e.target.files?.[0];e.target.value='';if(!f)return;setBusy(true);try{await b3Api.importPortfolio(f);await load();setNotice('Carteira validada e atualizada.')}catch(x){setNotice(`Importação recusada: ${err(x)}`)}finally{setBusy(false)}}
+ async function importNotes(e:ChangeEvent<HTMLInputElement>){const files=[...(e.target.files||[])];e.target.value='';if(!files.length)return;if(files.length>100||files.some(f=>f.name.endsWith('.zip'))&&files.length!==1){setNotice('Selecione até 100 PDFs ou um ZIP.');return}setBusy(true);try{if(files[0].name.toLowerCase().endsWith('.zip')){setBatch(JSON.stringify(await b3Api.importBrokerageBatch(files[0]),null,2))}else{const results=[];for(const f of files){try{const r=await b3Api.importBrokerageNote(f);results.push({file:f.name,status:'processado',inseridas:r.inserted_count})}catch(x){results.push({file:f.name,status:'erro',detalhe:err(x)})}}setBatch(JSON.stringify(results,null,2))}setNotice('Lote concluído. Confira o resultado por arquivo.');await load()}catch(x){setNotice(`Lote: ${err(x)}`)}finally{setBusy(false)}}
+ async function inspect(t:string){const v=t.trim().toUpperCase();if(!/^[A-Z0-9]{4,12}$/.test(v)){setNotice('Informe um ticker B3 válido.');return}setTicker(v);setAsset(v);setLive(null);setNews(null);setBusy(true);const [a,b]=await Promise.allSettled([b3Api.liveAnalysis(v),b3Api.researchNews(v)]);if(a.status==='fulfilled')setLive(a.value);else setNotice(`Cotação indisponível: ${err(a.reason)}`);if(b.status==='fulfilled')setNews(b.value);setBusy(false)}
+ const stocks=(portfolio?.positions||[]).filter(p=>p.instrument_type==='STOCK').sort((a,b)=>Math.abs(b.market_value||0)-Math.abs(a.market_value||0));const options=(portfolio?.positions||[]).filter(p=>p.instrument_type==='OPTION');
+ const optionTable=(rows:PortfolioSnapshot['positions'])=><section className="panel"><h2>Opções abertas</h2><div className="table-wrap"><table><thead><tr>{['Ativo','Contrato','Tipo','Direção','Qtd.','Strike','Vencimento','Preço atual','Valor BTG','Prêmio / P&L'].map(x=><th key={x}>{x}</th>)}</tr></thead><tbody>{rows.map(p=><tr key={p.position_id} onClick={()=>setTicker(p.ticker)}><td>{p.underlying_ticker||'—'}</td><td>{p.ticker}</td><td>{p.option_type}</td><td>{p.quantity<0?'Vendida':'Comprada'}</td><td>{p.quantity}</td><td>{brl(p.strike)}</td><td>{p.expiration_date||'—'}</td><td>{brl(p.market_price)}</td><td>{brl(p.market_value)}</td><td>Indisponível</td></tr>)}</tbody></table></div>{!rows.length&&<p className="muted">Nenhuma opção aberta no snapshot BTG.</p>}</section>;
+ return <div className="app-shell"><header className="topbar"><div className="brand"><span className="brand-mark">▮▮▮</span><div><strong>B3 Investment Copilot</strong><small>Carteira · Opções · Inteligência</small></div></div><button className="backend-button" onClick={()=>setSettings(true)}><span className={online?'online-dot':'offline-dot'}>●</span> {online?'Conectado':'Offline'} · {getApiBaseUrl()}</button></header><div className="body"><aside className="sidebar"><nav>{pages.map((p,i)=><button key={p} className={`nav-item ${page===p?'active':''}`} onClick={()=>{setPage(p);setAnalysis(null)}}><span className="nav-icon">{['◫','◈','◎','⇄','◌'][i]}</span><strong>{p}</strong></button>)}</nav><section className="connections"><h3>Dados</h3><label className="load">{portfolio?.updated_at?'Atualizar carteira BTG':'Carregar carteira BTG'}<input hidden type="file" accept=".xlsx,.xlsm" onChange={importPortfolio}/></label><label className="load secondary">Carregar notas PDF / ZIP<input hidden type="file" accept=".pdf,.zip" multiple onChange={importNotes}/></label><button className="load secondary" onClick={()=>setCapitalEdit(true)}>Capital disponível</button><button className="load secondary" onClick={()=>setSettings(true)}>Configurar backend</button><small>Carteira: {when(portfolio?.updated_at)}</small>{batch&&<details><summary>Resultado das notas</summary><pre>{batch}</pre></details>}</section></aside><main className="workspace"><div className="workspace-head"><div><h1>{page}</h1><p>{page==='Portfolio'?`Snapshot BTG: ${portfolio?.as_of||'Indisponível'}`:'Fatos canônicos · decisão humana'}</p></div><button className="refresh" disabled={busy} onClick={()=>{void load();if(page!=='Portfolio')void run(`Atualize ${page} com fatos, datas e fontes.`)}}>{busy?'Carregando…':'Atualizar'}</button></div>{notice&&<div className="state-banner limited" role="status">{notice}</div>}
+ {page==='Portfolio'&&<><div className="cards"><div className="metric"><span>Capital utilizável</span><strong>{brl(capital?.usable_capital)}</strong><small>Reserva: {brl(capital?.minimum_reserve)}</small></div><div className="metric"><span>Valor das ações</span><strong>{stocks.length?brl(stocks.reduce((a,p)=>a+(p.market_value||0),0)):'Indisponível'}</strong><small>Snapshot: {portfolio?.as_of||'—'}</small></div><div className="metric"><span>Opções abertas</span><strong>{options.length}</strong><small>Snapshot BTG</small></div></div><section className="panel"><h2>Ações · valor atual decrescente</h2><div className="table-wrap"><table><thead><tr>{['Ativo','Qtd.','Custo médio','Último preço','Valor atual','Resultado econômico','Dividendos/JCP recebidos','Proventos anunciados'].map(x=><th key={x}>{x}</th>)}</tr></thead><tbody>{stocks.map(p=><tr key={p.position_id} onClick={()=>setTicker(p.ticker)}><td>{p.ticker}{p.quantity<0?' · SHORT':''}</td><td>{p.quantity}</td><td>{brl(p.average_cost)}</td><td>{brl(p.market_price)}</td><td>{brl(p.market_value)}</td><td>Indisponível</td><td>Indisponível</td><td>Indisponível</td></tr>)}</tbody></table></div>{!stocks.length&&<p className="muted">Importe o Excel BTG para ver as posições.</p>}</section><section className="panel"><h2>Aquisição × valor atual</h2><p className="muted">Base de aquisição indisponível no contrato atual. O gráfico será exibido quando o backend fornecer esse valor canônico.</p></section>{optionTable(options)}</>}
+ {page==='Options'&&<><div className="toolbar"><label>Ativo / contrato <input value={filter} onChange={e=>setFilter(e.target.value)} placeholder="Todos"/></label></div><section className="panel"><h2>Resultado mensal e acumulado realizado</h2><p className="muted">Aguardando endpoint canônico de P&amp;L realizado por período. Transações brutas não são resultado.</p></section>{optionTable(options.filter(p=>!filter||p.ticker.includes(filter.toUpperCase())||p.underlying_ticker?.includes(filter.toUpperCase())))}<section className="panel"><h2>Transações registradas</h2><div className="table-wrap"><table><thead><tr>{['Data','Contrato','Ação','Quantidade','Preço','Corretora'].map(x=><th key={x}>{x}</th>)}</tr></thead><tbody>{tx.filter(t=>!filter||t.ticker.includes(filter.toUpperCase())).map(t=><tr key={t.transaction_id} onClick={()=>setTicker(t.ticker)}><td>{when(t.executed_at)}</td><td>{t.ticker}</td><td>{t.action}</td><td>{t.quantity}</td><td>{brl(t.price)}</td><td>{t.broker||'—'}</td></tr>)}</tbody></table></div></section></>}
+ {page==='Opportunities'&&<><div className="toolbar"><form onSubmit={e=>{e.preventDefault();setTicker(asset.toUpperCase());void run(`UC-03: analise ${asset.toUpperCase()} sob demanda, elegibilidade, risco, evidências e ranking canônico disponível.`)}}><label>Analisar ativo <input required value={asset} onChange={e=>setAsset(e.target.value)} placeholder="PETR4"/></label><button>Analisar</button></form><button onClick={()=>void run('UC-03: retorne ranking canônico B3, inclusive fora da carteira, score, risco, liquidez, evidências e as_of.')}>Buscar oportunidades</button></div><section className="panel"><h2>Ranking · risco × oportunidade</h2><p className="muted">Scores e classificação são mostrados somente quando fornecidos pelo pipeline canônico.</p><Output data={analysis}/><button onClick={()=>setPage('Strategy Lab')}>Comparar no Strategy Lab</button></section></>}
+ {page==='Strategy Lab'&&<><section className="panel"><h2>Comparar alternativas</h2><form className="lab-form" onSubmit={e=>{e.preventDefault();void run(`UC-04: compare ${strategyA} em ${left.toUpperCase()} e ${strategyB} em ${right.toUpperCase()}${amount?`, valor informado R$ ${amount}`:''}. Mostre cenários, premissas e riscos canônicos. Só classifique com ranking determinístico validado.`)}}><label>Ativo A<input required value={left} onChange={e=>setLeft(e.target.value)} placeholder="ITUB4"/></label><label>Estratégia A<select value={strategyA} onChange={e=>setStrategyA(e.target.value)}>{['Comprar ação','Vender PUT','Manter'].map(x=><option key={x}>{x}</option>)}</select></label><label>Ativo B<input required value={right} onChange={e=>setRight(e.target.value)} placeholder="WEGE3"/></label><label>Estratégia B<select value={strategyB} onChange={e=>setStrategyB(e.target.value)}>{['Vender PUT','Comprar ação','Manter'].map(x=><option key={x}>{x}</option>)}</select></label><label>Valor a simular (opcional)<input type="number" min="0" value={amount} onChange={e=>setAmount(e.target.value)}/></label><button>Comparar</button></form></section><section className="panel"><h2>Comparação</h2><p className="muted">Classificação indisponível sem ranking determinístico validado.</p><Output data={analysis}/></section></>}
+ {page==='Market Intelligence'&&<><div className="workspace-tabs"><button className={!assetView?'selected':''} onClick={()=>setAssetView(false)}>Contexto de mercado</button><button className={assetView?'selected':''} onClick={()=>setAssetView(true)}>Análise de ativo</button></div>{!assetView?<section className="panel"><h2>Regime, fatores e eventos</h2><button onClick={()=>void run('UC-05/06/10: regime, drivers, taxas, câmbio, fluxo, fatores e eventos com data, qualidade e fontes; associação não é causalidade.')}>Analisar contexto</button><Output data={analysis}/></section>:<><div className="toolbar"><form onSubmit={e=>{e.preventDefault();void inspect(asset)}}><label>Ativo B3 <input required value={asset} onChange={e=>setAsset(e.target.value)} placeholder="PETR4"/></label><button>Analisar</button></form><div>{['1W','1M','3M','6M','1Y','Tudo'].map(h=><button key={h} className={h===horizon?'selected':''} onClick={()=>setHorizon(h)}>{h}</button>)}</div></div><div className="cards"><div className="metric"><span>Ativo</span><strong>{ticker||'—'}</strong><small>{when(live?.as_of)}</small></div><div className="metric"><span>Último preço</span><strong>{brl(live?.market.latest.close)}</strong><small>{when(live?.market.latest.observation_timestamp)}</small></div><div className="metric"><span>Volume</span><strong>{live?.market.latest.volume??'—'}</strong><small>{live?.market.latest.source||'Fonte indisponível'}</small></div></div><section className="panel"><h2>Preço e indicadores · {horizon}</h2><p className="muted">{live?`${live.market.history_count} registros no backend; série histórica e indicadores técnicos ainda não expostos por esta API.`:'Selecione um ativo.'}</p></section><section className="panel"><h2>Fundamentos e alvos institucionais</h2><p className="muted">Indisponíveis até fontes verificadas com instituição, data e referência. Nenhum preço alvo é estimado.</p></section><section className="panel"><h2>Notícias e eventos</h2>{news?.events.length?news.events.map((v,i)=><details key={i}><summary>Evento {i+1}</summary><pre>{JSON.stringify(v,null,2)}</pre></details>):<p className="muted">Nenhuma notícia verificada disponível.</p>}</section></>}</>}
+ </main><aside className="copilot"><div className="copilot-head"><strong>Copilot</strong><span className={online?'online-dot':'offline-dot'}>●</span></div><p className="context">Contexto: {ticker?`${ticker} / `:''}{page}{assetView&&page==='Market Intelligence'?' / Ativo':''}</p><button disabled={busy} onClick={()=>void run(`Faça um panorama de ${page}${ticker?` para ${ticker}`:''}; fatos, riscos, contradições, limitações e fontes.`,true)}>Visão geral</button><div className="conversation">{chat.map((c,i)=><div className="answer-card" key={i}><b>Você: {c.q}</b><Output data={c.r}/></div>)}</div><form className="chat-form" onSubmit={e=>{e.preventDefault();if(question.trim())void run(question.trim(),true)}}><textarea value={question} onChange={e=>setQuestion(e.target.value)} placeholder="Pergunte sobre a seleção atual…" rows={4}/><button disabled={busy||!question.trim()}>Enviar</button></form></aside></div>
+ {settings&&<div className="modal-backdrop" onClick={()=>setSettings(false)}><div className="transaction-modal" onClick={e=>e.stopPropagation()}><h2>Configurar backend</h2><form className="transaction-form" onSubmit={async(e:FormEvent)=>{e.preventDefault();try{setApiBaseUrl(url);setSettings(false);setPortfolio(null);setCapital(null);await load()}catch(x){setNotice(err(x))}}}><label>IP ou hostname e porta</label><input value={url} onChange={e=>setUrl(e.target.value)} placeholder="http://ubuntu:8000"/><small>{url}</small><button>Salvar e testar</button></form><button onClick={()=>setSettings(false)}>Fechar</button></div></div>}
+ {capitalEdit&&<div className="modal-backdrop" onClick={()=>setCapitalEdit(false)}><div className="transaction-modal" onClick={e=>e.stopPropagation()}><h2>Capital BTG</h2><form className="transaction-form" onSubmit={async(e:FormEvent)=>{e.preventDefault();try{const c=await b3Api.saveCapital(Number(available),Number(reserve));setCapital(c);setCapitalEdit(false);setNotice('Capital salvo no backend.')}catch(x){setNotice(err(x))}}}><label>Capital disponível (R$)</label><input type="number" min="0" step="0.01" required value={available} onChange={e=>setAvailable(e.target.value)}/><label>Reserva mínima (R$)</label><input type="number" min="0" step="0.01" required value={reserve} onChange={e=>setReserve(e.target.value)}/><button>Salvar no backend</button></form><button onClick={()=>setCapitalEdit(false)}>Fechar</button></div></div>}
+ </div>;
 }
-
-function App() {
-  const [page, setPage] = useState<PageId>(() => pageFromHash());
-  const [activeTab, setActiveTab] = useState<string | null>(null);
-  const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState<OrchestrateResponse | null>(null);
-  const [serverOnline, setServerOnline] = useState(false);
-  const [asking, setAsking] = useState(false);
-  const [importStatus, setImportStatus] = useState("");
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [backendUrl, setBackendUrl] = useState(() => getApiBaseUrl());
-
-  useEffect(() => {
-    const syncPageFromHash = () => setPage(pageFromHash());
-    window.addEventListener("hashchange", syncPageFromHash);
-    if (!window.location.hash) window.history.replaceState(null, "", hashForPage("Overview"));
-    return () => window.removeEventListener("hashchange", syncPageFromHash);
-  }, []);
-
-  const pageDefinition = useMemo(() => getPageDefinition(page), [page]);
-  const selectedTab: PageTab | null = useMemo(() => {
-    const tabs = pageDefinition.tabs ?? [];
-    return tabs.find((tab) => tab.id === activeTab) ?? tabs[0] ?? null;
-  }, [pageDefinition, activeTab]);
-
-  const prompt = selectedTab?.prompt ?? pageDefinition.prompt;
-  const description = selectedTab?.description ?? pageDefinition.description;
-  const useCases = selectedTab?.useCases ?? pageDefinition.useCases;
-
-  async function checkBackend() {
-    try {
-      const health = await b3Api.health();
-      setServerOnline(health.status === "ok");
-      return true;
-    } catch {
-      setServerOnline(false);
-      return false;
-    }
-  }
-
-  useEffect(() => {
-    checkBackend();
-  }, []);
-
-  function navigate(nextPage: PageId) {
-    window.location.hash = hashForPage(nextPage);
-    setPage(nextPage);
-    setActiveTab(null);
-    setAnswer(null);
-    setQuestion("");
-  }
-
-  async function runAnalysis(task = prompt) {
-    if (!task.trim() || asking) return;
-    setAsking(true);
-    setAnswer(null);
-    try {
-      const response = await b3Api.orchestrate({
-        task: task.trim(),
-        context: {
-          client: "windows-react-production-v1",
-          dashboard_page: page,
-          dashboard_tab: selectedTab?.id ?? null,
-          use_cases: useCases,
-        },
-      });
-      setAnswer(response);
-      setServerOnline(true);
-    } catch (error) {
-      setAnswer({
-        status: "ERROR",
-        result: {},
-        sources: [],
-        audit: [],
-        error: errorMessage(error),
-      });
-      setServerOnline(false);
-    } finally {
-      setAsking(false);
-    }
-  }
-
-  async function ask(event?: FormEvent) {
-    event?.preventDefault();
-    await runAnalysis(question.trim() || prompt);
-  }
-
-  async function importExcel(
-    event: ChangeEvent<HTMLInputElement>,
-    kind: "portfolio" | "options",
-  ) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    setImportStatus(`Loading ${kind === "portfolio" ? "portfolio" : "options"} snapshot…`);
-    try {
-      const data = kind === "portfolio"
-        ? await b3Api.importPortfolio(file)
-        : await b3Api.importOptions(file);
-      setImportStatus(`✓ ${data.file} validated and activated.`);
-      setServerOnline(true);
-    } catch (error) {
-      setImportStatus(`Error: ${errorMessage(error)}`);
-    }
-  }
-
-  async function saveBackend(event: FormEvent) {
-    event.preventDefault();
-    try {
-      const normalized = setApiBaseUrl(backendUrl);
-      setBackendUrl(normalized);
-      const ok = await checkBackend();
-      if (ok) setSettingsOpen(false);
-    } catch (error) {
-      setImportStatus(`Backend URL: ${errorMessage(error)}`);
-    }
-  }
-
-  return (
-    <div className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark">▮▮▮</span>
-          <div>
-            <strong>B3 Investment Copilot</strong>
-            <small>Windows 11 · React + Tauri · V4 frozen</small>
-          </div>
-        </div>
-        <div className="architecture-badge">SQLite/Parquet · Qdrant 768d hybrid · Neo4j</div>
-        <button className="backend-button" onClick={() => setSettingsOpen(true)}>
-          <span className={serverOnline ? "online-dot" : "offline-dot"}>●</span>
-          {serverOnline ? "Backend online" : "Configure backend"}
-        </button>
-      </header>
-
-      <div className="body">
-        <aside className="sidebar">
-          <nav>
-            {PAGE_DEFINITIONS.map((item) => (
-              <button
-                key={item.id}
-                className={page === item.id ? "nav-item active" : "nav-item"}
-                onClick={() => navigate(item.id)}
-              >
-                <span className="nav-icon">{item.icon}</span>
-                <span>
-                  <strong>{item.id}</strong>
-                  <small>{item.subtitle}</small>
-                </span>
-              </button>
-            ))}
-          </nav>
-
-          <section className="connections">
-            <label>REAL DATA</label>
-            <label className="load">
-              ↥ &nbsp; BTG Portfolio Excel
-              <input type="file" accept=".xlsx,.xlsm" hidden onChange={(event) => importExcel(event, "portfolio")} />
-            </label>
-            <label className="load secondary">
-              ↥ &nbsp; Options Excel
-              <input type="file" accept=".xlsx,.xlsm" hidden onChange={(event) => importExcel(event, "options")} />
-            </label>
-            {importStatus && <small className="import-status">{importStatus}</small>}
-          </section>
-
-          <section className="knowledge-status">
-            <label>RUNTIME</label>
-            <span>▦ Structured <i>SQLite / Parquet</i></span>
-            <span>◉ Semantic <i>Qdrant hybrid</i></span>
-            <span>● Relational <i>Neo4j</i></span>
-          </section>
-        </aside>
-
-        <main className="workspace">
-          <div className="workspace-head">
-            <div>
-              <div className="uc-row">{useCases.map((uc) => <span key={uc}>{uc}</span>)}</div>
-              <h1>{page}</h1>
-              <p>{description}</p>
-            </div>
-            <button className="refresh" onClick={() => runAnalysis()} disabled={asking}>
-              {asking ? "Loading real runtime…" : "Refresh"}
-            </button>
-          </div>
-
-          {!!pageDefinition.tabs?.length && (
-            <div className="workspace-tabs">
-              {pageDefinition.tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  className={selectedTab?.id === tab.id ? "selected" : ""}
-                  onClick={() => {
-                    setActiveTab(tab.id);
-                    setAnswer(null);
-                    setQuestion("");
-                  }}
-                >
-                  {tab.label}
-                  <small>{tab.useCases.join(" · ")}</small>
-                </button>
-              ))}
-            </div>
-          )}
-
-          <section className="cards">
-            <Metric title="Authority" value="Backend" detail="No calculations in React" />
-            <Metric title="Freshness" value="as_of" detail="Always preserved when supplied" />
-            <Metric title="Data gaps" value="Explicit" detail="UNKNOWN / LIMITED visible" />
-            <Metric title="Execution" value="Disabled" detail="Decision support only" />
-          </section>
-
-          <section className="panel production-panel">
-            <div className="panel-title">
-              <div>
-                <h2>Canonical intelligence</h2>
-                <span>{useCases.join(" · ")}</span>
-              </div>
-              <span className={serverOnline ? "server online" : "server"}>
-                ● {serverOnline ? getApiBaseUrl() : "backend offline"}
-              </span>
-            </div>
-            <ResultSurface response={answer} />
-          </section>
-        </main>
-
-        <aside className="copilot">
-          <div className="copilot-head">
-            <div>
-              <strong>Copilot</strong>
-              <small>Same frozen backend, contextual query</small>
-            </div>
-            <span className={serverOnline ? "online-dot" : "offline-dot"}>●</span>
-          </div>
-
-          <div className="copilot-intro">
-            <h2>{selectedTab?.label ?? page}</h2>
-            <p>{prompt}</p>
-          </div>
-
-          <div className="suggestions">
-            <button onClick={() => setQuestion(prompt)}>Use workspace query <span>›</span></button>
-            <button onClick={() => setQuestion("O que mudou desde a última análise? Preserve as_of e fontes.")}>What changed? <span>›</span></button>
-            <button onClick={() => setQuestion("Quais dados estão LIMITED, UNKNOWN ou ausentes e como isso limita a análise?")}>Data limitations <span>›</span></button>
-          </div>
-
-          {answer?.error && <div className="answer-card"><p>{answer.error}</p></div>}
-
-          <form onSubmit={ask} className="chat-form">
-            <textarea
-              value={question}
-              onChange={(event) => setQuestion(event.target.value)}
-              placeholder="Ask about this workspace…"
-              rows={5}
-            />
-            <button disabled={asking}>{asking ? "…" : "➤"}</button>
-          </form>
-
-          <small className="disclaimer">No order execution. Human remains final decision authority.</small>
-        </aside>
-      </div>
-
-      {settingsOpen && (
-        <div className="modal-backdrop" onClick={() => setSettingsOpen(false)}>
-          <div className="transaction-modal" onClick={(event) => event.stopPropagation()}>
-            <div className="panel-title">
-              <div>
-                <h2>Backend connection</h2>
-                <span>Windows app → real B3 backend instance</span>
-              </div>
-              <button onClick={() => setSettingsOpen(false)}>×</button>
-            </div>
-            <form className="transaction-form" onSubmit={saveBackend}>
-              <label>Backend URL</label>
-              <input
-                value={backendUrl}
-                onChange={(event) => setBackendUrl(event.target.value)}
-                placeholder="http://ubuntu:8000"
-                autoFocus
-              />
-              <button type="submit">Save and test connection</button>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Metric({ title, value, detail }: { title: string; value: string; detail: string }) {
-  return (
-    <div className="metric">
-      <span>{title}</span>
-      <strong>{value}</strong>
-      <small>{detail}</small>
-    </div>
-  );
-}
-
-export default App;

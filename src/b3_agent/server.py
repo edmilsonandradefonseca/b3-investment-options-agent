@@ -4,6 +4,7 @@ from functools import lru_cache
 from dataclasses import asdict
 import hashlib
 import os
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -210,6 +211,55 @@ def import_portfolio(file: UploadFile = File(...)) -> dict[str, Any]:
     )
     _configure_runtime.cache_clear()
     return result
+
+
+@app.get("/portfolio/current")
+def current_portfolio() -> dict[str, Any]:
+    """Read the validated BTG snapshot without recomputing market facts."""
+    path = _import_dir() / "portfolio.xlsx"
+    if not path.exists():
+        return {"status": "NOT_AVAILABLE", "as_of": None, "updated_at": None, "positions": []}
+    try:
+        context = BtgRendaVariavelLoader().load(path)
+    except (ValueError, OSError) as exc:
+        raise HTTPException(status_code=503, detail=f"snapshot indisponível: {exc}") from exc
+    return {
+        "status": context.quality_status,
+        "as_of": context.as_of.isoformat(),
+        "updated_at": datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat(),
+        "source_refs": list(context.source_refs),
+        "positions": [asdict(position) for position in context.positions],
+    }
+
+
+class CapitalProfileRequest(BaseModel):
+    available_capital: float = Field(ge=0)
+    minimum_reserve: float = Field(ge=0)
+
+
+def _capital_connection() -> sqlite3.Connection:
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(settings.data_dir / "capital_profile.sqlite3")
+    connection.execute("CREATE TABLE IF NOT EXISTS capital_profile (account TEXT PRIMARY KEY, available REAL NOT NULL, reserve REAL NOT NULL, updated_at TEXT NOT NULL)")
+    return connection
+
+
+@app.get("/capital-profile")
+def get_capital_profile() -> dict[str, Any]:
+    with _capital_connection() as connection:
+        row = connection.execute("SELECT available, reserve, updated_at FROM capital_profile WHERE account = ?", ("BTG",)).fetchone()
+    if row is None:
+        return {"status": "NOT_AVAILABLE", "account": "BTG", "available_capital": None, "minimum_reserve": None, "usable_capital": None, "updated_at": None}
+    return {"status": "manual", "account": "BTG", "available_capital": row[0], "minimum_reserve": row[1], "usable_capital": row[0] - row[1], "updated_at": row[2]}
+
+
+@app.post("/capital-profile")
+def save_capital_profile(request: CapitalProfileRequest) -> dict[str, Any]:
+    if request.minimum_reserve > request.available_capital:
+        raise HTTPException(status_code=400, detail="reserva mínima excede capital disponível")
+    with _capital_connection() as connection:
+        connection.execute("INSERT INTO capital_profile VALUES (?, ?, ?, ?) ON CONFLICT(account) DO UPDATE SET available=excluded.available, reserve=excluded.reserve, updated_at=excluded.updated_at", ("BTG", request.available_capital, request.minimum_reserve, datetime.now(timezone.utc).isoformat()))
+    return get_capital_profile()
 
 
 @app.post("/imports/options")
