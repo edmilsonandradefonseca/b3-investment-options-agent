@@ -22,4 +22,4 @@ sudo systemd-run --unit="$unit" --wait --pipe --collect \
   -p "TimeoutStartSec=3h" \
   "$repo/.venv/bin/python" "$repo/scripts/intelligence_pilot_20.py" --limit "$limit"
 
-echo "Result: /opt/b3-runtime/data/derived/intelligence_pilot_v41/latest.json"
+echo "Result: /opt/b3-runtime/data/derived/intelligence_pilot_v42/latest.json"
