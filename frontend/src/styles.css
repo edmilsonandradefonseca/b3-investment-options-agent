@@ -115,3 +115,7 @@
 .option-month span{font-size:11px;white-space:nowrap}.option-month i{width:65%;min-height:5px;border-radius:4px 4px 0 0}.option-month.active{outline:2px solid #58a6ff;border-radius:7px}
 .options-workspace .table-wrap{max-height:430px;overflow:auto}.options-workspace .table-wrap th{position:sticky;top:0;background:#102b3c;z-index:1}
 @media(max-width:1450px){.option-filters{grid-template-columns:repeat(3,minmax(130px,1fr))}}
+.llm-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.llm-columns>div{background:#0a2234;border:1px solid #27516c;border-radius:9px;padding:15px;max-height:360px;overflow:auto}
+.llm-columns h3{font-size:16px;margin:0 0 8px}.llm-columns p{white-space:pre-wrap;line-height:1.55;overflow-wrap:anywhere}
+.llm-columns li{margin:7px 0}.llm-columns details{margin-top:12px}
