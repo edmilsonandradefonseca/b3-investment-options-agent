@@ -583,6 +583,25 @@ def nightly_ticker_intelligence(ticker: str) -> dict[str, Any]:
     return payload
 
 
+@app.get("/intelligence/pilot/{ticker}")
+def pilot_ticker_intelligence(ticker: str) -> dict[str, Any]:
+    """Read the evidence-backed DeepSeek/OpenClaw pilot for one stock."""
+    normalized = ticker.strip().upper()
+    if not normalized.isalnum() or not 5 <= len(normalized) <= 12:
+        raise HTTPException(status_code=400, detail="invalid B3 ticker")
+    path = settings.data_dir / "derived" / "intelligence_pilot_20" / f"{normalized}.json"
+    if not path.is_file():
+        return {"ticker": normalized, "status": "NOT_AVAILABLE"}
+    try:
+        result = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail=f"pilot artifact unavailable: {exc}") from exc
+    if result.get("ticker") != normalized:
+        raise HTTPException(status_code=503, detail="pilot artifact identity mismatch")
+    result["status"] = "COMPLETED" if result.get("deepseek_status") == result.get("openclaw_status") == "completed" else "PARTIAL"
+    return result
+
+
 @app.get("/version")
 def version() -> dict[str, str]:
     return {"service": "b3-orchestrator-server", "version": app.version}
