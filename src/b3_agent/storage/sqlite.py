@@ -62,6 +62,14 @@ CREATE INDEX IF NOT EXISTS idx_transactions_executed_at
 CREATE INDEX IF NOT EXISTS idx_transactions_ticker
     ON transactions(ticker);
 
+CREATE TABLE IF NOT EXISTS capital_profile (
+    account TEXT PRIMARY KEY,
+    available REAL NOT NULL CHECK (available >= 0),
+    reserve REAL NOT NULL CHECK (reserve >= 0 AND reserve <= available),
+    updated_at TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'manual'
+);
+
 CREATE TABLE IF NOT EXISTS retrieval_traces (
     trace_id TEXT PRIMARY KEY,
     query_id TEXT NOT NULL,
