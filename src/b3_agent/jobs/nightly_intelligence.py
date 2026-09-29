@@ -8,6 +8,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from b3_agent.config import settings
+from b3_agent.intelligence import AcquisitionStatus, EvidenceConclusion
 from b3_agent.llm.ollama_client import OllamaClient
 from b3_agent.portfolio.snapshot import load_active_snapshots
 from b3_agent.providers.searxng_news import SearxngNewsAdapter
@@ -17,7 +18,6 @@ from b3_agent.research_events import ResearchEventService
 _STATIC_DOMAINS = {
     "statusinvest.com.br",
     "www.statusinvest.com.br",
-    "sistemaswebb3-listados.b3.com.br",
 }
 _STATIC_TITLE_TERMS = (
     "cotação",
@@ -201,6 +201,9 @@ class NightlyIntelligenceJob:
             "completed": sum(1 for item in results if item["status"] == "completed"),
             "skipped": sum(1 for item in results if item["status"].startswith("skipped_")),
             "deferred": sum(1 for item in results if item["status"] == "deferred_deepseek_budget"),
+            "coverage_insufficient": sum(
+                1 for item in results if item["status"] == "coverage_insufficient"
+            ),
             "failed": sum(1 for item in results if item["status"] == "failed"),
             "deepseek_calls": deepseek_calls,
             "max_deepseek_calls": self.max_deepseek_calls,
@@ -215,19 +218,70 @@ class NightlyIntelligenceJob:
     def _process_ticker(self, *, ticker: str, deepseek_allowed: bool) -> dict[str, Any]:
         query = f"{ticker} notícias fato relevante resultados dividendos mercado"
         records = self.news.search(ticker, query=query, limit=self.news_limit)
+        diagnostics = getattr(self.news, "last_diagnostics", None)
         recent_records = _recent_dated_records(records)
+        dated_result_count = sum(
+            1 for record in records if getattr(record, "published_date", None) is not None
+        )
         snapshot_as_of = datetime.now(timezone.utc)
         snapshot = ResearchEventService().build(recent_records, as_of=snapshot_as_of)
         material_events = _select_material_events(snapshot.events)
+
+        engine_errors = []
+        fallback_used = False
+        fallback_strategy = None
+        primary_raw_result_count = len(records)
+        fallback_raw_result_count = 0
+        if diagnostics is not None:
+            engine_errors = [
+                {"engine": name, "reason": reason}
+                for name, reason in diagnostics.unresponsive_engines
+            ]
+            fallback_used = diagnostics.fallback_used
+            fallback_strategy = diagnostics.fallback_strategy
+            primary_raw_result_count = diagnostics.primary_raw_result_count
+            fallback_raw_result_count = diagnostics.fallback_raw_result_count
+
+        if not records:
+            acquisition_status = (
+                AcquisitionStatus.DEGRADED
+                if engine_errors
+                else AcquisitionStatus.EMPTY
+            )
+        elif engine_errors:
+            acquisition_status = AcquisitionStatus.PARTIAL
+        else:
+            acquisition_status = AcquisitionStatus.SUCCESS
+
+        if not records or dated_result_count == 0:
+            evidence_conclusion = EvidenceConclusion.COVERAGE_INSUFFICIENT
+        elif material_events:
+            evidence_conclusion = EvidenceConclusion.MATERIAL_FOUND
+        else:
+            evidence_conclusion = EvidenceConclusion.NO_MATERIAL_FOUND
 
         base = {
             "ticker": ticker,
             "as_of": snapshot_as_of.isoformat(),
             "raw_result_count": len(records),
+            "primary_raw_result_count": primary_raw_result_count,
+            "fallback_raw_result_count": fallback_raw_result_count,
+            "dated_result_count": dated_result_count,
             "dated_recent_count": len(recent_records),
             "raw_event_count": len(snapshot.events),
             "material_event_count": len(material_events),
+            "acquisition_status": acquisition_status.value,
+            "evidence_conclusion": evidence_conclusion.value,
+            "fallback_used": fallback_used,
+            "fallback_strategy": fallback_strategy,
+            "engine_errors": engine_errors,
         }
+
+        if evidence_conclusion == EvidenceConclusion.COVERAGE_INSUFFICIENT:
+            return {
+                **base,
+                "status": "coverage_insufficient",
+            }
 
         if not material_events:
             return {
