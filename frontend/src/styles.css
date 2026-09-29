@@ -104,3 +104,14 @@
 .app-shell button,.app-shell .connections label.load,.app-shell .workspace-tabs button{color:#fff!important;font-weight:650}
 .app-shell button:disabled{color:#fff!important;opacity:.65}
 .app-shell .nav-item.active,.app-shell .nav-item:hover{color:#fff!important}
+
+/* Options: compact controls, a broad monthly chart and readable positions. */
+.option-filters{display:grid;grid-template-columns:repeat(5,minmax(130px,1fr));gap:10px;margin-bottom:12px}
+.option-filters label{display:grid;gap:6px;font-size:13px;color:#c5d9ea}
+.option-filters select{min-width:0;background:#0c2738;color:#fff;border:1px solid #6a8ba3;padding:9px;border-radius:7px}
+.options-workspace .panel{margin:10px 0}
+.option-bars{min-height:168px;display:flex;align-items:end;gap:7px;padding:14px 5px 4px;overflow-x:auto;border-bottom:1px solid #426078}
+.options-workspace .panel .option-month{display:flex;flex:1 0 60px;min-width:60px;align-items:center;flex-direction:column;justify-content:end;gap:7px;background:transparent;border:0;padding:4px;color:#c9e0f0;font-size:11px}
+.option-month span{font-size:11px;white-space:nowrap}.option-month i{width:65%;min-height:5px;border-radius:4px 4px 0 0}.option-month.active{outline:2px solid #58a6ff;border-radius:7px}
+.options-workspace .table-wrap{max-height:430px;overflow:auto}.options-workspace .table-wrap th{position:sticky;top:0;background:#102b3c;z-index:1}
+@media(max-width:1450px){.option-filters{grid-template-columns:repeat(3,minmax(130px,1fr))}}
