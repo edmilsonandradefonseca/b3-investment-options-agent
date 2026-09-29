@@ -270,7 +270,7 @@ def option_brokerage_ledger() -> dict[str, Any]:
             "source_ref": item.source_ref,
         }
         for item in OptionTransactionLedger(ledger_path).list_all()
-        if item.source_type == "BROKERAGE_NOTE"
+        if item.source_type == "BROKERAGE_NOTE" or item.source_ref.startswith("BTG:NotaCorretagem:")
     ]
     return {"status": "VALIDATED" if operations else "NOT_AVAILABLE", "operations": operations}
 
