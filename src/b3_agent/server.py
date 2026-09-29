@@ -250,6 +250,31 @@ def current_portfolio() -> dict[str, Any]:
     }
 
 
+@app.get("/options/ledger")
+def option_brokerage_ledger() -> dict[str, Any]:
+    """Expose canonical note cash flows with provenance; no inferred realized P&L."""
+    ledger_path = settings.data_dir / "options.sqlite3"
+    if not ledger_path.exists():
+        return {"status": "NOT_AVAILABLE", "operations": []}
+    operations = [
+        {
+            "transaction_id": item.transaction_id,
+            "option_ticker": item.option_ticker,
+            "side": item.side,
+            "quantity": item.absolute_quantity,
+            "execution_price": item.execution_price,
+            "cash_flow": -item.total_amount if item.total_amount is not None else None,
+            "trade_date": item.as_of.isoformat() if item.as_of else None,
+            "broker": item.broker,
+            "note_number": item.note_number,
+            "source_ref": item.source_ref,
+        }
+        for item in OptionTransactionLedger(ledger_path).list_all()
+        if item.source_type == "BROKERAGE_NOTE"
+    ]
+    return {"status": "VALIDATED" if operations else "NOT_AVAILABLE", "operations": operations}
+
+
 class CapitalProfileRequest(BaseModel):
     available_capital: float = Field(ge=0)
     minimum_reserve: float = Field(ge=0)
