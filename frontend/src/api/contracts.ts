@@ -107,7 +107,7 @@ export type BrokerageOperation = {
 export type BrokerageLedger = { status: string; operations: BrokerageOperation[] };
 export type PilotAnalysis = {
   ticker: string; status: string;
-  evidence?: { collected_at: string; source_refs: string[]; news: Array<{headline: string; published_date: string; source_ref: string}>; latest_market_record: {close: number; observation_timestamp: string; source: string}; news_error: string | null };
+  evidence?: { collected_at: string; source_refs: string[]; news: Array<{headline: string; published_date: string; source_ref: string}>; latest_market_record?: {close: number; observation_timestamp: string; source: string}; news_error?: string | null };
   deepseek_status?: string; deepseek?: {model: string; analysis: string};
   openclaw_status?: string; openclaw?: {model: string; analysis: {summary: string; risks: string[]; catalysts: string[]; limitations: string[]; evidence_refs: string[]}};
   deepseek_error?: string; openclaw_error?: string;
