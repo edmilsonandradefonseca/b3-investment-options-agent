@@ -93,12 +93,18 @@ export type PortfolioPosition = {
 export type PortfolioSnapshot = {
   status: string; as_of: string | null; updated_at: string | null;
   source_refs?: string[]; positions: PortfolioPosition[];
-  intelligence?: { as_of: string; capital_risk: { assignment_capital: number; cash_after_assignment: number | null; fully_cash_secured: boolean | null; uncovered_call_shares: number } };
 };
 export type CapitalProfile = {
   status: string; account: string; available_capital: number | null;
   minimum_reserve: number | null; usable_capital: number | null; updated_at: string | null;
 };
+
+export type BrokerageOperation = {
+  transaction_id: string; option_ticker: string; side: "BUY" | "SELL";
+  quantity: number; execution_price: number | null; cash_flow: number | null;
+  trade_date: string | null; broker: string; note_number: string | null; source_ref: string;
+};
+export type BrokerageLedger = { status: string; operations: BrokerageOperation[] };
 
 export type DataRecord = {
   instrument_id: string;
