@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evidence-backed 20-stock pilot for local DeepSeek and OpenClaw senior reasoning.
+"""Evidence-backed V4.2 20-stock pilot for resilient acquisition, DeepSeek and OpenClaw.
 
 Run under the B3 systemd environment. Results are research artifacts, never
 canonical rankings, valuations, or investment recommendations.
@@ -93,7 +93,7 @@ def analyze(ticker: str, output: Path, senior: OpenClawStructuredClient) -> dict
         except Exception as exc:
             market = None
             market_error = f"{type(exc).__name__}: {exc}"
-        # V4.1 UC-10: search -> dated research events -> material prefilter -> local DeepSeek.
+        # V4.2 UC-10: resilient acquisition -> coverage -> events -> materiality -> local DeepSeek.
         result = NightlyIntelligenceJob(
             news_limit=8, max_deepseek_calls=1, output_dir=output / "deepseek"
         ).run(tickers=[ticker])["results"][0]
@@ -104,6 +104,18 @@ def analyze(ticker: str, output: Path, senior: OpenClawStructuredClient) -> dict
                 "collected_at": result.get("as_of"),
                 "source_refs": result.get("source_refs", []),
                 "news": result.get("evidence_events", []),
+                "acquisition_status": result.get("acquisition_status"),
+                "evidence_conclusion": result.get("evidence_conclusion"),
+                "raw_result_count": result.get("raw_result_count", 0),
+                "primary_raw_result_count": result.get("primary_raw_result_count", 0),
+                "fallback_raw_result_count": result.get("fallback_raw_result_count", 0),
+                "dated_result_count": result.get("dated_result_count", 0),
+                "dated_recent_count": result.get("dated_recent_count", 0),
+                "raw_event_count": result.get("raw_event_count", 0),
+                "material_event_count": result.get("material_event_count", 0),
+                "fallback_used": result.get("fallback_used", False),
+                "fallback_strategy": result.get("fallback_strategy"),
+                "engine_errors": result.get("engine_errors", []),
             },
             "deepseek_status": result["status"],
             "deepseek": {
@@ -121,10 +133,10 @@ def analyze(ticker: str, output: Path, senior: OpenClawStructuredClient) -> dict
     facts = row["evidence"]
     refs = facts["source_refs"]
     try:
-        # V4.1 senior escalation receives the source events plus DeepSeek's dossier.
+        # V4.2 senior escalation receives validated source events plus DeepSeek's dossier.
         response = senior.complete_json(
             instructions=(
-                "Você é a camada sênior da V4.1 para UC-10. Examine apenas eventos e "
+                "Você é a camada sênior da V4.2 para UC-10. Examine apenas eventos e "
                 "a síntese local fornecidos. Não crie ranking, preço, causalidade ou "
                 "recomendação. Cite apenas source_refs fornecidos e destaque incertezas."
             ),
@@ -154,30 +166,43 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=20, choices=range(1, 21), metavar="1-20")
     args = parser.parse_args()
-    output = settings.data_dir / "derived" / "intelligence_pilot_v41"
+    output = settings.data_dir / "derived" / "intelligence_pilot_v42"
     senior = OpenClawStructuredClient(agent=settings.openclaw_agent, model=settings.openclaw_model,
                                       timeout=settings.openclaw_timeout_seconds, executable=settings.openclaw_bin)
     rows = []
     for ticker in TICKERS[:args.limit]:
         row = analyze(ticker, output, senior)
+        evidence = row.get("evidence", {})
         rows.append({"ticker": ticker, "deepseek": row.get("deepseek_status", "not_run"),
                      "openclaw": row.get("openclaw_status", "not_run"),
                      "escalation": row.get("escalation_status"), "routes": row.get("routes"),
                      "market": "validated" if row.get("market") else "unavailable",
-                     "market_error": row.get("market_error")})
+                     "market_error": row.get("market_error"),
+                     "acquisition_status": evidence.get("acquisition_status"),
+                     "evidence_conclusion": evidence.get("evidence_conclusion"),
+                     "raw_results": evidence.get("raw_result_count", 0),
+                     "recent_dated": evidence.get("dated_recent_count", 0),
+                     "material_events": evidence.get("material_event_count", 0),
+                     "fallback_used": evidence.get("fallback_used", False)})
         manifest = {
             "as_of": datetime.now(timezone.utc).isoformat(), "requested": args.limit,
             "router_verified": sum(bool(r["routes"]) for r in rows),
             "market_validated": sum(r["market"] == "validated" for r in rows),
             "deepseek_completed": sum(r["deepseek"] == "completed" for r in rows),
             "no_material_event": sum(r["deepseek"] == "skipped_no_material_events" for r in rows),
+            "coverage_insufficient": sum(r["deepseek"] == "coverage_insufficient" for r in rows),
             "openclaw_escalations_completed": sum(r["openclaw"] == "completed" for r in rows),
             "both_completed": sum(r["deepseek"] == r["openclaw"] == "completed" for r in rows),
             "results": rows,
         }
         save(output / "latest.json", manifest)
         print(json.dumps(rows[-1], ensure_ascii=False), flush=True)
-    return 0 if all(r["market"] == "validated" and r["deepseek"] != "failed" and r["openclaw"] != "failed" for r in rows) else 2
+    return 0 if all(
+        r["market"] == "validated"
+        and r["deepseek"] not in {"failed", "coverage_insufficient"}
+        and r["openclaw"] != "failed"
+        for r in rows
+    ) else 2
 
 
 if __name__ == "__main__":
