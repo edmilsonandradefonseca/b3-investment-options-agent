@@ -105,17 +105,17 @@ def test_searxng_falls_back_to_general_and_parses_relative_portuguese_date(monke
 
 
 def test_searxng_falls_back_when_news_results_have_no_parseable_dates(monkeypatch):
-    responses = iter([
+    undated = [
         {
-            "results": [
-                {
-                    "title": "WEGE3 overview",
-                    "url": "https://example.com/static",
-                    "publishedDate": None,
-                    "engine": "example",
-                }
-            ]
-        },
+            "title": f"WEGE3 overview {index}",
+            "url": f"https://example.com/static/{index}",
+            "publishedDate": None,
+            "engine": "example",
+        }
+        for index in range(8)
+    ]
+    responses = iter([
+        {"results": undated},
         {
             "results": [
                 {
@@ -134,9 +134,10 @@ def test_searxng_falls_back_when_news_results_have_no_parseable_dates(monkeypatc
     )
 
     adapter = SearxngNewsAdapter(base_url="http://searxng")
-    records = adapter.search("WEGE3")
+    records = adapter.search("WEGE3", limit=8)
 
-    assert len(records) == 2
-    assert any(record.published_at is not None for record in records)
+    assert len(records) == 8
+    assert records[0].headline == "WEGE3 resultado recente"
+    assert records[0].published_at is not None
     assert adapter.last_diagnostics is not None
     assert adapter.last_diagnostics.fallback_used is True
