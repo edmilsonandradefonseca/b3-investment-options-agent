@@ -24,6 +24,7 @@ from b3_agent.options.brokerage_batch import (
     BrokerageBatchIngestionService,
 )
 from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
+from b3_agent.portfolio import PortfolioIntelligenceEngine
 from b3_agent.repositories.transaction import TransactionRepository
 from b3_agent.repositories.option_ledger import OptionTransactionLedger
 from b3_agent.repositories.source_manifest import SourceManifestRecord, SourceManifestRepository
@@ -245,6 +246,7 @@ def current_portfolio() -> dict[str, Any]:
         "updated_at": datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat(),
         "source_refs": list(context.source_refs),
         "positions": [asdict(position) for position in context.positions],
+        "intelligence": asdict(PortfolioIntelligenceEngine().build(context)),
     }
 
 
@@ -255,9 +257,10 @@ class CapitalProfileRequest(BaseModel):
 
 def _capital_connection() -> sqlite3.Connection:
     settings.data_dir.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(settings.data_dir / "capital_profile.sqlite3")
-    connection.execute("CREATE TABLE IF NOT EXISTS capital_profile (account TEXT PRIMARY KEY, available REAL NOT NULL, reserve REAL NOT NULL, updated_at TEXT NOT NULL)")
-    return connection
+    # Manual business state belongs in the existing canonical structured store.
+    database = settings.data_dir / "b3_agent.db"
+    SQLiteStore(database).initialize()
+    return sqlite3.connect(database)
 
 
 @app.get("/capital-profile")
