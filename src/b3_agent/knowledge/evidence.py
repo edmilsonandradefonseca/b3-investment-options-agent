@@ -28,6 +28,22 @@ class EvidenceMetadata:
     ticker_refs: tuple[str, ...] = ()
     sector_refs: tuple[str, ...] = ()
     event_refs: tuple[str, ...] = ()
+    issuer_ref: str | None = None
+    cvm_code: str | None = None
+    provider_record_id: str | None = None
+    source_class: str | None = None
+    authority_tier: int | None = None
+    discovery_channel: str | None = None
+    transport_reliability: str | None = None
+    reference_at: datetime | None = None
+    first_seen_at: datetime | None = None
+    observed_at: datetime | None = None
+    source_status: str | None = None
+    acquisition_status: str | None = None
+    pit_status: str | None = None
+    materiality: str | None = None
+    materiality_reason: str | None = None
+    materiality_policy_version: str | None = None
     topic: str = ""
     source_quality: str = "unknown"
     confidence: float = 1.0
@@ -48,6 +64,17 @@ class EvidenceMetadata:
             self.published_at.tzinfo is None or self.published_at.utcoffset() is None
         ):
             raise ValueError("published_at must be timezone-aware")
+        for value, field_name in (
+            (self.reference_at, "reference_at"),
+            (self.first_seen_at, "first_seen_at"),
+            (self.observed_at, "observed_at"),
+        ):
+            if value is not None and (
+                value.tzinfo is None or value.utcoffset() is None
+            ):
+                raise ValueError(f"{field_name} must be timezone-aware")
+        if self.authority_tier is not None and self.authority_tier not in {0, 1, 2, 3}:
+            raise ValueError("authority_tier must be one of 0, 1, 2, 3")
         if self.valid_from is not None and (
             self.valid_from.tzinfo is None or self.valid_from.utcoffset() is None
         ):
