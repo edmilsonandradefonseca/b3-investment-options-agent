@@ -17,7 +17,9 @@ sudo systemd-run --unit="$unit" --wait --pipe --collect \
   -p "EnvironmentFile=-/opt/b3-runtime/b3.env" \
   -p "Environment=B3_AGENT_PROJECT_ROOT=$repo" \
   -p "Environment=B3_AGENT_DATA_DIR=/opt/b3-runtime/data" \
+  -p "Nice=10" \
+  -p "CPUWeight=20" \
   -p "TimeoutStartSec=3h" \
   "$repo/.venv/bin/python" "$repo/scripts/intelligence_pilot_20.py" --limit "$limit"
 
-echo "Result: /opt/b3-runtime/data/derived/intelligence_pilot_20/latest.json"
+echo "Result: /opt/b3-runtime/data/derived/intelligence_pilot_v41/latest.json"
