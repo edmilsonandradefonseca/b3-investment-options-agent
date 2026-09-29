@@ -589,7 +589,7 @@ def pilot_ticker_intelligence(ticker: str) -> dict[str, Any]:
     normalized = ticker.strip().upper()
     if not normalized.isalnum() or not 5 <= len(normalized) <= 12:
         raise HTTPException(status_code=400, detail="invalid B3 ticker")
-    path = settings.data_dir / "derived" / "intelligence_pilot_20" / f"{normalized}.json"
+    path = settings.data_dir / "derived" / "intelligence_pilot_v41" / f"{normalized}.json"
     if not path.is_file():
         return {"ticker": normalized, "status": "NOT_AVAILABLE"}
     try:
