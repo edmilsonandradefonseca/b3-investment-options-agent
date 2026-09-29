@@ -1,8 +1,8 @@
 # B3 Investment & Options Agent
-# Frontend Functional & UX Specification V1.0
+# Frontend Functional & UX Specification V1.1 FINAL
 
 **Date:** 2026-09-29  
-**Status:** Functional baseline approved for implementation  
+**Status:** FINAL — approved functional/UX baseline for implementation  
 **Target:** React + TypeScript + Vite + Tauri (Windows 11 desktop)  
 **Architecture:** B3 V4.0 frozen + V4.1 additive intelligence/runtime layer  
 **Reference dashboard:** `feature/v4-dashboard-e2e`  
@@ -1146,6 +1146,145 @@ Copilot Overview in this workspace should synthesize:
 
 ---
 
+## 12.8 Asset Intelligence — dedicated asset analysis
+
+Market Intelligence includes a dedicated **Asset Analysis** view. This is not a new top-level workspace; it is a sub-view of Market Intelligence.
+
+Its purpose is to answer:
+
+> What is happening with this specific stock, technically and fundamentally, what are relevant institutions saying, and what news/events may affect it?
+
+### Asset selector and header
+
+The user can search/select a supported B3 ticker or company. The header shows, when canonically available:
+
+- ticker and company;
+- sector/industry;
+- current price and daily change;
+- last market update;
+- market capitalization;
+- P/L;
+- P/VP;
+- EV/EBITDA;
+- dividend yield;
+- ROE;
+- 52-week range;
+- Add to Watchlist.
+
+### Price chart and configurable horizon
+
+The main visual is an interactive price/candlestick chart with volume.
+
+Required horizons include at least:
+
+- 1 week;
+- 1 month;
+- 3 months;
+- 6 months;
+- 1 year;
+- longer history / All when data exists.
+
+The user may overlay supported technical indicators. Exact price/volume values must come from canonical market data.
+
+### Technical analysis
+
+Display technical indicators supported by the backend, such as:
+
+- RSI;
+- MACD;
+- moving averages (20/50/200);
+- stochastic oscillator;
+- Bollinger Bands;
+- ADX;
+- volume;
+- other validated indicators.
+
+Show both the raw value and a concise interpretation where a deterministic rule exists. Provide an overall trend summary by useful horizons (short/medium/long term) without fabricating unsupported signals.
+
+### Fundamental analysis
+
+Provide tabs/sections for:
+
+- summary;
+- income statement;
+- balance sheet;
+- cash flow;
+- indicators/multiples;
+- dividends/JCP.
+
+Relevant metrics may include revenue, EBITDA, net income, margins, leverage, ROE, valuation multiples and dividend yield, only when reliable data is available.
+
+### Institutional research and target prices
+
+Provide a **Research / Target Price Summary** consolidating available, attributable and sufficiently current research from institutions such as:
+
+- BTG Pactual;
+- XP Investimentos;
+- Itaú BBA;
+- Safra;
+- other supported/reliable research sources.
+
+For each institution show only verified fields that are actually available:
+
+- institution;
+- recommendation/rating;
+- target price;
+- report/publication date;
+- implied upside/downside versus the current canonical price;
+- source/reference.
+
+The UI may show descriptive aggregates such as mean/median target price and rating distribution when enough comparable reports exist.
+
+**Critical rule:** the system must never invent, infer or silently carry forward an institution's recommendation or target price. If the current report cannot be verified, show it as unavailable/stale rather than estimating it. Any aggregate must disclose the reports and dates included.
+
+### News and events for the selected asset
+
+Show recent relevant news and upcoming events, including when available:
+
+- earnings/results;
+- dividends/JCP;
+- shareholder meetings;
+- regulatory events;
+- sector/company events;
+- macro/commodity events with direct relevance.
+
+Each item should carry date/time, source and relevance/relationship to the asset when supported.
+
+### Peer comparison
+
+Allow comparison with relevant peers when canonical comparable data exists. Comparison may include valuation, profitability, leverage, growth and market performance.
+
+### Copilot context
+
+When Asset Analysis is open, Copilot automatically receives the selected ticker and visible analysis context.
+
+Typical questions:
+
+- Summarize PETR4.
+- What is the current technical trend?
+- What are the main fundamental strengths and risks?
+- Compare the target prices published by the available research houses.
+- What changed recently in the investment thesis?
+- What upcoming events matter?
+- Compare PETR4 with relevant peers.
+
+Copilot synthesizes attributable evidence; it must not fabricate broker research or target prices.
+
+### Asset Analysis acceptance criteria
+
+Accepted when:
+
+- a supported ticker can be searched/selected;
+- the price chart supports at least 1W, 1M and 1Y horizons;
+- technical indicators are displayed from canonical data;
+- fundamental metrics are available where supported;
+- institutional target prices/recommendations include institution, date and source;
+- stale/unavailable research is clearly identified rather than inferred;
+- relevant asset news/events are visible;
+- Copilot automatically receives the selected asset context.
+
+---
+
 # 13. Cross-workspace interaction model
 
 ## 13.1 Selection propagation
@@ -1460,6 +1599,7 @@ Accepted when:
 - portfolio/opportunity-relevant news/events are prioritized;
 - data timestamps are visible where relevant;
 - factor claims distinguish association from causation;
+- Market Intelligence includes the approved Asset Analysis sub-view with configurable price horizon, technicals, fundamentals, attributable research/target prices, news/events and contextual Copilot;
 - Copilot can synthesize current market context.
 
 ---
@@ -1500,11 +1640,15 @@ Recommended sequence:
 - scenarios;
 - evidence/assumptions.
 
-### Phase 5 — Market Intelligence and polish
+### Phase 5 — Market Intelligence and Asset Intelligence
 - regime;
 - market/macro charts;
 - news/events;
 - factor surfacing;
+- dedicated Asset Analysis view;
+- technical indicators and fundamental analysis;
+- attributable institutional research/target-price summary;
+- asset news/events and peer comparison;
 - cross-workspace UX polish;
 - performance/accessibility validation.
 
