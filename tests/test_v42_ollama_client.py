@@ -110,3 +110,30 @@ def test_ollama_timeout_error_includes_operational_bounds(monkeypatch):
     assert "num_ctx=1024" in message
     assert "num_predict=64" in message
     assert "TimeoutError: timed out" in message
+
+
+def test_ollama_client_can_disable_thinking_for_health_preflight(monkeypatch):
+    captured = {}
+
+    def fake_urlopen(request, timeout):
+        captured["payload"] = json.loads(request.data.decode("utf-8"))
+        return _Response(
+            {
+                "model": "deepseek-r1:8b",
+                "message": {"content": "READY"},
+            }
+        )
+
+    monkeypatch.setattr(module, "urlopen", fake_urlopen)
+
+    OllamaClient(
+        timeout=30,
+        num_ctx=512,
+        num_predict=24,
+        keep_alive="5m",
+        think=False,
+    ).ask("Reply exactly READY.")
+
+    assert captured["payload"]["think"] is False
+    assert captured["payload"]["keep_alive"] == "5m"
+    assert captured["payload"]["options"]["num_predict"] == 24
