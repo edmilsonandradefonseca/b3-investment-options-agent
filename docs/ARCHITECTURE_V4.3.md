@@ -550,3 +550,276 @@ This negative-path validation is intentional evidence for the V4.3 architecture:
 V4.3 is therefore implemented and runtime validated.
 
 Repository merge/freeze sequencing remains separate because V4.3 is stacked on the V4.2 branch, whose CVM RAD live Gate D depends on external credentials.
+
+
+---
+
+## 22. Continuous Intelligence Loop
+
+V4.3 extends the asynchronous local Evidence Analyst into a continuous intelligence loop.
+
+The objective is to continuously discover new public/official information, normalize it into canonical Evidence, apply deterministic relevance/materiality filters, and use DeepSeek only as asynchronous derived-intelligence enrichment.
+
+The continuous loop must preserve the V4.3 critical invariant:
+
+> **Discovery and canonical Evidence ingestion never wait for DeepSeek.**
+
+### 22.1 Source hierarchy
+
+The continuous loop uses the following CVM/public channels with distinct roles.
+
+| Source | Authentication | V4.3 role |
+|---|---:|---|
+| CVM Dados Abertos — https://dados.cvm.gov.br | none | historical backfill, reconciliation, registry and public canonical datasets |
+| CVM Dados Abertos / Companhias — https://dados.cvm.gov.br/dataset?groups=companhias | none | company datasets, IPE/FCA/CAD discovery and reconciliation |
+| Empresas.NET / ENET — https://www.rad.cvm.gov.br/ENET/frmConsultaExternaCVM.aspx | none for public queries | public consultation/document retrieval and manual/diagnostic fallback |
+| CVMWEB — http://sistemas.cvm.gov.br | none for public consultation | supplemental public consultation; not a critical automation dependency |
+| CVM Download Múltiplo | authenticated credentials | near-real-time incremental discovery of newly filed documents |
+
+Credentials for Download Múltiplo are runtime secrets only and must never be committed to Git.
+
+### 22.2 Continuous loop
+
+```text
+               OFFICIAL/PUBLIC SOURCES
+                         |
+        +----------------+----------------+
+        |                                 |
+        v                                 v
+CVM Download Múltiplo               Open Data / ENET
+near-real-time discovery           reconciliation/backfill
+        |                                 |
+        +----------------+----------------+
+                         |
+                         v
+                 CANONICAL EVIDENCE
+                         |
+                         v
+               DETERMINISTIC TRIAGE
+            issuer / ticker / source
+          category / materiality / age
+             dedupe / portfolio scope
+                         |
+          +--------------+---------------+
+          |                              |
+          v                              v
+      SKIP/STORE                   LOCAL ANALYSIS QUEUE
+  no model required                       |
+                                          v
+                               DEEPSEEK ASYNC ANALYST
+                                 relevance/enrichment
+                                          |
+                                 +--------+--------+
+                                 |                 |
+                                 v                 v
+                              READY            DEGRADED
+                                 |                 |
+                                 v                 v
+                        optional derived       diagnostics only
+                        intelligence context
+                                 |
+                                 v
+                         SENIOR REVIEW POLICY
+                                 |
+                       deterministic trigger
+                          or human request
+                                 |
+                                 v
+                           OPENCLAW / LUNA
+```
+
+### 22.3 Deterministic triage before DeepSeek
+
+New Evidence must not be sent indiscriminately to the local model.
+
+The deterministic prefilter evaluates:
+
+- canonical issuer identity;
+- ticker mapping;
+- portfolio/watchlist membership;
+- source authority;
+- disclosure/document category;
+- deterministic materiality;
+- freshness;
+- duplicate/provider-record identity;
+- Evidence content hash;
+- whether an equivalent Evidence fingerprint has already been analyzed.
+
+Initial enqueue policy:
+
+1. `MATERIAL` official Evidence for monitored issuers -> always eligible for local background enrichment;
+2. `CANDIDATE` official Evidence for monitored issuers -> eligible for local relevance screening;
+3. open-web Evidence -> eligible only after minimum coverage/source-quality rules and ticker mapping;
+4. `NON_MATERIAL`, duplicates and already-current fingerprints -> persist/skip without local inference;
+5. `COVERAGE_INSUFFICIENT` remains a coverage state, not a reason to invent relevance.
+
+DeepSeek never changes the canonical deterministic materiality classification.
+
+### 22.4 Two-stage local reasoning
+
+To reduce latency and avoid the observed 768-token truncation failure, V4.3 continuous intelligence should use two distinct local tasks.
+
+#### Stage A — Local relevance screen
+
+A small structured-output request answers only:
+
+```json
+{
+  "relevance": "RELEVANT | POSSIBLY_RELEVANT | NOT_RELEVANT | UNKNOWN",
+  "themes": ["..."],
+  "reason": "...",
+  "senior_review_candidate": false,
+  "evidence_refs": ["..."]
+}
+```
+
+Properties:
+
+- small context;
+- small output ceiling;
+- deterministic JSON Schema;
+- no recommendation;
+- no numerical invention;
+- no canonical-state mutation.
+
+For official `MATERIAL` Evidence, a DeepSeek `NOT_RELEVANT` result cannot suppress the Evidence or remove it from senior availability.
+
+For `CANDIDATE` Evidence, relevance output remains derived intelligence.
+
+#### Stage B — Local Evidence dossier
+
+Only Evidence that survives deterministic eligibility and local relevance screening proceeds to the larger dossier task.
+
+The dossier produces:
+
+- concise summary;
+- candidate risks;
+- candidate catalysts;
+- contradictions;
+- missing information;
+- questions for senior review;
+- exact Evidence refs.
+
+A dossier that is invalid, truncated, stale or uses unknown refs is `DEGRADED` and is excluded from senior context.
+
+### 22.5 Scheduling policy
+
+Default operational target:
+
+- Download Múltiplo incremental discovery: configurable frequent polling on business days;
+- conservative initial cadence: every 15 minutes during the active monitoring window;
+- Open Data reconciliation: once daily;
+- local DeepSeek worker: separate timer after discovery and periodically drain a bounded queue;
+- catch-up/reconciliation run after host downtime;
+- all cadences configurable through runtime environment, not hard-coded business logic.
+
+The implementation must use a durable discovery cursor with a small overlap window so restart or transient source failure does not create gaps.
+
+Polling must be respectful of source capacity; no uncontrolled parallel requests or aggressive scraping.
+
+### 22.6 Incremental discovery cursor
+
+The Download Múltiplo path must persist:
+
+- last successful query date/time;
+- last observed provider record IDs;
+- query overlap window;
+- last source error;
+- last successful retrieval timestamp.
+
+On each poll:
+
+```text
+previous cursor
+      |
+      v
+query [cursor - overlap, now]
+      |
+      v
+dedupe by provider identity/content hash
+      |
+      v
+persist new canonical Evidence
+      |
+      v
+advance cursor only after successful persistence
+```
+
+A failed query must not advance the cursor.
+
+### 22.7 Senior escalation policy
+
+DeepSeek may propose `senior_review_candidate=true`, but that field alone is insufficient to invoke OpenClaw/Luna automatically.
+
+Automatic senior escalation requires a deterministic policy, for example:
+
+- official MATERIAL Evidence for an owned position;
+- configured portfolio-risk threshold;
+- multiple independent canonical Evidence records on the same theme;
+- explicit user request;
+- another deterministic UC trigger.
+
+If no deterministic senior trigger exists, the local dossier remains cached derived intelligence for future use.
+
+### 22.8 Continuous intelligence observability
+
+Backend observability should expose at least:
+
+```text
+GET /intelligence/local/status
+GET /intelligence/local/queue
+GET /intelligence/local/{ticker}
+GET /intelligence/local/manifest
+```
+
+The UI/API must keep these concepts visibly separate:
+
+- canonical Evidence;
+- deterministic materiality;
+- local derived-intelligence status;
+- whether a local dossier was accepted or omitted;
+- quality flags;
+- last source poll / cursor;
+- backlog size.
+
+### 22.9 Shared-host resource arbitration
+
+Continuous scheduling makes cross-project Ollama arbitration a production requirement.
+
+B3 and João must share one host-level heavy-reasoning lock/semaphore.
+
+Target contract:
+
+```text
+/var/lock/local-reasoning.lock
+              |
+       +------+------+
+       |             |
+       v             v
+      B3            João
+       \             /
+        +--- flock --+
+```
+
+Only one heavy local inference may run at a time.
+
+A busy lock delays/requeues local analysis; it never delays canonical Evidence ingestion, deterministic APIs or OpenClaw/Luna interactive reasoning.
+
+### 22.10 Continuous-loop acceptance
+
+The continuous intelligence extension is accepted only when all are demonstrated:
+
+- authenticated Download Múltiplo discovery works with runtime secrets;
+- no credentials appear in Git/log artifacts;
+- cursor restart/catch-up does not lose Evidence;
+- repeated polling is idempotent;
+- official MATERIAL Evidence is persisted immediately;
+- candidate Evidence can enter local relevance screening;
+- DeepSeek is never called inline by source ingestion;
+- relevance-screen structured output is bounded and validated;
+- degraded local output cannot suppress canonical Evidence;
+- local worker is bounded and serialized;
+- B3/João shared-host lock works;
+- backend observability exposes queue/dossier/source-cursor status;
+- daily Open Data reconciliation detects/reconciles missed records;
+- senior reasoning remains fully functional when DeepSeek is absent, busy or degraded.
