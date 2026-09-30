@@ -63,3 +63,57 @@ def test_material_dossier_escalates_with_provenance(tmp_path, monkeypatch):
     assert senior.calls == 1
     assert pilot.analyze("ABEV3", tmp_path, senior)["openclaw_status"] == "completed"
     assert senior.calls == 1
+
+
+def test_live_pilot_accepts_explicit_coverage_insufficient_as_observable_state():
+    rows = []
+    for ticker in pilot.TICKERS[:10]:
+        rows.append(
+            {
+                "ticker": ticker,
+                "market": "validated",
+                "deepseek": "completed",
+                "openclaw": "completed",
+            }
+        )
+    for ticker in pilot.TICKERS[10:15]:
+        rows.append(
+            {
+                "ticker": ticker,
+                "market": "validated",
+                "deepseek": "skipped_no_material_events",
+                "openclaw": "not_required",
+            }
+        )
+    for ticker in pilot.TICKERS[15:]:
+        rows.append(
+            {
+                "ticker": ticker,
+                "market": "validated",
+                "deepseek": "coverage_insufficient",
+                "openclaw": "not_required",
+            }
+        )
+
+    assert pilot.pilot_runtime_ok(
+        rows,
+        {"status": "SUCCESS", "resolved_tickers": 20},
+    )
+
+
+def test_live_pilot_still_fails_real_runtime_or_model_errors():
+    rows = [
+        {
+            "ticker": ticker,
+            "market": "validated",
+            "deepseek": "skipped_no_material_events",
+            "openclaw": "not_required",
+        }
+        for ticker in pilot.TICKERS
+    ]
+    rows[-1]["deepseek"] = "failed"
+
+    assert not pilot.pilot_runtime_ok(
+        rows,
+        {"status": "SUCCESS", "resolved_tickers": 20},
+    )

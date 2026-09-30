@@ -16,16 +16,47 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from b3_agent.config import settings
+from b3_agent.intelligence.official_sources import load_open_data_official_evidence
 from b3_agent.jobs.nightly_intelligence import NightlyIntelligenceJob
 from b3_agent.llm.client import OpenClawStructuredClient
 from b3_agent.orchestration.live_providers import LiveProviderService
 from b3_agent.routing import FastRouter, RouteTarget
+
+PILOT_VERSION = "v4.2-official-sources-fd1"
 
 TICKERS = (
     "ABEV3", "ASAI3", "BBDC4", "BEEF3", "CMIG4", "CURY3", "DIRR3", "EQTL3",
     "GGBR4", "ITUB4", "MILS3", "ORVR3", "PCAR3", "PETR4", "POMO4", "RANI3",
     "SUZB3", "TOTS3", "VULC3", "WEGE3",
 )
+ALLOWED_PILOT_RESEARCH_STATUSES = {
+    "completed",
+    "skipped_no_material_events",
+    "coverage_insufficient",
+}
+ALLOWED_PILOT_OPENCLAW_STATUSES = {
+    "completed",
+    "not_required",
+}
+
+
+def pilot_runtime_ok(rows: list[dict], official_coverage: dict) -> bool:
+    """Technical acceptance for the live coverage track.
+
+    COVERAGE_INSUFFICIENT is a valid observable coverage state in V4.2. It is
+    not a provider/runtime failure and must not be rewritten as NO_MATERIAL.
+    """
+    return (
+        official_coverage.get("status") == "SUCCESS"
+        and all(
+            row.get("market") == "validated"
+            and row.get("deepseek") in ALLOWED_PILOT_RESEARCH_STATUSES
+            and row.get("openclaw") in ALLOWED_PILOT_OPENCLAW_STATUSES
+            for row in rows
+        )
+    )
+
+
 SCHEMA = {
     "type": "object",
     "properties": {
@@ -66,9 +97,13 @@ def routing_contract(ticker: str) -> dict[str, str]:
     return {name: decision.target.value for name, decision in paths.items()}
 
 
-def market_evidence(ticker: str) -> dict:
+def market_evidence(
+    ticker: str,
+    service: LiveProviderService | None = None,
+) -> dict:
     today = datetime.now(timezone.utc).date()
-    records = LiveProviderService().market_provider.get_market_data(
+    live = service or LiveProviderService()
+    records = live.market_provider.get_market_data(
         ticker, today - timedelta(days=35), today
     )
     if not records:
@@ -81,24 +116,38 @@ def market_evidence(ticker: str) -> dict:
     }
 
 
-def analyze(ticker: str, output: Path, senior: OpenClawStructuredClient) -> dict:
+def analyze(
+    ticker: str,
+    output: Path,
+    senior: OpenClawStructuredClient,
+    official_evidence: tuple = (),
+    market_service: LiveProviderService | None = None,
+    nightly_job: NightlyIntelligenceJob | None = None,
+) -> dict:
     path = output / f"{ticker}.json"
     row = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"ticker": ticker}
     row["routes"] = routing_contract(ticker)
     today = datetime.now(timezone.utc).date().isoformat()
-    if row.get("run_date") != today:
+    if row.get("run_date") != today or row.get("pilot_version") != PILOT_VERSION:
         try:
-            market = market_evidence(ticker)
+            market = market_evidence(ticker, service=market_service)
             market_error = None
         except Exception as exc:
             market = None
             market_error = f"{type(exc).__name__}: {exc}"
         # V4.2 UC-10: resilient acquisition -> coverage -> events -> materiality -> local DeepSeek.
-        result = NightlyIntelligenceJob(
+        intelligence = nightly_job or NightlyIntelligenceJob(
             news_limit=8, max_deepseek_calls=1, output_dir=output / "deepseek"
-        ).run(tickers=[ticker])["results"][0]
+        )
+        result = intelligence.run(
+            tickers=[ticker],
+            official_evidence_by_ticker={ticker: official_evidence},
+        )["results"][0]
         row = {
-            "ticker": ticker, "run_date": today, "routes": routing_contract(ticker),
+            "ticker": ticker,
+            "run_date": today,
+            "pilot_version": PILOT_VERSION,
+            "routes": routing_contract(ticker),
             "market": market, "market_error": market_error,
             "evidence": {
                 "collected_at": result.get("as_of"),
@@ -113,6 +162,10 @@ def analyze(ticker: str, output: Path, senior: OpenClawStructuredClient) -> dict
                 "dated_recent_count": result.get("dated_recent_count", 0),
                 "raw_event_count": result.get("raw_event_count", 0),
                 "material_event_count": result.get("material_event_count", 0),
+                "official_evidence_count": result.get("official_evidence_count", 0),
+                "official_material_count": result.get("official_material_count", 0),
+                "official_candidate_count": result.get("official_candidate_count", 0),
+                "material_evidence_count": result.get("material_evidence_count", 0),
                 "fallback_used": result.get("fallback_used", False),
                 "fallback_strategy": result.get("fallback_strategy"),
                 "engine_errors": result.get("engine_errors", []),
@@ -169,9 +222,38 @@ def main() -> int:
     output = settings.data_dir / "derived" / "intelligence_pilot_v42"
     senior = OpenClawStructuredClient(agent=settings.openclaw_agent, model=settings.openclaw_model,
                                       timeout=settings.openclaw_timeout_seconds, executable=settings.openclaw_bin)
+    selected = TICKERS[:args.limit]
+    try:
+        official_snapshot = load_open_data_official_evidence(selected)
+        official_map = official_snapshot.by_ticker
+        official_coverage = official_snapshot.coverage
+    except Exception as exc:
+        official_map = {ticker: () for ticker in selected}
+        official_coverage = {
+            "status": "FAILED",
+            "error": f"{type(exc).__name__}: {exc}",
+            "requested_tickers": len(selected),
+            "resolved_tickers": 0,
+            "unresolved_tickers": list(selected),
+        }
+
+    market_service = LiveProviderService()
+    nightly_job = NightlyIntelligenceJob(
+        news_limit=8,
+        max_deepseek_calls=1,
+        output_dir=output / "deepseek",
+    )
+
     rows = []
-    for ticker in TICKERS[:args.limit]:
-        row = analyze(ticker, output, senior)
+    for ticker in selected:
+        row = analyze(
+            ticker,
+            output,
+            senior,
+            official_evidence=official_map.get(ticker, ()),
+            market_service=market_service,
+            nightly_job=nightly_job,
+        )
         evidence = row.get("evidence", {})
         rows.append({"ticker": ticker, "deepseek": row.get("deepseek_status", "not_run"),
                      "openclaw": row.get("openclaw_status", "not_run"),
@@ -183,26 +265,36 @@ def main() -> int:
                      "raw_results": evidence.get("raw_result_count", 0),
                      "recent_dated": evidence.get("dated_recent_count", 0),
                      "material_events": evidence.get("material_event_count", 0),
+                     "official_evidence": evidence.get("official_evidence_count", 0),
+                     "official_material": evidence.get("official_material_count", 0),
+                     "material_evidence": evidence.get("material_evidence_count", 0),
                      "fallback_used": evidence.get("fallback_used", False)})
         manifest = {
-            "as_of": datetime.now(timezone.utc).isoformat(), "requested": args.limit,
+            "as_of": datetime.now(timezone.utc).isoformat(),
+            "requested": args.limit,
+            "pilot_version": PILOT_VERSION,
+            "official_sources": official_coverage,
             "router_verified": sum(bool(r["routes"]) for r in rows),
             "market_validated": sum(r["market"] == "validated" for r in rows),
             "deepseek_completed": sum(r["deepseek"] == "completed" for r in rows),
             "no_material_event": sum(r["deepseek"] == "skipped_no_material_events" for r in rows),
             "coverage_insufficient": sum(r["deepseek"] == "coverage_insufficient" for r in rows),
+            "coverage_sufficient": sum(
+                r["deepseek"] in {"completed", "skipped_no_material_events"}
+                for r in rows
+            ),
+            "live_coverage_status": (
+                "PASS_WITH_COVERAGE_GAPS"
+                if any(r["deepseek"] == "coverage_insufficient" for r in rows)
+                else "PASS"
+            ),
             "openclaw_escalations_completed": sum(r["openclaw"] == "completed" for r in rows),
             "both_completed": sum(r["deepseek"] == r["openclaw"] == "completed" for r in rows),
             "results": rows,
         }
         save(output / "latest.json", manifest)
         print(json.dumps(rows[-1], ensure_ascii=False), flush=True)
-    return 0 if all(
-        r["market"] == "validated"
-        and r["deepseek"] not in {"failed", "coverage_insufficient"}
-        and r["openclaw"] != "failed"
-        for r in rows
-    ) else 2
+    return 0 if pilot_runtime_ok(rows, official_coverage) else 2
 
 
 if __name__ == "__main__":

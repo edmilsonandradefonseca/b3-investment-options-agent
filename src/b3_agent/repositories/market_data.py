@@ -88,7 +88,11 @@ class MarketDataRepository:
         if not output_path.exists():
             return []
 
-        table = pq.ParquetFile(output_path).read()
+        # Open the parquet source explicitly so the file descriptor is closed
+        # deterministically after every read. Relying on ParquetFile object
+        # finalization can accumulate descriptors in long multi-ticker runs.
+        with output_path.open("rb") as source:
+            table = pq.read_table(source)
         rows = table.to_pylist()
 
         return [

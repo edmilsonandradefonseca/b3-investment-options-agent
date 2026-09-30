@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 from b3_agent.config import settings
 from b3_agent.intelligence import AcquisitionStatus, EvidenceConclusion
+from b3_agent.knowledge.evidence import Evidence
 from b3_agent.llm.ollama_client import OllamaClient
 from b3_agent.portfolio.snapshot import load_active_snapshots
 from b3_agent.providers.searxng_news import SearxngNewsAdapter
@@ -86,6 +87,7 @@ def portfolio_tickers() -> list[str]:
 
 def _event_payload(event: Any) -> dict[str, Any]:
     return {
+        "evidence_type": "open_web_event",
         "ticker": event.ticker,
         "event_type": event.event_type,
         "published_at": event.published_at.isoformat(),
@@ -94,6 +96,50 @@ def _event_payload(event: Any) -> dict[str, Any]:
         "source_name": event.source_name,
         "source_ref": event.source_ref,
     }
+
+
+def _official_evidence_payload(evidence: Evidence) -> dict[str, Any]:
+    metadata = evidence.metadata
+    return {
+        "evidence_type": "official_disclosure",
+        "ticker_refs": list(metadata.ticker_refs),
+        "issuer_ref": metadata.issuer_ref,
+        "cvm_code": metadata.cvm_code,
+        "published_at": (
+            metadata.published_at.isoformat() if metadata.published_at else None
+        ),
+        "reference_at": (
+            metadata.reference_at.isoformat() if metadata.reference_at else None
+        ),
+        "headline": evidence.title,
+        "summary": evidence.content,
+        "source_name": metadata.source,
+        "source_ref": evidence.source_url or evidence.evidence_id,
+        "materiality": metadata.materiality,
+        "materiality_reason": metadata.materiality_reason,
+        "pit_status": metadata.pit_status,
+        "evidence_id": evidence.evidence_id,
+    }
+
+
+def _recent_official_evidence(
+    evidences: tuple[Evidence, ...],
+    *,
+    as_of: datetime,
+    days: int = 3,
+) -> tuple[Evidence, ...]:
+    cutoff = as_of - timedelta(days=days)
+    selected: list[Evidence] = []
+    for evidence in evidences:
+        metadata = evidence.metadata
+        timestamp = (
+            metadata.published_at
+            or metadata.observed_at
+            or metadata.retrieved_at
+        )
+        if timestamp <= as_of and timestamp >= cutoff:
+            selected.append(evidence)
+    return tuple(selected)
 
 
 def _looks_static(event: Any) -> bool:
@@ -168,8 +214,17 @@ class NightlyIntelligenceJob:
         )
         self.llm = OllamaClient()
 
-    def run(self, *, tickers: list[str] | None = None) -> dict[str, Any]:
+    def run(
+        self,
+        *,
+        tickers: list[str] | None = None,
+        official_evidence_by_ticker: dict[str, tuple[Evidence, ...]] | None = None,
+    ) -> dict[str, Any]:
         selected = tickers or portfolio_tickers()
+        official_map = {
+            key.upper().strip(): value
+            for key, value in (official_evidence_by_ticker or {}).items()
+        }
         if not selected:
             raise RuntimeError("no portfolio tickers available for nightly intelligence")
 
@@ -183,6 +238,7 @@ class NightlyIntelligenceJob:
                 result = self._process_ticker(
                     ticker=ticker,
                     deepseek_allowed=deepseek_calls < self.max_deepseek_calls,
+                    official_evidence=official_map.get(ticker.upper().strip(), ()),
                 )
                 if result["status"] == "completed":
                     deepseek_calls += 1
@@ -215,7 +271,13 @@ class NightlyIntelligenceJob:
         )
         return manifest
 
-    def _process_ticker(self, *, ticker: str, deepseek_allowed: bool) -> dict[str, Any]:
+    def _process_ticker(
+        self,
+        *,
+        ticker: str,
+        deepseek_allowed: bool,
+        official_evidence: tuple[Evidence, ...] = (),
+    ) -> dict[str, Any]:
         query = f"{ticker} notícias fato relevante resultados dividendos mercado"
         records = self.news.search(ticker, query=query, limit=self.news_limit)
         diagnostics = getattr(self.news, "last_diagnostics", None)
@@ -226,6 +288,20 @@ class NightlyIntelligenceJob:
         snapshot_as_of = datetime.now(timezone.utc)
         snapshot = ResearchEventService().build(recent_records, as_of=snapshot_as_of)
         material_events = _select_material_events(snapshot.events)
+        recent_official = _recent_official_evidence(
+            official_evidence,
+            as_of=snapshot_as_of,
+        )
+        official_material = tuple(
+            item
+            for item in recent_official
+            if item.metadata.materiality == "MATERIAL"
+        )
+        official_candidates = tuple(
+            item
+            for item in recent_official
+            if item.metadata.materiality == "CANDIDATE"
+        )
 
         engine_errors = []
         fallback_used = False
@@ -253,10 +329,10 @@ class NightlyIntelligenceJob:
         else:
             acquisition_status = AcquisitionStatus.SUCCESS
 
-        if not records or dated_result_count == 0:
-            evidence_conclusion = EvidenceConclusion.COVERAGE_INSUFFICIENT
-        elif material_events:
+        if material_events or official_material:
             evidence_conclusion = EvidenceConclusion.MATERIAL_FOUND
+        elif not records or dated_result_count == 0:
+            evidence_conclusion = EvidenceConclusion.COVERAGE_INSUFFICIENT
         else:
             evidence_conclusion = EvidenceConclusion.NO_MATERIAL_FOUND
 
@@ -270,6 +346,10 @@ class NightlyIntelligenceJob:
             "dated_recent_count": len(recent_records),
             "raw_event_count": len(snapshot.events),
             "material_event_count": len(material_events),
+            "official_evidence_count": len(recent_official),
+            "official_material_count": len(official_material),
+            "official_candidate_count": len(official_candidates),
+            "material_evidence_count": len(material_events) + len(official_material),
             "acquisition_status": acquisition_status.value,
             "evidence_conclusion": evidence_conclusion.value,
             "fallback_used": fallback_used,
@@ -283,27 +363,35 @@ class NightlyIntelligenceJob:
                 "status": "coverage_insufficient",
             }
 
-        if not material_events:
+        if not material_events and not official_material:
             return {
                 **base,
                 "status": "skipped_no_material_events",
             }
 
+        web_payloads = [_event_payload(event) for event in material_events]
+        official_payloads = [
+            _official_evidence_payload(evidence)
+            for evidence in official_material
+        ]
+        events = web_payloads + official_payloads
+        source_refs = [event["source_ref"] for event in events]
+
         if not deepseek_allowed:
             return {
                 **base,
                 "status": "deferred_deepseek_budget",
-                "source_refs": [event.source_ref for event in material_events],
+                "source_refs": source_refs,
+                "evidence_events": events,
             }
 
-        events = [_event_payload(event) for event in material_events]
         llm_result = self.llm.ask(_prompt(ticker, events))
         item = {
             **base,
             "status": "completed",
-            "source_refs": [event["source_ref"] for event in events],
+            "source_refs": source_refs,
             "evidence_events": events,
-            "prompt_version": "b3_uc10_material_events_v1",
+            "prompt_version": "b3_uc10_canonical_evidence_v2",
             "created_at": datetime.now(timezone.utc).isoformat(),
             "escalation_status": "pending_review",
             "model": llm_result.model,
