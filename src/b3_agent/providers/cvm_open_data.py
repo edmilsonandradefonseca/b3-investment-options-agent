@@ -20,6 +20,7 @@ CVM_CAD_URL = CVM_OPEN_DATA_ROOT + "/CAD/DADOS/cad_cia_aberta.csv"
 CVM_FCA_URL_TEMPLATE = (
     CVM_OPEN_DATA_ROOT + "/DOC/FCA/DADOS/fca_cia_aberta_{year}.zip"
 )
+CVM_SOURCE_TIMEZONE = ZoneInfo("America/Sao_Paulo")
 
 
 class CvmOpenDataError(RuntimeError):
