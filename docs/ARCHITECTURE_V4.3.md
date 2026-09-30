@@ -223,7 +223,7 @@ Minimum metadata:
   "evidence_refs": ["..."],
   "created_at": "...",
   "model": "deepseek-r1:8b",
-  "prompt_version": "b3_local_evidence_analyst_v1",
+  "prompt_version": "b3_local_evidence_analyst_v2",
   "status": "READY",
   "quality_flags": [],
   "analysis": "...",
