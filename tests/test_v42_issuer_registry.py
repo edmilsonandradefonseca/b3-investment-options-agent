@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
 from b3_agent.intelligence.issuer_registry import IssuerRegistry
@@ -125,3 +126,29 @@ def test_issuer_registry_excludes_ended_security_from_active_mapping(tmp_path):
         cvm_code="9512",
         active_only=False,
     ) == ("PETR3", "PETR4", "PETR9")
+
+
+def test_issuer_registry_repeated_resolution_does_not_leak_sqlite_descriptors(tmp_path):
+    fd_root = Path("/proc/self/fd")
+    if not fd_root.is_dir():
+        return
+
+    registry = IssuerRegistry(tmp_path / "issuer_registry.sqlite3")
+    registry.sync_from_cvm(
+        provider=FakeProvider(),
+        year=2026,
+        as_of=date(2026, 9, 30),
+    )
+
+    before = len(list(fd_root.iterdir()))
+    for _ in range(2000):
+        issuer = registry.resolve_issuer(cvm_code="9512", cnpj="33000167000101")
+        assert issuer is not None
+        assert registry.resolve_tickers(
+            cvm_code="9512",
+            cnpj="33000167000101",
+            as_of=date(2026, 9, 30),
+        ) == ("PETR3", "PETR4")
+    after = len(list(fd_root.iterdir()))
+
+    assert after <= before + 2
