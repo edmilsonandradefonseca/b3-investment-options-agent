@@ -99,7 +99,7 @@ def test_open_data_ipe_becomes_canonical_historical_evidence(tmp_path):
         version="1",
         document_url="https://www.rad.cvm.gov.br/doc/123",
         retrieved_at=NOW,
-        raw_row={"categoria": "Fato Relevante"},
+        raw_row={"categoria": "Fato Relevante", "data_entrega": "2026-09-29"},
     )
 
     evidence = builder.from_open_data_ipe(record)
@@ -115,6 +115,8 @@ def test_open_data_ipe_becomes_canonical_historical_evidence(tmp_path):
     assert evidence.metadata.published_at == DELIVERED
     assert evidence.metadata.first_seen_at == NOW
     assert evidence.metadata.discovery_channel == "CVM_OPEN_DATA"
+    assert evidence.metadata.extra["published_at_precision"] == "DATE"
+    assert evidence.metadata.extra["published_at_semantics"] == "CVM_DATA_ENTREGA"
 
     payload = evidence_to_dict(evidence)
     assert payload["metadata"]["ticker_refs"] == ["PETR3", "PETR4"]
