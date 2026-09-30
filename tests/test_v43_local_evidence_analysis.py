@@ -10,6 +10,7 @@ from b3_agent.intelligence.local_evidence_analysis import (
     LocalEvidenceContextSelector,
     LocalEvidenceDossier,
     LocalEvidenceQueue,
+    LOCAL_ANALYSIS_SCHEMA,
     build_request,
     evidence_fingerprint,
 )
@@ -235,3 +236,10 @@ def test_worker_processes_queue_and_persists_manifest(tmp_path):
     assert client.calls == 1
     assert queue.latest("PETR4") is not None
     assert (queue.manifests_dir / "latest.json").is_file()
+
+
+def test_default_local_analyst_uses_runtime_json_schema():
+    analyst = LocalEvidenceAnalyst()
+    assert analyst.client.format_schema == LOCAL_ANALYSIS_SCHEMA
+    assert analyst.client.format_schema["additionalProperties"] is False
+    assert "evidence_refs" in analyst.client.format_schema["required"]
