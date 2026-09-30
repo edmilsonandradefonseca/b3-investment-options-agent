@@ -9,6 +9,7 @@ import re
 import unicodedata
 import urllib.request
 import zipfile
+from zoneinfo import ZoneInfo
 
 
 CVM_OPEN_DATA_ROOT = "https://dados.cvm.gov.br/dados/CIA_ABERTA"
@@ -509,7 +510,7 @@ def _parse_datetime(value: str | None) -> datetime | None:
     try:
         parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
         if parsed.tzinfo is None or parsed.utcoffset() is None:
-            return parsed.replace(tzinfo=timezone.utc)
+            return parsed.replace(tzinfo=CVM_SOURCE_TIMEZONE).astimezone(timezone.utc)
         return parsed.astimezone(timezone.utc)
     except ValueError:
         pass
@@ -523,7 +524,7 @@ def _parse_datetime(value: str | None) -> datetime | None:
     ):
         try:
             parsed = datetime.strptime(text, fmt)
-            return parsed.replace(tzinfo=timezone.utc)
+            return parsed.replace(tzinfo=CVM_SOURCE_TIMEZONE).astimezone(timezone.utc)
         except ValueError:
             continue
     return None
