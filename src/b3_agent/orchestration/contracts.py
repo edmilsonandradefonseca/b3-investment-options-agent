@@ -47,6 +47,7 @@ class B3State(TypedDict, total=False):
     rag_context: list[dict[str, Any]]
     graph_context: list[dict[str, Any]]
     evidence: list[dict[str, Any]]
+    derived_intelligence: dict[str, Any]
     signals: list[dict[str, Any]]
     threats: list[dict[str, Any]]
     opportunities: list[dict[str, Any]]
