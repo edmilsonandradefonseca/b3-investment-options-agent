@@ -52,3 +52,48 @@ jobs:
       - name: Build React frontend
         working-directory: frontend
         run: npm run build
+
+
+  v42-low-fd-live-cvm:
+    if: github.head_ref == 'feature/v4.2-official-sources'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: "pip"
+
+      - name: Install project
+        run: python -m pip install -e ".[dev]"
+
+      - name: Validate real CVM official loader under low NOFILE
+        shell: bash
+        run: |
+          ulimit -n 128
+          echo "NOFILE=$(ulimit -n)"
+          python scripts/validate_v42_official_sources.py --ticker PETR4 --year 2026
+          python - <<'PY'
+          from b3_agent.intelligence.official_sources import load_open_data_official_evidence
+          tickers = (
+              "ABEV3", "ASAI3", "BBDC4", "BEEF3", "CMIG4", "CURY3", "DIRR3", "EQTL3",
+              "GGBR4", "ITUB4", "MILS3", "ORVR3", "PCAR3", "PETR4", "POMO4", "RANI3",
+              "SUZB3", "TOTS3", "VULC3", "WEGE3",
+          )
+          snapshot = load_open_data_official_evidence(tickers, year=2026)
+          print({
+              "status": snapshot.coverage["status"],
+              "requested_tickers": snapshot.coverage["requested_tickers"],
+              "resolved_tickers": snapshot.coverage["resolved_tickers"],
+              "ipe_document_count": snapshot.coverage["ipe_document_count"],
+              "ipe_material_count": snapshot.coverage["ipe_material_count"],
+              "ipe_candidate_count": snapshot.coverage["ipe_candidate_count"],
+          })
+          assert snapshot.coverage["status"] == "SUCCESS"
+          assert snapshot.coverage["resolved_tickers"] == 20
+          PY
