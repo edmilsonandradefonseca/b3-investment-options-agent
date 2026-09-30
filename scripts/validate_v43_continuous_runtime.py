@@ -216,10 +216,16 @@ def main() -> int:
     )
     lock_event = _event(material or candidate)
     lock_queue.enqueue(selected[0], [lock_event])
+    acceptance_lock_path = acceptance_data / "shared-lock-acceptance.lock"
     old_wait = os.environ.get("LOCAL_REASONING_LOCK_WAIT_SECONDS")
+    old_path = os.environ.get("LOCAL_REASONING_LOCK_PATH")
     os.environ["LOCAL_REASONING_LOCK_WAIT_SECONDS"] = "0"
+    os.environ["LOCAL_REASONING_LOCK_PATH"] = str(acceptance_lock_path)
     try:
-        with local_reasoning_lock(wait_seconds=0):
+        with local_reasoning_lock(
+            path=acceptance_lock_path,
+            wait_seconds=0,
+        ):
             lock_result = LocalEvidenceAnalystJob(
                 queue=lock_queue,
                 output_root=acceptance_data / "derived" / "lock_acceptance_dossier",
@@ -229,6 +235,10 @@ def main() -> int:
             os.environ.pop("LOCAL_REASONING_LOCK_WAIT_SECONDS", None)
         else:
             os.environ["LOCAL_REASONING_LOCK_WAIT_SECONDS"] = old_wait
+        if old_path is None:
+            os.environ.pop("LOCAL_REASONING_LOCK_PATH", None)
+        else:
+            os.environ["LOCAL_REASONING_LOCK_PATH"] = old_path
 
     if lock_result.get("deferred") != 1:
         raise RuntimeError(
@@ -314,6 +324,10 @@ def main() -> int:
         },
         "shared_lock": {
             "status": "PASS",
+            "production_contract_path": (
+                old_path or "/var/lock/local-reasoning.lock"
+            ),
+            "semantic_test_path": str(acceptance_lock_path),
             "worker_deferred": lock_result.get("deferred"),
             "remaining_queue": lock_result.get("remaining_queue"),
         },

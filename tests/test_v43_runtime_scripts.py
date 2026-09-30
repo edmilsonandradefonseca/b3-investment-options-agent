@@ -85,3 +85,13 @@ def test_v43_identity_finalize_script_checks_valid_and_invalid_tickers():
     assert '[[ "${valid_code}" == "200" ]]' in text
     assert '[[ "${invalid_code}" == "400" ]]' in text
     assert "V4_3_IDENTITY_RUNTIME=PASS" in text
+
+
+def test_v43_continuous_acceptance_uses_isolated_lock_fixture():
+    text = (ROOT / "scripts/validate_v43_continuous_runtime.py").read_text(
+        encoding="utf-8"
+    )
+    assert 'acceptance_lock_path = acceptance_data / "shared-lock-acceptance.lock"' in text
+    assert 'os.environ["LOCAL_REASONING_LOCK_PATH"] = str(acceptance_lock_path)' in text
+    assert '"production_contract_path"' in text
+    assert '"semantic_test_path"' in text
