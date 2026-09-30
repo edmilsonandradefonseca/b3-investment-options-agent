@@ -55,7 +55,7 @@ class FakeLLM:
 
 
 def test_nightly_job_persists_manifest_for_material_event(tmp_path):
-    job = NightlyIntelligenceJob(output_dir=tmp_path)
+    job = NightlyIntelligenceJob(output_dir=tmp_path, local_analysis_mode="inline")
     job.news = FakeNews(material=True)
     job.llm = FakeLLM()
     result = job.run(tickers=["PETR4"])
@@ -68,7 +68,7 @@ def test_nightly_job_persists_manifest_for_material_event(tmp_path):
 
 
 def test_nightly_job_skips_static_non_material_page(tmp_path):
-    job = NightlyIntelligenceJob(output_dir=tmp_path)
+    job = NightlyIntelligenceJob(output_dir=tmp_path, local_analysis_mode="inline")
     job.news = FakeNews(material=False)
     job.llm = FakeLLM()
     result = job.run(tickers=["PETR4"])
@@ -81,6 +81,7 @@ def test_nightly_job_defers_after_deepseek_budget(tmp_path):
     job = NightlyIntelligenceJob(
         output_dir=tmp_path,
         max_deepseek_calls=1,
+        local_analysis_mode="inline",
     )
     job.news = FakeNews(material=True)
     job.llm = FakeLLM()
@@ -108,7 +109,7 @@ class FakeEmptyNews:
 
 
 def test_nightly_job_distinguishes_insufficient_coverage_from_no_material(tmp_path):
-    job = NightlyIntelligenceJob(output_dir=tmp_path)
+    job = NightlyIntelligenceJob(output_dir=tmp_path, local_analysis_mode="inline")
     job.news = FakeEmptyNews()
     job.llm = FakeLLM()
 
@@ -129,7 +130,7 @@ def test_nightly_job_distinguishes_insufficient_coverage_from_no_material(tmp_pa
 
 
 def test_nightly_job_persists_coverage_metadata_for_no_material_result(tmp_path):
-    job = NightlyIntelligenceJob(output_dir=tmp_path)
+    job = NightlyIntelligenceJob(output_dir=tmp_path, local_analysis_mode="inline")
     job.news = FakeNews(material=False)
     job.llm = FakeLLM()
 
@@ -174,7 +175,7 @@ def test_official_material_evidence_triggers_deepseek_when_open_web_is_degraded(
         ),
     )
 
-    job = NightlyIntelligenceJob(output_dir=tmp_path)
+    job = NightlyIntelligenceJob(output_dir=tmp_path, local_analysis_mode="inline")
     job.news = FakeEmptyNews()
     job.llm = FakeLLM()
 
