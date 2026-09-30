@@ -1,9 +1,11 @@
 from datetime import date, datetime, timezone
+import json
 from types import SimpleNamespace
 
 from b3_agent.intelligence.issuer_registry import IssuerRegistry
 from b3_agent.intelligence.official_evidence import (
     OfficialEvidenceBuilder,
+    evidence_for_reasoning,
     evidence_to_dict,
 )
 from b3_agent.providers.cvm_open_data import (
@@ -149,3 +151,37 @@ def test_rad_becomes_live_observed_evidence_without_inventing_publish_time(tmp_p
     assert evidence.metadata.first_seen_at == NOW
     assert evidence.metadata.observed_at == NOW
     assert evidence.metadata.discovery_channel == "CVM_RAD"
+
+
+def test_reasoning_projection_excludes_raw_provider_payload(tmp_path):
+    builder = OfficialEvidenceBuilder(registry=_registry(tmp_path))
+    huge_raw = {
+        "data_entrega": "2026-09-29",
+        "raw_blob": "x" * 50000,
+    }
+    record = CvmOpenDataIpeRecord(
+        provider_record_id="CVM_OPEN_DATA_IPE|999|1",
+        cnpj="33000167000101",
+        cvm_code="9512",
+        company_name="PETROBRAS",
+        reference_date=date(2026, 9, 29),
+        category="Fato Relevante",
+        disclosure_type="Fato Relevante",
+        species=None,
+        subject="Evento oficial",
+        delivered_at=DELIVERED,
+        presentation_type=None,
+        protocol="999",
+        version="1",
+        document_url="https://www.rad.cvm.gov.br/doc/999",
+        retrieved_at=NOW,
+        raw_row=huge_raw,
+    )
+
+    evidence = builder.from_open_data_ipe(record)
+    full_payload = evidence_to_dict(evidence)
+    reasoning_payload = evidence_for_reasoning(evidence)
+
+    assert full_payload["metadata"]["extra"]["raw_row"]["raw_blob"].startswith("xxx")
+    assert "extra" not in reasoning_payload["metadata"]
+    assert len(json.dumps(reasoning_payload)) < 5000
