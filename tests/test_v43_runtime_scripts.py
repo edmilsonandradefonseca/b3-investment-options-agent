@@ -17,6 +17,7 @@ def test_v43_shell_wrappers_are_syntax_valid():
         "scripts/install_continuous_intelligence_timers.sh",
         "scripts/run_v43_continuous_acceptance.sh",
         "scripts/deploy_v43_continuous_backend.sh",
+        "scripts/finalize_v43_identity_runtime.sh",
     )
     for relative in scripts:
         subprocess.run(
@@ -72,3 +73,15 @@ def test_v43_acceptance_treats_local_relevance_as_optional_derived_context():
     assert '{"READY", "DEGRADED", "DEFERRED"}' in text
     assert "non-ready relevance output was incorrectly promoted" in text
     assert '"contained_nonblocking"' in text
+
+
+def test_v43_identity_finalize_script_checks_valid_and_invalid_tickers():
+    text = (ROOT / "scripts/finalize_v43_identity_runtime.sh").read_text(
+        encoding="utf-8"
+    )
+    assert "validate_v43_identity_runtime.py" in text
+    assert "/intelligence/local/PETR4" in text
+    assert "/intelligence/local/1" in text
+    assert '[[ "${valid_code}" == "200" ]]' in text
+    assert '[[ "${invalid_code}" == "400" ]]' in text
+    assert "V4_3_IDENTITY_RUNTIME=PASS" in text
