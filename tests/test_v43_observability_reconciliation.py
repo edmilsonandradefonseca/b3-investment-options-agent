@@ -210,3 +210,29 @@ def test_reconciliation_detects_and_persists_missing_historical_evidence(tmp_pat
     assert len(saved) == 1
     payload = json.loads(saved[0].read_text(encoding="utf-8"))
     assert payload["reconciliation_status"] == "HISTORICAL_RECONSTRUCTION"
+
+
+def test_server_local_observability_accepts_short_authoritative_symbol(monkeypatch):
+    monkeypatch.setattr(
+        server,
+        "local_ticker_intelligence",
+        lambda ticker: {
+            "ticker": ticker.upper(),
+            "dossier": None,
+            "relevance": None,
+        },
+    )
+    client = TestClient(server.app)
+
+    response = client.get("/intelligence/local/ABCD")
+
+    assert response.status_code == 200
+    assert response.json()["ticker"] == "ABCD"
+
+
+def test_server_local_observability_rejects_path_unsafe_symbol():
+    client = TestClient(server.app)
+
+    response = client.get("/intelligence/local/AB.C")
+
+    assert response.status_code == 400

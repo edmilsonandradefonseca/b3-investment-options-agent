@@ -281,7 +281,10 @@ def main() -> int:
         ).status_code,
     }
     if any(code != 200 for code in api_codes.values()):
-        raise RuntimeError(f"observability API validation failed: {api_codes}")
+        raise RuntimeError(
+            "observability API validation failed: "
+            f"ticker={selected[0]!r} codes={api_codes}"
+        )
 
     result = {
         "V4_3_CONTINUOUS_ACCEPTANCE": "PASS",
