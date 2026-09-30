@@ -54,7 +54,7 @@ def test_ollama_client_uses_bounded_defaults_and_exposes_timings(monkeypatch):
     assert captured["payload"]["options"] == {
         "temperature": 0,
         "num_ctx": 2048,
-        "num_predict": 512,
+        "num_predict": 768,
     }
     assert result.load_duration_ns == 10
     assert result.prompt_eval_count == 120
