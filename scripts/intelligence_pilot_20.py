@@ -22,6 +22,8 @@ from b3_agent.llm.client import OpenClawStructuredClient
 from b3_agent.orchestration.live_providers import LiveProviderService
 from b3_agent.routing import FastRouter, RouteTarget
 
+PILOT_VERSION = "v4.2-official-sources-fd1"
+
 TICKERS = (
     "ABEV3", "ASAI3", "BBDC4", "BEEF3", "CMIG4", "CURY3", "DIRR3", "EQTL3",
     "GGBR4", "ITUB4", "MILS3", "ORVR3", "PCAR3", "PETR4", "POMO4", "RANI3",
@@ -67,9 +69,13 @@ def routing_contract(ticker: str) -> dict[str, str]:
     return {name: decision.target.value for name, decision in paths.items()}
 
 
-def market_evidence(ticker: str) -> dict:
+def market_evidence(
+    ticker: str,
+    service: LiveProviderService | None = None,
+) -> dict:
     today = datetime.now(timezone.utc).date()
-    records = LiveProviderService().market_provider.get_market_data(
+    live = service or LiveProviderService()
+    records = live.market_provider.get_market_data(
         ticker, today - timedelta(days=35), today
     )
     if not records:
@@ -87,27 +93,33 @@ def analyze(
     output: Path,
     senior: OpenClawStructuredClient,
     official_evidence: tuple = (),
+    market_service: LiveProviderService | None = None,
+    nightly_job: NightlyIntelligenceJob | None = None,
 ) -> dict:
     path = output / f"{ticker}.json"
     row = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"ticker": ticker}
     row["routes"] = routing_contract(ticker)
     today = datetime.now(timezone.utc).date().isoformat()
-    if row.get("run_date") != today:
+    if row.get("run_date") != today or row.get("pilot_version") != PILOT_VERSION:
         try:
-            market = market_evidence(ticker)
+            market = market_evidence(ticker, service=market_service)
             market_error = None
         except Exception as exc:
             market = None
             market_error = f"{type(exc).__name__}: {exc}"
         # V4.2 UC-10: resilient acquisition -> coverage -> events -> materiality -> local DeepSeek.
-        result = NightlyIntelligenceJob(
+        intelligence = nightly_job or NightlyIntelligenceJob(
             news_limit=8, max_deepseek_calls=1, output_dir=output / "deepseek"
-        ).run(
+        )
+        result = intelligence.run(
             tickers=[ticker],
             official_evidence_by_ticker={ticker: official_evidence},
         )["results"][0]
         row = {
-            "ticker": ticker, "run_date": today, "routes": routing_contract(ticker),
+            "ticker": ticker,
+            "run_date": today,
+            "pilot_version": PILOT_VERSION,
+            "routes": routing_contract(ticker),
             "market": market, "market_error": market_error,
             "evidence": {
                 "collected_at": result.get("as_of"),
@@ -197,6 +209,13 @@ def main() -> int:
             "unresolved_tickers": list(selected),
         }
 
+    market_service = LiveProviderService()
+    nightly_job = NightlyIntelligenceJob(
+        news_limit=8,
+        max_deepseek_calls=1,
+        output_dir=output / "deepseek",
+    )
+
     rows = []
     for ticker in selected:
         row = analyze(
@@ -204,6 +223,8 @@ def main() -> int:
             output,
             senior,
             official_evidence=official_map.get(ticker, ()),
+            market_service=market_service,
+            nightly_job=nightly_job,
         )
         evidence = row.get("evidence", {})
         rows.append({"ticker": ticker, "deepseek": row.get("deepseek_status", "not_run"),
@@ -221,7 +242,9 @@ def main() -> int:
                      "material_evidence": evidence.get("material_evidence_count", 0),
                      "fallback_used": evidence.get("fallback_used", False)})
         manifest = {
-            "as_of": datetime.now(timezone.utc).isoformat(), "requested": args.limit,
+            "as_of": datetime.now(timezone.utc).isoformat(),
+            "requested": args.limit,
+            "pilot_version": PILOT_VERSION,
             "official_sources": official_coverage,
             "router_verified": sum(bool(r["routes"]) for r in rows),
             "market_validated": sum(r["market"] == "validated" for r in rows),
