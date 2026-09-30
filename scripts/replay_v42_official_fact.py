@@ -20,6 +20,7 @@ from b3_agent.config import settings
 from b3_agent.intelligence.issuer_registry import IssuerRegistry
 from b3_agent.intelligence.official_evidence import (
     OfficialEvidenceBuilder,
+    evidence_for_reasoning,
     evidence_to_dict,
 )
 from b3_agent.knowledge.evidence import Evidence
@@ -79,13 +80,14 @@ def select_material_evidence(
 
 
 def replay_prompt(ticker: str, evidence: Evidence) -> str:
-    payload = evidence_to_dict(evidence)
+    payload = evidence_for_reasoning(evidence)
     return (
         "Historical V4.2 replay. Analyze only the supplied canonical CVM evidence. "
         "This is not a current-market claim and not an investment recommendation. "
         "Do not invent prices, causes, probabilities or facts absent from evidence. "
-        "Identify what the official disclosure says, risks, catalysts, contradictions "
-        "and limitations. Explicitly preserve the historical/PIT limitation. "
+        "Produce a concise dossier of at most 220 words. Sections: Evidence summary; "
+        "Risks; Catalysts; Contradictions; Limitations. Explicitly preserve the "
+        "historical/PIT limitation and UNKNOWN values. "
         f"Ticker: {ticker}\nCanonical Evidence JSON:\n"
         + json.dumps(payload, ensure_ascii=False)
     )
@@ -155,12 +157,24 @@ def main() -> int:
 
         evidence_ref = evidence.source_url or evidence.evidence_id
 
-        deepseek = OllamaClient().ask(replay_prompt(ticker, evidence))
+        reasoning_evidence = evidence_for_reasoning(evidence)
+        prompt = replay_prompt(ticker, evidence)
+        deepseek_client = OllamaClient()
+        deepseek = deepseek_client.ask(prompt)
         deepseek_payload = {
             "model": deepseek.model,
             "analysis": deepseek.content,
             "thinking_chars": len(deepseek.thinking),
+            "input_chars": len(prompt),
+            "timeout_seconds": deepseek_client.timeout,
+            "num_ctx": deepseek_client.num_ctx,
+            "num_predict": deepseek_client.num_predict,
+            "keep_alive": deepseek_client.keep_alive,
             "total_duration_ns": deepseek.total_duration_ns,
+            "load_duration_ns": deepseek.load_duration_ns,
+            "prompt_eval_count": deepseek.prompt_eval_count,
+            "prompt_eval_cached_count": deepseek.prompt_eval_cached_count,
+            "prompt_eval_duration_ns": deepseek.prompt_eval_duration_ns,
             "eval_count": deepseek.eval_count,
             "eval_duration_ns": deepseek.eval_duration_ns,
         }
@@ -181,7 +195,7 @@ def main() -> int:
             input_text=json.dumps(
                 {
                     "ticker": ticker,
-                    "evidence": evidence_to_dict(evidence),
+                    "evidence": reasoning_evidence,
                     "deepseek_dossier": deepseek_payload,
                     "allowed_evidence_refs": [evidence_ref],
                 },
