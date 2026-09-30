@@ -29,6 +29,34 @@ TICKERS = (
     "GGBR4", "ITUB4", "MILS3", "ORVR3", "PCAR3", "PETR4", "POMO4", "RANI3",
     "SUZB3", "TOTS3", "VULC3", "WEGE3",
 )
+ALLOWED_PILOT_RESEARCH_STATUSES = {
+    "completed",
+    "skipped_no_material_events",
+    "coverage_insufficient",
+}
+ALLOWED_PILOT_OPENCLAW_STATUSES = {
+    "completed",
+    "not_required",
+}
+
+
+def pilot_runtime_ok(rows: list[dict], official_coverage: dict) -> bool:
+    """Technical acceptance for the live coverage track.
+
+    COVERAGE_INSUFFICIENT is a valid observable coverage state in V4.2. It is
+    not a provider/runtime failure and must not be rewritten as NO_MATERIAL.
+    """
+    return (
+        official_coverage.get("status") == "SUCCESS"
+        and all(
+            row.get("market") == "validated"
+            and row.get("deepseek") in ALLOWED_PILOT_RESEARCH_STATUSES
+            and row.get("openclaw") in ALLOWED_PILOT_OPENCLAW_STATUSES
+            for row in rows
+        )
+    )
+
+
 SCHEMA = {
     "type": "object",
     "properties": {
@@ -251,21 +279,22 @@ def main() -> int:
             "deepseek_completed": sum(r["deepseek"] == "completed" for r in rows),
             "no_material_event": sum(r["deepseek"] == "skipped_no_material_events" for r in rows),
             "coverage_insufficient": sum(r["deepseek"] == "coverage_insufficient" for r in rows),
+            "coverage_sufficient": sum(
+                r["deepseek"] in {"completed", "skipped_no_material_events"}
+                for r in rows
+            ),
+            "live_coverage_status": (
+                "PASS_WITH_COVERAGE_GAPS"
+                if any(r["deepseek"] == "coverage_insufficient" for r in rows)
+                else "PASS"
+            ),
             "openclaw_escalations_completed": sum(r["openclaw"] == "completed" for r in rows),
             "both_completed": sum(r["deepseek"] == r["openclaw"] == "completed" for r in rows),
             "results": rows,
         }
         save(output / "latest.json", manifest)
         print(json.dumps(rows[-1], ensure_ascii=False), flush=True)
-    return 0 if (
-        official_coverage.get("status") == "SUCCESS"
-        and all(
-            r["market"] == "validated"
-            and r["deepseek"] not in {"failed", "coverage_insufficient"}
-            and r["openclaw"] != "failed"
-            for r in rows
-        )
-    ) else 2
+    return 0 if pilot_runtime_ok(rows, official_coverage) else 2
 
 
 if __name__ == "__main__":
