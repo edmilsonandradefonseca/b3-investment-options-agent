@@ -200,7 +200,6 @@ def test_v43_nightly_enqueues_material_analysis_without_calling_deepseek(tmp_pat
     queue = LocalEvidenceQueue(tmp_path / "local")
     job = NightlyIntelligenceJob(
         output_dir=tmp_path / "nightly",
-        local_analysis_mode="enqueue",
         local_analysis_queue=queue,
     )
     job.news = FakeNews(material=True)
