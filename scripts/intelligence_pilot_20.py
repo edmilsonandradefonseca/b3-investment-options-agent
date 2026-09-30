@@ -16,9 +16,12 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from b3_agent.config import settings
+from b3_agent.intelligence.issuer_registry import IssuerRegistry
+from b3_agent.intelligence.official_evidence import OfficialEvidenceBuilder
 from b3_agent.jobs.nightly_intelligence import NightlyIntelligenceJob
 from b3_agent.llm.client import OpenClawStructuredClient
 from b3_agent.orchestration.live_providers import LiveProviderService
+from b3_agent.providers.cvm_open_data import CvmOpenDataProvider
 from b3_agent.routing import FastRouter, RouteTarget
 
 TICKERS = (
@@ -81,7 +84,62 @@ def market_evidence(ticker: str) -> dict:
     }
 
 
-def analyze(ticker: str, output: Path, senior: OpenClawStructuredClient) -> dict:
+def load_official_evidence(tickers: tuple[str, ...]) -> tuple[dict[str, tuple], dict]:
+    """Load public CVM registry + current-year IPE once for the whole pilot."""
+    year = datetime.now(timezone.utc).year
+    provider = CvmOpenDataProvider()
+    registry = IssuerRegistry()
+    sync = registry.sync_from_cvm(provider=provider, year=year)
+
+    issuer_rows = {}
+    cvm_codes = []
+    unresolved = []
+    for ticker in tickers:
+        issuer = registry.resolve_issuer_by_ticker(ticker)
+        if issuer is None:
+            unresolved.append(ticker)
+            continue
+        issuer_rows[ticker] = issuer
+        if issuer.cvm_code and issuer.cvm_code not in cvm_codes:
+            cvm_codes.append(issuer.cvm_code)
+
+    ipe = provider.fetch_ipe_year(year, cvm_codes=tuple(cvm_codes))
+    builder = OfficialEvidenceBuilder(registry=registry)
+    by_ticker: dict[str, list] = {ticker: [] for ticker in tickers}
+    material_total = 0
+    candidate_total = 0
+
+    for record in ipe.records:
+        evidence = builder.from_open_data_ipe(record)
+        if evidence.metadata.materiality == "MATERIAL":
+            material_total += 1
+        elif evidence.metadata.materiality == "CANDIDATE":
+            candidate_total += 1
+        for ticker in evidence.metadata.ticker_refs:
+            if ticker in by_ticker:
+                by_ticker[ticker].append(evidence)
+
+    coverage = {
+        "status": "SUCCESS" if not unresolved else "PARTIAL",
+        "year": year,
+        "registry_sync": sync,
+        "requested_tickers": len(tickers),
+        "resolved_tickers": len(issuer_rows),
+        "unresolved_tickers": unresolved,
+        "ipe_document_count": len(ipe.records),
+        "ipe_material_count": material_total,
+        "ipe_candidate_count": candidate_total,
+        "source_url": ipe.source_url,
+    }
+    return {key: tuple(value) for key, value in by_ticker.items()}, coverage
+
+
+def analyze(
+    ticker: str,
+    output: Path,
+    senior: OpenClawStructuredClient,
+    official_evidence: tuple = (),
+) -> dict:
     path = output / f"{ticker}.json"
     row = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"ticker": ticker}
     row["routes"] = routing_contract(ticker)
@@ -96,7 +154,10 @@ def analyze(ticker: str, output: Path, senior: OpenClawStructuredClient) -> dict
         # V4.2 UC-10: resilient acquisition -> coverage -> events -> materiality -> local DeepSeek.
         result = NightlyIntelligenceJob(
             news_limit=8, max_deepseek_calls=1, output_dir=output / "deepseek"
-        ).run(tickers=[ticker])["results"][0]
+        ).run(
+            tickers=[ticker],
+            official_evidence_by_ticker={ticker: official_evidence},
+        )["results"][0]
         row = {
             "ticker": ticker, "run_date": today, "routes": routing_contract(ticker),
             "market": market, "market_error": market_error,
@@ -113,6 +174,10 @@ def analyze(ticker: str, output: Path, senior: OpenClawStructuredClient) -> dict
                 "dated_recent_count": result.get("dated_recent_count", 0),
                 "raw_event_count": result.get("raw_event_count", 0),
                 "material_event_count": result.get("material_event_count", 0),
+                "official_evidence_count": result.get("official_evidence_count", 0),
+                "official_material_count": result.get("official_material_count", 0),
+                "official_candidate_count": result.get("official_candidate_count", 0),
+                "material_evidence_count": result.get("material_evidence_count", 0),
                 "fallback_used": result.get("fallback_used", False),
                 "fallback_strategy": result.get("fallback_strategy"),
                 "engine_errors": result.get("engine_errors", []),
@@ -169,9 +234,27 @@ def main() -> int:
     output = settings.data_dir / "derived" / "intelligence_pilot_v42"
     senior = OpenClawStructuredClient(agent=settings.openclaw_agent, model=settings.openclaw_model,
                                       timeout=settings.openclaw_timeout_seconds, executable=settings.openclaw_bin)
+    selected = TICKERS[:args.limit]
+    try:
+        official_map, official_coverage = load_official_evidence(selected)
+    except Exception as exc:
+        official_map = {ticker: () for ticker in selected}
+        official_coverage = {
+            "status": "FAILED",
+            "error": f"{type(exc).__name__}: {exc}",
+            "requested_tickers": len(selected),
+            "resolved_tickers": 0,
+            "unresolved_tickers": list(selected),
+        }
+
     rows = []
-    for ticker in TICKERS[:args.limit]:
-        row = analyze(ticker, output, senior)
+    for ticker in selected:
+        row = analyze(
+            ticker,
+            output,
+            senior,
+            official_evidence=official_map.get(ticker, ()),
+        )
         evidence = row.get("evidence", {})
         rows.append({"ticker": ticker, "deepseek": row.get("deepseek_status", "not_run"),
                      "openclaw": row.get("openclaw_status", "not_run"),
@@ -183,9 +266,13 @@ def main() -> int:
                      "raw_results": evidence.get("raw_result_count", 0),
                      "recent_dated": evidence.get("dated_recent_count", 0),
                      "material_events": evidence.get("material_event_count", 0),
+                     "official_evidence": evidence.get("official_evidence_count", 0),
+                     "official_material": evidence.get("official_material_count", 0),
+                     "material_evidence": evidence.get("material_evidence_count", 0),
                      "fallback_used": evidence.get("fallback_used", False)})
         manifest = {
             "as_of": datetime.now(timezone.utc).isoformat(), "requested": args.limit,
+            "official_sources": official_coverage,
             "router_verified": sum(bool(r["routes"]) for r in rows),
             "market_validated": sum(r["market"] == "validated" for r in rows),
             "deepseek_completed": sum(r["deepseek"] == "completed" for r in rows),
@@ -197,11 +284,14 @@ def main() -> int:
         }
         save(output / "latest.json", manifest)
         print(json.dumps(rows[-1], ensure_ascii=False), flush=True)
-    return 0 if all(
-        r["market"] == "validated"
-        and r["deepseek"] not in {"failed", "coverage_insufficient"}
-        and r["openclaw"] != "failed"
-        for r in rows
+    return 0 if (
+        official_coverage.get("status") == "SUCCESS"
+        and all(
+            r["market"] == "validated"
+            and r["deepseek"] not in {"failed", "coverage_insufficient"}
+            and r["openclaw"] != "failed"
+            for r in rows
+        )
     ) else 2
 
 
