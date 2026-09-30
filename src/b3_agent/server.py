@@ -5,6 +5,7 @@ from dataclasses import asdict
 import hashlib
 import json
 import os
+import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -630,7 +631,7 @@ def intelligence_local_manifest() -> dict[str, Any]:
 def intelligence_local_ticker(ticker: str) -> dict[str, Any]:
     """Read accepted local dossier and latest relevance screen for one ticker."""
     normalized = ticker.strip().upper()
-    if not normalized.isalnum() or not 1 <= len(normalized) <= 20:
+    if re.fullmatch(r"[A-Z]{4}\d{1,2}", normalized) is None:
         raise HTTPException(status_code=400, detail="invalid B3 ticker")
     return local_ticker_intelligence(normalized)
 

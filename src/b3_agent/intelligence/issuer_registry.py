@@ -171,7 +171,11 @@ class IssuerRegistry:
                     issuer_by_cnpj[record.cnpj] = record
 
         latest_securities: dict[tuple[str, str], CvmOpenDataSecurityRecord] = {}
+        invalid_security_count = 0
         for record in security_result.securities:
+            if not _is_valid_b3_ticker(record.ticker):
+                invalid_security_count += 1
+                continue
             if not record.cnpj:
                 continue
             key = (record.cnpj, record.ticker)
@@ -185,7 +189,27 @@ class IssuerRegistry:
         active_security_count = 0
         unmatched_security_count = 0
 
+        purged_invalid_security_count = 0
         with self._connect() as conn:
+            stale_rows = conn.execute(
+                """
+                SELECT instrument_id, ticker
+                FROM securities
+                WHERE source = 'CVM_FCA_OPEN_DATA'
+                """
+            ).fetchall()
+            invalid_ids = [
+                str(row["instrument_id"])
+                for row in stale_rows
+                if not _is_valid_b3_ticker(str(row["ticker"]))
+            ]
+            if invalid_ids:
+                conn.executemany(
+                    "DELETE FROM securities WHERE instrument_id = ?",
+                    [(instrument_id,) for instrument_id in invalid_ids],
+                )
+                purged_invalid_security_count = len(invalid_ids)
+
             for record in issuer_result.issuers:
                 issuer_id = _issuer_id(record)
                 if issuer_id is None:
@@ -309,6 +333,8 @@ class IssuerRegistry:
             "security_count": security_count,
             "active_security_count": active_security_count,
             "unmatched_security_count": unmatched_security_count,
+            "invalid_security_count": invalid_security_count,
+            "purged_invalid_security_count": purged_invalid_security_count,
             "skipped_issuer_count": skipped_issuers,
             "issuer_source_url": issuer_result.source_url,
             "security_source_url": security_result.source_url,
@@ -504,6 +530,10 @@ def _normalize_cvm_code(value: str) -> str:
 
 def _normalize_ticker(value: str) -> str:
     return re.sub(r"\s+", "", value.strip().upper())
+
+
+def _is_valid_b3_ticker(value: str) -> bool:
+    return re.fullmatch(r"[A-Z]{4}\d{1,2}", _normalize_ticker(value)) is not None
 
 
 def _date_text(value: date | None) -> str | None:

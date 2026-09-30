@@ -483,7 +483,9 @@ def _normalize_ticker(value: str | None) -> str | None:
         return None
     ticker = value.strip().upper()
     ticker = re.sub(r"\s+", "", ticker)
-    return ticker or None
+    if not re.fullmatch(r"[A-Z]{4}\d{1,2}", ticker):
+        return None
+    return ticker
 
 
 def _parse_date(value: str | None) -> date | None:
