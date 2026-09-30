@@ -85,6 +85,9 @@ def test_v43_identity_finalize_script_checks_valid_and_invalid_tickers():
     assert '[[ "${valid_code}" == "200" ]]' in text
     assert '[[ "${invalid_code}" == "400" ]]' in text
     assert "V4_3_IDENTITY_RUNTIME=PASS" in text
+    assert "/health" in text
+    assert "B3_RUNTIME_READY=PASS" in text
+    assert "journalctl -u b3-runtime.service" in text
 
 
 def test_v43_continuous_acceptance_uses_isolated_lock_fixture():

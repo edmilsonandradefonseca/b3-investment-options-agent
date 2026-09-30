@@ -27,6 +27,27 @@ sudo systemd-run \
 sudo systemctl restart b3-runtime.service
 [[ "$(systemctl is-active b3-runtime.service)" == "active" ]]
 
+ready=0
+for attempt in $(seq 1 30); do
+  health_code="$(curl -sS -o /tmp/b3-v43-health.json -w '%{http_code}' \
+    http://127.0.0.1:8000/health 2>/dev/null || true)"
+  if [[ "${health_code}" == "200" ]]; then
+    ready=1
+    echo "B3_RUNTIME_READY=PASS attempt=${attempt}"
+    break
+  fi
+  sleep 1
+done
+
+if [[ "${ready}" -ne 1 ]]; then
+  echo "B3_RUNTIME_READY=FAIL"
+  systemctl status b3-runtime.service --no-pager || true
+  journalctl -u b3-runtime.service -n 80 --no-pager || true
+  rm -f /tmp/b3-v43-health.json
+  exit 4
+fi
+rm -f /tmp/b3-v43-health.json
+
 valid_code="$(curl -sS -o /tmp/b3-v43-valid.json -w '%{http_code}' \
   http://127.0.0.1:8000/intelligence/local/PETR4)"
 invalid_code="$(curl -sS -o /tmp/b3-v43-invalid.json -w '%{http_code}' \
