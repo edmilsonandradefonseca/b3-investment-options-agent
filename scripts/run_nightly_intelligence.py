@@ -63,13 +63,10 @@ def main() -> int:
     print(json.dumps(output, ensure_ascii=False))
 
     official_ok = official_coverage.get("status") == "SUCCESS"
-    return (
-        0
-        if official_ok
-        and not result["failed"]
-        and not result["coverage_insufficient"]
-        else 2
-    )
+    # COVERAGE_INSUFFICIENT is an explicit V4.2/V4.3 evidence state, not a
+    # runtime failure. The nightly producer succeeds as long as official-source
+    # loading is healthy and no ticker execution failed.
+    return 0 if official_ok and not result["failed"] else 2
 
 
 if __name__ == "__main__":
