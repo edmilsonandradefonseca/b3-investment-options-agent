@@ -36,7 +36,7 @@ def test_cvm_open_data_ipe_preserves_reference_and_delivery_times(monkeypatch):
         "Protocolo_Entrega;Versao;Link_Download\n"
         "33.000.167/0001-01;PETROLEO BRASILEIRO S.A. PETROBRAS;"
         "2026-09-15;9512;Fato Relevante;Fato Relevante;;"
-        "Novo plano estratégico;2026-09-16 08:30:00;Apresentação;"
+        "Novo plano estratégico;2026-09-16;Apresentação;"
         "123456;1;https://www.rad.cvm.gov.br/doc/123456\n"
     )
     payload = _zip_csv("ipe_cia_aberta_2026.csv", csv_text)
