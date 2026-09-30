@@ -232,7 +232,12 @@ class LocalEvidenceQueue:
         run_path = self.runs_dir / f"{request.analysis_id}.json"
 
         if run_path.exists():
-            return QueueEnqueueResult(request=request, queue_status="ALREADY_PROCESSED")
+            previous = json.loads(run_path.read_text(encoding="utf-8"))
+            if previous.get("status") != LocalAnalysisStatus.FAILED.value:
+                return QueueEnqueueResult(
+                    request=request,
+                    queue_status="ALREADY_PROCESSED",
+                )
         if queued_path.exists():
             return QueueEnqueueResult(request=request, queue_status="ALREADY_QUEUED")
 
@@ -325,6 +330,21 @@ class LocalEvidenceAnalyst:
             quality_flags.append("MISSING_CONTENT")
 
         if analysis is not None:
+            required = {
+                "summary": str,
+                "risks": list,
+                "catalysts": list,
+                "contradictions": list,
+                "questions_for_senior_review": list,
+                "escalation_recommended": bool,
+                "evidence_refs": list,
+            }
+            if any(
+                key not in analysis or not isinstance(analysis.get(key), expected)
+                for key, expected in required.items()
+            ):
+                quality_flags.append("INVALID_SCHEMA")
+
             refs = analysis.get("evidence_refs")
             if not isinstance(refs, list):
                 quality_flags.append("UNKNOWN_EVIDENCE_REF")
