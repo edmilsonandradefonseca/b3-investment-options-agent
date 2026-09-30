@@ -37,6 +37,7 @@ class SpecialistContext:
     request: str
     deterministic_context: Mapping[str, Any] = field(default_factory=dict)
     retrieved_evidence: tuple[Mapping[str, Any], ...] = ()
+    derived_intelligence: Mapping[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_agent_context(cls, context: AgentContext) -> "SpecialistContext":
@@ -44,6 +45,7 @@ class SpecialistContext:
             request=context.request,
             deterministic_context=context.deterministic_context,
             retrieved_evidence=context.retrieved_evidence,
+            derived_intelligence=context.derived_intelligence,
         )
 
     def to_payload(self) -> dict[str, Any]:
@@ -51,4 +53,5 @@ class SpecialistContext:
             "request": self.request,
             "deterministic_context": self.deterministic_context,
             "retrieved_evidence": list(self.retrieved_evidence),
+            "derived_intelligence": dict(self.derived_intelligence),
         }
