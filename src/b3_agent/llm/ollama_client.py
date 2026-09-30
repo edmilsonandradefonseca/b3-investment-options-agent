@@ -35,6 +35,7 @@ class OllamaClient:
         num_predict: int | None = None,
         keep_alive: str | int | None = None,
         think: bool | None = None,
+        format_schema: dict[str, Any] | None = None,
     ) -> None:
         self.base_url = (
             base_url
@@ -73,6 +74,7 @@ class OllamaClient:
             else raw_keep_alive
         )
         self.think = think
+        self.format_schema = dict(format_schema) if format_schema is not None else None
 
         if self.timeout <= 0:
             raise ValueError("timeout must be positive")
@@ -98,6 +100,8 @@ class OllamaClient:
         }
         if self.think is not None:
             payload["think"] = self.think
+        if self.format_schema is not None:
+            payload["format"] = self.format_schema
 
         req = Request(
             f"{self.base_url}/api/chat",
