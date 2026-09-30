@@ -207,7 +207,12 @@ class NightlyIntelligenceJob:
         self.max_deepseek_calls = (
             max_deepseek_calls
             if max_deepseek_calls is not None
-            else int(os.getenv("B3_NIGHTLY_MAX_DEEPSEEK_CALLS", "5"))
+            else int(
+                os.getenv(
+                    "B3_NIGHTLY_MAX_LOCAL_ANALYSIS_ENQUEUES",
+                    os.getenv("B3_NIGHTLY_MAX_DEEPSEEK_CALLS", "5"),
+                )
+            )
         )
         self.output_dir = Path(
             output_dir or settings.data_dir / "derived" / "nightly_intelligence"
