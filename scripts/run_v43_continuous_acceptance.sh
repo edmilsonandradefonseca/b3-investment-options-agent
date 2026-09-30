@@ -2,6 +2,8 @@
 set -u
 
 REPO="${B3_REPO:-/opt/b3-investment-options-agent}"
+JOAO_REPO="${JOAO_REPO:-${HOME}/joao-resolve}"
+LOCK_PATH="${LOCAL_REASONING_LOCK_PATH:-/var/lock/local-reasoning.lock}"
 UNIT="b3-v43-continuous-acceptance-$(date +%s)"
 
 cd "${REPO}" || exit 2
@@ -14,7 +16,34 @@ echo
 bash -n scripts/run_continuous_intelligence.sh || exit 2
 bash -n scripts/install_continuous_intelligence_timers.sh || exit 2
 
-sudo systemd-run   --unit="${UNIT}"   --wait --pipe --collect   -p "User=$(id -un)"   -p "WorkingDirectory=${REPO}"   -p "EnvironmentFile=-/opt/joao-runtime/joao.env"   -p "EnvironmentFile=-/etc/b3-runtime.env"   -p "EnvironmentFile=-/opt/b3-runtime/b3.env"   -p "Environment=B3_AGENT_PROJECT_ROOT=${REPO}"   -p "Environment=B3_AGENT_DATA_DIR=/opt/b3-runtime/data"   -p "Environment=B3_AGENT_TIMEZONE=America/Sao_Paulo"   -p "Environment=LOCAL_REASONING_LOCK_PATH=/var/lock/local-reasoning.lock"   -p "TimeoutStartSec=20min"   "${REPO}/.venv/bin/python"   "${REPO}/scripts/validate_v43_continuous_runtime.py"
+if [[ ! -f "${JOAO_REPO}/local_ai/host_lock.py" ]] \
+   || ! grep -q '/var/lock/local-reasoning.lock' "${JOAO_REPO}/local_ai/host_lock.py" \
+   || ! grep -q 'local_reasoning_lock' "${JOAO_REPO}/local_ai/ollama_client.py"; then
+  echo "Joao shared local-reasoning lock is not deployed at ${JOAO_REPO}" >&2
+  exit 3
+fi
+
+sudo touch "${LOCK_PATH}" || exit 3
+sudo chown "$(id -un):$(id -gn)" "${LOCK_PATH}" || exit 3
+sudo chmod 0664 "${LOCK_PATH}" || exit 3
+echo "shared_lock=${LOCK_PATH}"
+echo "joao_commit=$(git -C "${JOAO_REPO}" rev-parse HEAD)"
+
+sudo systemd-run \
+  --unit="${UNIT}" \
+  --wait --pipe --collect \
+  -p "User=$(id -un)" \
+  -p "WorkingDirectory=${REPO}" \
+  -p "EnvironmentFile=-/opt/joao-runtime/joao.env" \
+  -p "EnvironmentFile=-/etc/b3-runtime.env" \
+  -p "EnvironmentFile=-/opt/b3-runtime/b3.env" \
+  -p "Environment=B3_AGENT_PROJECT_ROOT=${REPO}" \
+  -p "Environment=B3_AGENT_DATA_DIR=/opt/b3-runtime/data" \
+  -p "Environment=B3_AGENT_TIMEZONE=America/Sao_Paulo" \
+  -p "Environment=LOCAL_REASONING_LOCK_PATH=${LOCK_PATH}" \
+  -p "TimeoutStartSec=20min" \
+  "${REPO}/.venv/bin/python" \
+  "${REPO}/scripts/validate_v43_continuous_runtime.py"
 
 rc=$?
 
