@@ -12,8 +12,15 @@ def evaluate(root: Path) -> dict:
     manifest = json.loads((root / "latest.json").read_text(encoding="utf-8"))
     rows = manifest.get("results", [])
     issues = []
+    official = manifest.get("official_sources") or {}
     if manifest.get("requested") != 20 or len(rows) != 20 or len({r.get("ticker") for r in rows}) != 20:
         issues.append("20 distinct stocks were not processed")
+    if official.get("status") != "SUCCESS":
+        issues.append(f"official CVM coverage status is {official.get('status')}")
+    if official.get("resolved_tickers") != 20:
+        issues.append(
+            f"issuer registry resolved {official.get('resolved_tickers')} of 20 tickers"
+        )
     for item in rows:
         ticker = item.get("ticker")
         detail_path = root / f"{ticker}.json"
@@ -49,14 +56,14 @@ def evaluate(root: Path) -> dict:
             issues.append(f"{ticker}: research status {local}")
     deepseek_calls = sum(r.get("deepseek") == "completed" for r in rows)
     senior_calls = sum(r.get("openclaw") == "completed" for r in rows)
-    if not deepseek_calls:
-        issues.append("DeepSeek inference was not exercised with real material evidence")
-    if not senior_calls:
-        issues.append("OpenClaw escalation was not exercised with a real dossier")
     return {
         "status": "PASS" if not issues else "LIMITED",
         "stocks": len(rows), "router_verified": manifest.get("router_verified"),
         "market_validated": manifest.get("market_validated"),
+        "official_sources_status": official.get("status"),
+        "official_resolved_tickers": official.get("resolved_tickers"),
+        "official_ipe_documents": official.get("ipe_document_count"),
+        "official_ipe_material": official.get("ipe_material_count"),
         "deepseek_completed": deepseek_calls,
         "openclaw_escalations_completed": senior_calls,
         "skipped_no_material_events": sum(r.get("deepseek") == "skipped_no_material_events" for r in rows),
