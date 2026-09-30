@@ -47,7 +47,9 @@ class InvestmentReasoningAgent:
                 "Use the supplied deterministic facts and retrieved evidence as the source of truth. "
                 "The supplied synthesis is a non-authoritative interpretation of independent specialist analyses: "
                 "use it to identify agreements, conflicts, uncertainties and evidence gaps, but do not treat it "
-                "as a replacement for deterministic facts or evidence. Do not invent data or calculations. "
+                "as a replacement for deterministic facts or evidence. Optional derived_intelligence is "
+                "non-authoritative background context: use it only when consistent with supplied facts/evidence. "
+                "Do not invent data or calculations. "
                 "If evidence is insufficient, prefer WAIT or NO_CHANGE. Return a structured proposal for human review."
             ),
             input_text=json.dumps(payload, ensure_ascii=False, default=str),
