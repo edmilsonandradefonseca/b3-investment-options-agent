@@ -118,6 +118,11 @@ def main() -> int:
     parser.add_argument("--year", type=int, default=datetime.now(timezone.utc).year)
     parser.add_argument("--protocol")
     parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="select and validate real official evidence without calling DeepSeek/OpenClaw",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=settings.data_dir / "derived" / "v42_historical_replay",
@@ -159,6 +164,63 @@ def main() -> int:
 
         reasoning_evidence = evidence_for_reasoning(evidence)
         prompt = replay_prompt(ticker, evidence)
+
+        if args.dry_run:
+            print(
+                json.dumps(
+                    {
+                        "status": "READY",
+                        "ticker": ticker,
+                        "year": args.year,
+                        "issuer": {
+                            "issuer_id": issuer.issuer_id,
+                            "cvm_code": issuer.cvm_code,
+                            "cnpj": issuer.cnpj,
+                            "legal_name": issuer.legal_name,
+                        },
+                        "selected_evidence": {
+                            "evidence_id": evidence.evidence_id,
+                            "title": evidence.title,
+                            "source_url": evidence.source_url,
+                            "published_at": (
+                                evidence.metadata.published_at.isoformat()
+                                if evidence.metadata.published_at
+                                else None
+                            ),
+                            "reference_at": (
+                                evidence.metadata.reference_at.isoformat()
+                                if evidence.metadata.reference_at
+                                else None
+                            ),
+                            "materiality": evidence.metadata.materiality,
+                            "materiality_reason": evidence.metadata.materiality_reason,
+                            "pit_status": evidence.metadata.pit_status,
+                            "ticker_refs": list(evidence.metadata.ticker_refs),
+                        },
+                        "reasoning_input_chars": len(prompt),
+                        "reasoning_evidence_chars": len(
+                            json.dumps(reasoning_evidence, ensure_ascii=False)
+                        ),
+                        "full_evidence_chars": len(
+                            json.dumps(
+                                evidence_to_dict(evidence),
+                                ensure_ascii=False,
+                                default=str,
+                            )
+                        ),
+                        "ollama_defaults": {
+                            "timeout_seconds": OllamaClient().timeout,
+                            "num_ctx": OllamaClient().num_ctx,
+                            "num_predict": OllamaClient().num_predict,
+                            "keep_alive": OllamaClient().keep_alive,
+                        },
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return 0
+
         deepseek_client = OllamaClient()
         deepseek = deepseek_client.ask(prompt)
         deepseek_payload = {
