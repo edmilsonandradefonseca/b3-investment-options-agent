@@ -26,6 +26,8 @@ class OfficialEvidenceBuilder:
     ) -> None:
         self.registry = registry
         self.timezone = ZoneInfo(timezone_name or settings.timezone)
+        self._issuer_cache: dict[tuple[str | None, str | None], Any] = {}
+        self._securities_cache: dict[str, tuple[Any, ...]] = {}
 
     def from_open_data_ipe(self, record: CvmOpenDataIpeRecord) -> Evidence:
         decision = classify_official_disclosure(
@@ -197,14 +199,28 @@ class OfficialEvidenceBuilder:
         if self.registry is None or (not cvm_code and not cnpj):
             return None, ()
 
-        issuer = self.registry.resolve_issuer(cvm_code=cvm_code, cnpj=cnpj)
-        tickers = self.registry.resolve_tickers(
-            cvm_code=cvm_code,
-            cnpj=cnpj,
-            active_only=True,
-            as_of=as_of,
+        identity_key = (cvm_code, cnpj)
+        if identity_key not in self._issuer_cache:
+            self._issuer_cache[identity_key] = self.registry.resolve_issuer(
+                cvm_code=cvm_code,
+                cnpj=cnpj,
+            )
+        issuer = self._issuer_cache[identity_key]
+        if issuer is None:
+            return None, ()
+
+        if issuer.issuer_id not in self._securities_cache:
+            self._securities_cache[issuer.issuer_id] = self.registry.securities_for_issuer(
+                issuer.issuer_id,
+                active_only=False,
+            )
+        securities = self._securities_cache[issuer.issuer_id]
+        tickers = tuple(
+            security.ticker
+            for security in securities
+            if security.is_active(as_of=as_of)
         )
-        return (issuer.issuer_id if issuer else None), tickers
+        return issuer.issuer_id, tickers
 
     def _reference_at(self, value: date | None) -> datetime | None:
         if value is None:
