@@ -66,3 +66,19 @@ def test_replay_selects_latest_real_fato_relevante_and_can_pin_protocol():
         protocol="200",
     )
     assert pinned.metadata.extra["protocol"] == "200"
+
+
+def test_replay_prompt_is_bounded_and_excludes_provider_raw_payload():
+    evidence = _evidence(
+        "400",
+        materiality="MATERIAL",
+        reason="OFFICIAL_FATO_RELEVANTE",
+        when=datetime(2026, 9, 4, tzinfo=timezone.utc),
+    )
+    prompt = replay.replay_prompt("PETR4", evidence)
+
+    assert "raw_row" not in prompt
+    assert "raw_attributes" not in prompt
+    assert "OFFICIAL_FATO_RELEVANTE" in prompt
+    assert "HISTORICAL_RECONSTRUCTION" in prompt
+    assert len(prompt) < 6000
