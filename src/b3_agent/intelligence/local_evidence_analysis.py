@@ -465,12 +465,11 @@ def _analysis_prompt(request: LocalEvidenceAnalysisRequest) -> str:
         "share classes, returns, probabilities, causal claims or facts. "
         "Do not make an investment recommendation. If evidence does not support "
         "a conclusion, state that limitation. Return ONLY one compact JSON object "
-        "matching this contract: "
-        + json.dumps(contract, ensure_ascii=False)
-        + f"\\nTicker: {request.ticker}"
-        + "\\nAllowed evidence refs: "
+        "matching the runtime-enforced JSON schema."
+        f"\nTicker: {request.ticker}"
+        "\nAllowed evidence refs: "
         + json.dumps(list(request.source_refs), ensure_ascii=False)
-        + "\\nCanonical evidence events: "
+        + "\nCanonical evidence events: "
         + json.dumps(list(request.evidence_events), ensure_ascii=False)
     )
 
