@@ -57,7 +57,7 @@ class OllamaClient:
             else int(num_ctx)
         )
         self.num_predict = (
-            int(os.getenv("B3_OLLAMA_NUM_PREDICT", "512"))
+            int(os.getenv("B3_OLLAMA_NUM_PREDICT", "768"))
             if num_predict is None
             else int(num_predict)
         )
