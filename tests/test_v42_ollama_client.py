@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from io import BytesIO
+from urllib.error import HTTPError
 
 from b3_agent.llm import ollama_client as module
 from b3_agent.llm.ollama_client import OllamaClient
@@ -167,3 +169,61 @@ def test_ollama_client_sends_structured_output_schema(monkeypatch):
 
     assert captured["payload"]["format"] == schema
     assert result.content == '{"summary":"ok"}'
+
+
+def test_ollama_client_retries_without_think_for_older_runtime(monkeypatch):
+    payloads = []
+
+    def fake_urlopen(request, timeout):
+        payload = json.loads(request.data.decode("utf-8"))
+        payloads.append(payload)
+        if len(payloads) == 1:
+            raise HTTPError(
+                request.full_url,
+                400,
+                "Bad Request",
+                hdrs=None,
+                fp=BytesIO(b'{"error":"think is not supported by this runtime"}'),
+            )
+        return _Response(
+            {
+                "model": "deepseek-r1:8b",
+                "message": {"content": '{"relevance":"UNKNOWN"}'},
+            }
+        )
+
+    monkeypatch.setattr(module, "urlopen", fake_urlopen)
+
+    result = OllamaClient(
+        timeout=30,
+        num_ctx=512,
+        num_predict=64,
+        think=False,
+    ).ask("Return JSON")
+
+    assert payloads[0]["think"] is False
+    assert "think" not in payloads[1]
+    assert result.content == '{"relevance":"UNKNOWN"}'
+
+
+def test_ollama_http_error_includes_response_detail(monkeypatch):
+    def fake_urlopen(request, timeout):
+        raise HTTPError(
+            request.full_url,
+            500,
+            "Internal Server Error",
+            hdrs=None,
+            fp=BytesIO(b'{"error":"model runner crashed"}'),
+        )
+
+    monkeypatch.setattr(module, "urlopen", fake_urlopen)
+
+    try:
+        OllamaClient(timeout=30, num_ctx=512, num_predict=64).ask("test")
+    except RuntimeError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("expected RuntimeError")
+
+    assert "HTTPError 500" in message
+    assert "model runner crashed" in message

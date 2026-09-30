@@ -20,6 +20,7 @@ from b3_agent.intelligence.relevance_screen import (
     promote_to_dossier,
 )
 from b3_agent.jobs.continuous_intelligence import ContinuousIntelligenceJob
+from b3_agent.jobs.local_relevance_screen import LocalRelevanceScreenJob
 from b3_agent.providers.cvm_open_data import (
     CvmOpenDataIssuerRecord,
     CvmOpenDataSecurityRecord,
@@ -304,3 +305,46 @@ def test_relevance_screen_promotes_relevant_candidate_only(tmp_path):
     ).analyze(request2)
     assert promote_to_dossier(request2, result2, dossier2) == "NOT_PROMOTED"
     assert len(dossier2.pending()) == 0
+
+
+class RuntimeFailingRelevanceClient:
+    model = "deepseek-r1:8b"
+    num_predict = 192
+
+    def ask(self, prompt):
+        raise RuntimeError(
+            "Ollama request failed model=deepseek-r1:8b: "
+            "HTTPError 400: think is not supported"
+        )
+
+
+def test_relevance_runtime_failure_is_deferred_and_observable(tmp_path):
+    queue = LocalRelevanceQueue(tmp_path / "relevance")
+    dossier = LocalEvidenceQueue(tmp_path / "dossier")
+    event = {
+        "evidence_type": "official_disclosure",
+        "evidence_id": "E2",
+        "source_ref": "https://cvm.test/2.zip",
+        "headline": "Comunicado ao Mercado",
+        "summary": "Candidate event",
+        "materiality": "CANDIDATE",
+        "pit_status": "OBSERVED_LIVE",
+    }
+    queue.enqueue("PETR4", [event])
+
+    result = LocalRelevanceScreenJob(
+        queue=queue,
+        analyst=LocalRelevanceAnalyst(RuntimeFailingRelevanceClient()),
+        dossier_queue=dossier,
+        output_root=tmp_path / "relevance",
+    ).run(limit=1)
+
+    assert result["processed"] == 1
+    assert result["deferred"] == 1
+    assert result["failed"] == 0
+    assert result["remaining_queue"] == 1
+    row = result["results"][0]
+    assert row["status"] == "DEFERRED"
+    assert row["dossier_queue_status"] == "NOT_PROMOTED"
+    assert "think is not supported" in row["error"]
+    assert len(dossier.pending()) == 0

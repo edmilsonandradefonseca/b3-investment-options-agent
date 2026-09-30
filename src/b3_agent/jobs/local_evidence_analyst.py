@@ -60,6 +60,18 @@ class LocalEvidenceAnalystJob:
                         "error": str(exc),
                     }
                 )
+            except RuntimeError as exc:
+                error = f"{type(exc).__name__}: {exc}"
+                self.queue.defer(request, reason=error)
+                results.append(
+                    {
+                        "analysis_id": request.analysis_id,
+                        "ticker": request.ticker,
+                        "status": "DEFERRED",
+                        "quality_flags": ["LOCAL_MODEL_RUNTIME_FAILURE"],
+                        "error": error,
+                    }
+                )
             except Exception as exc:
                 dossier = self.queue.fail(
                     request,

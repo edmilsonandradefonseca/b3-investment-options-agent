@@ -66,7 +66,8 @@ class LocalRelevanceScreenJob:
                     }
                 )
             except LocalReasoningBusy as exc:
-                self.queue.defer(request, reason=str(exc))
+                error = f"{type(exc).__name__}: {exc}"
+                self.queue.defer(request, reason=error)
                 results.append(
                     {
                         "request_id": request.request_id,
@@ -75,12 +76,28 @@ class LocalRelevanceScreenJob:
                         "relevance": None,
                         "quality_flags": ["LOCAL_REASONING_BUSY"],
                         "dossier_queue_status": "NOT_PROMOTED",
+                        "error": error,
+                    }
+                )
+            except RuntimeError as exc:
+                error = f"{type(exc).__name__}: {exc}"
+                self.queue.defer(request, reason=error)
+                results.append(
+                    {
+                        "request_id": request.request_id,
+                        "ticker": request.ticker,
+                        "status": "DEFERRED",
+                        "relevance": None,
+                        "quality_flags": ["LOCAL_MODEL_RUNTIME_FAILURE"],
+                        "dossier_queue_status": "NOT_PROMOTED",
+                        "error": error,
                     }
                 )
             except Exception as exc:
+                error = f"{type(exc).__name__}: {exc}"
                 result = self.queue.fail(
                     request,
-                    error=f"{type(exc).__name__}: {exc}",
+                    error=error,
                     model=getattr(self.analyst.client, "model", "unknown"),
                 )
                 results.append(
@@ -91,6 +108,7 @@ class LocalRelevanceScreenJob:
                         "relevance": None,
                         "quality_flags": list(result.quality_flags),
                         "dossier_queue_status": "NOT_PROMOTED",
+                        "error": error,
                     }
                 )
 

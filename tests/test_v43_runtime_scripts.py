@@ -63,3 +63,12 @@ def test_v43_deploy_is_acceptance_first_and_verifies_production():
     assert "b3-continuous-intelligence.timer" in text
     assert "/intelligence/local/status" in text
     assert "restart joao-scheduler.service" in text
+
+
+def test_v43_acceptance_treats_local_relevance_as_optional_derived_context():
+    text = (ROOT / "scripts/validate_v43_continuous_runtime.py").read_text(
+        encoding="utf-8"
+    )
+    assert '{"READY", "DEGRADED", "DEFERRED"}' in text
+    assert "non-ready relevance output was incorrectly promoted" in text
+    assert '"contained_nonblocking"' in text

@@ -243,3 +243,29 @@ def test_default_local_analyst_uses_runtime_json_schema():
     assert analyst.client.format_schema == LOCAL_ANALYSIS_SCHEMA
     assert analyst.client.format_schema["additionalProperties"] is False
     assert "evidence_refs" in analyst.client.format_schema["required"]
+
+
+class RuntimeFailingClient:
+    model = "deepseek-r1:8b"
+    num_predict = 256
+
+    def ask(self, prompt):
+        raise RuntimeError("Ollama request failed: temporary local model failure")
+
+
+def test_dossier_runtime_failure_is_deferred_not_dropped(tmp_path):
+    queue = LocalEvidenceQueue(tmp_path)
+    queue.enqueue("PETR4", _events())
+    worker = LocalEvidenceAnalystJob(
+        queue=queue,
+        analyst=LocalEvidenceAnalyst(RuntimeFailingClient()),
+    )
+
+    result = worker.run(limit=1)
+
+    assert result["processed"] == 1
+    assert result["deferred"] == 1
+    assert result["failed"] == 0
+    assert result["remaining_queue"] == 1
+    assert result["results"][0]["status"] == "DEFERRED"
+    assert "temporary local model failure" in result["results"][0]["error"]

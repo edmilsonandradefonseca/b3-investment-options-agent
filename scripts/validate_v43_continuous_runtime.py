@@ -178,9 +178,17 @@ def main() -> int:
     if relevance_result["processed"] != 1:
         raise RuntimeError("relevance worker did not process one queued candidate")
     screen_row = relevance_result["results"][0]
-    if screen_row["status"] != "READY":
+    if screen_row["status"] not in {"READY", "DEGRADED", "DEFERRED"}:
         raise RuntimeError(
-            "relevance screen did not produce quality-gated structured output: "
+            "relevance screen was not safely contained: "
+            f"{screen_row}"
+        )
+    if (
+        screen_row["status"] != "READY"
+        and screen_row.get("dossier_queue_status") != "NOT_PROMOTED"
+    ):
+        raise RuntimeError(
+            "non-ready relevance output was incorrectly promoted: "
             f"{screen_row}"
         )
 
@@ -297,6 +305,9 @@ def main() -> int:
             "relevance": screen_row.get("relevance"),
             "quality_flags": screen_row.get("quality_flags"),
             "dossier_queue_status": screen_row.get("dossier_queue_status"),
+            "error": screen_row.get("error"),
+            "contained_nonblocking": screen_row["status"]
+            in {"READY", "DEGRADED", "DEFERRED"},
         },
         "shared_lock": {
             "status": "PASS",
