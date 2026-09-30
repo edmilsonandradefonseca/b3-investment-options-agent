@@ -1,7 +1,7 @@
 # B3 Investment & Options Agent — Architecture V4.3
 
 **Version:** 4.3  
-**Status:** IMPLEMENTATION BASELINE  
+**Status:** IMPLEMENTED / RUNTIME VALIDATED  
 **Date:** 2026-09-30  
 **Base:** V4.0 + V4.1 + V4.2  
 **Scope:** redefine the local DeepSeek role as asynchronous Evidence pre-analysis and enrichment.
@@ -524,3 +524,29 @@ The architectural decision introduced by V4.3 is:
 > **DeepSeek R1 8B is retained as an asynchronous local Evidence Analyst whose output is optional derived context. OpenClaw/Luna senior reasoning must never depend on DeepSeek availability or completion.**
 
 This change is motivated by observed production behavior and preserves all deterministic, Evidence, PIT, no-autonomous-trading and human-authority invariants.
+
+
+---
+
+## 21. As-built runtime validation — 2026-09-30
+
+V4.3 was validated on the production Ubuntu host with real PETR4 CVM Evidence.
+
+The staged acceptance proved:
+
+- canonical Evidence acquisition/materiality completed before local reasoning;
+- enqueue returned in approximately 2.6 seconds;
+- DeepSeek was not invoked inline;
+- the separate local worker consumed the queued request;
+- DeepSeek produced a degraded dossier after reaching the 768-token ceiling;
+- the quality gate marked it `DEGRADED` with `INVALID_JSON` and `OUTPUT_LIMIT_REACHED`;
+- the senior context builder omitted the degraded dossier;
+- canonical Evidence remained available to the senior path;
+- all three runtime stages returned zero;
+- final marker: `V4_3_ACCEPTANCE=PASS`.
+
+This negative-path validation is intentional evidence for the V4.3 architecture: local-model quality failure does not block or contaminate senior reasoning.
+
+V4.3 is therefore implemented and runtime validated.
+
+Repository merge/freeze sequencing remains separate because V4.3 is stacked on the V4.2 branch, whose CVM RAD live Gate D depends on external credentials.
