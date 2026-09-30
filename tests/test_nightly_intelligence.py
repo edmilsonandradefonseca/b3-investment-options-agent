@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+from b3_agent.intelligence.local_evidence_analysis import LocalEvidenceQueue
 from b3_agent.jobs.nightly_intelligence import NightlyIntelligenceJob
 from b3_agent.knowledge.evidence import Evidence, EvidenceKind, EvidenceMetadata
 
@@ -192,3 +193,70 @@ def test_official_material_evidence_triggers_deepseek_when_open_web_is_degraded(
     assert job.llm.calls == 1
     assert item["source_refs"] == ["https://www.rad.cvm.gov.br/doc/abc"]
     assert item["evidence_events"][0]["materiality_reason"] == "OFFICIAL_FATO_RELEVANTE"
+
+
+def test_v43_nightly_enqueues_material_analysis_without_calling_deepseek(tmp_path):
+    queue = LocalEvidenceQueue(tmp_path / "local")
+    job = NightlyIntelligenceJob(
+        output_dir=tmp_path / "nightly",
+        local_analysis_mode="enqueue",
+        local_analysis_queue=queue,
+    )
+    job.news = FakeNews(material=True)
+    job.llm = FakeLLM()
+
+    result = job.run(tickers=["PETR4"])
+
+    assert result["local_analysis_mode"] == "enqueue"
+    assert result["queued_local_analysis"] == 1
+    assert result["local_analysis_enqueues"] == 1
+    assert result["deepseek_calls"] == 0
+    assert job.llm.calls == 0
+    assert result["results"][0]["status"] == "queued_local_analysis"
+    assert result["results"][0]["local_analysis_queue_status"] == "ENQUEUED"
+    assert len(queue.pending()) == 1
+
+
+def test_v43_nightly_does_not_enqueue_no_material_or_coverage_gap(tmp_path):
+    queue = LocalEvidenceQueue(tmp_path / "local")
+
+    no_material = NightlyIntelligenceJob(
+        output_dir=tmp_path / "no-material",
+        local_analysis_mode="enqueue",
+        local_analysis_queue=queue,
+    )
+    no_material.news = FakeNews(material=False)
+    result_no_material = no_material.run(tickers=["PETR4"])
+
+    assert result_no_material["skipped"] == 1
+    assert result_no_material["queued_local_analysis"] == 0
+    assert queue.pending() == []
+
+    coverage = NightlyIntelligenceJob(
+        output_dir=tmp_path / "coverage",
+        local_analysis_mode="enqueue",
+        local_analysis_queue=queue,
+    )
+    coverage.news = FakeEmptyNews()
+    result_coverage = coverage.run(tickers=["WEGE3"])
+
+    assert result_coverage["coverage_insufficient"] == 1
+    assert result_coverage["queued_local_analysis"] == 0
+    assert queue.pending() == []
+
+
+def test_v43_nightly_enqueue_is_idempotent_for_same_material_bundle(tmp_path):
+    queue = LocalEvidenceQueue(tmp_path / "local")
+    job = NightlyIntelligenceJob(
+        output_dir=tmp_path / "nightly",
+        local_analysis_mode="enqueue",
+        local_analysis_queue=queue,
+    )
+    job.news = FakeNews(material=True)
+
+    first = job.run(tickers=["PETR4"])
+    second = job.run(tickers=["PETR4"])
+
+    assert first["results"][0]["local_analysis_queue_status"] == "ENQUEUED"
+    assert second["results"][0]["local_analysis_queue_status"] == "ALREADY_QUEUED"
+    assert len(queue.pending()) == 1
