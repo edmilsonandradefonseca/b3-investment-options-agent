@@ -18,6 +18,7 @@ from b3_agent.intelligence.local_evidence_analysis import (
     LocalAnalysisStatus,
     LocalEvidenceContextSelector,
     LocalEvidenceQueue,
+    PROMPT_VERSION,
 )
 from b3_agent.intelligence.official_sources import load_open_data_official_evidence
 from b3_agent.intelligence.senior_context import SeniorEvidenceContextBuilder
@@ -67,7 +68,12 @@ def _event(evidence: Evidence) -> dict:
 
 
 def _root() -> Path:
-    return settings.data_dir / "derived" / "v43_async_acceptance"
+    return (
+        settings.data_dir
+        / "derived"
+        / "v43_async_acceptance"
+        / PROMPT_VERSION
+    )
 
 
 def enqueue_stage(ticker: str, year: int) -> int:
