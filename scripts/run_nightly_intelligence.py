@@ -11,7 +11,8 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from b3_agent.jobs.nightly_intelligence import NightlyIntelligenceJob
+from b3_agent.intelligence.official_sources import load_open_data_official_evidence
+from b3_agent.jobs.nightly_intelligence import NightlyIntelligenceJob, portfolio_tickers
 
 
 def main() -> int:
@@ -19,8 +20,30 @@ def main() -> int:
     parser.add_argument("--ticker", action="append", dest="tickers")
     parser.add_argument("--news-limit", type=int, default=8)
     args = parser.parse_args()
-    result = NightlyIntelligenceJob(news_limit=args.news_limit).run(tickers=args.tickers)
-    print(json.dumps({
+
+    selected = args.tickers or portfolio_tickers()
+    if not selected:
+        raise RuntimeError("no portfolio tickers available for nightly intelligence")
+
+    try:
+        official_snapshot = load_open_data_official_evidence(selected)
+        official_map = official_snapshot.by_ticker
+        official_coverage = official_snapshot.coverage
+    except Exception as exc:
+        official_map = {}
+        official_coverage = {
+            "status": "FAILED",
+            "requested_tickers": len(selected),
+            "resolved_tickers": 0,
+            "unresolved_tickers": list(selected),
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+
+    result = NightlyIntelligenceJob(news_limit=args.news_limit).run(
+        tickers=list(selected),
+        official_evidence_by_ticker=official_map,
+    )
+    output = {
         "ticker_count": result["ticker_count"],
         "completed": result["completed"],
         "skipped": result["skipped"],
@@ -28,9 +51,19 @@ def main() -> int:
         "coverage_insufficient": result["coverage_insufficient"],
         "failed": result["failed"],
         "deepseek_calls": result["deepseek_calls"],
+        "official_sources": official_coverage,
         "as_of": result["as_of"],
-    }, ensure_ascii=False))
-    return 0 if not result["failed"] and not result["coverage_insufficient"] else 2
+    }
+    print(json.dumps(output, ensure_ascii=False))
+
+    official_ok = official_coverage.get("status") == "SUCCESS"
+    return (
+        0
+        if official_ok
+        and not result["failed"]
+        and not result["coverage_insufficient"]
+        else 2
+    )
 
 
 if __name__ == "__main__":
