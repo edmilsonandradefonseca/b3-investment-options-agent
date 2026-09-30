@@ -6,20 +6,27 @@ from pathlib import Path
 from typing import Any
 
 from b3_agent.config import settings
-from b3_agent.intelligence.materiality import classify_official_disclosure
+from b3_agent.intelligence.issuer_registry import IssuerRegistry
+from b3_agent.intelligence.official_evidence import (
+    OfficialEvidenceBuilder,
+    evidence_to_dict,
+)
 from b3_agent.providers.cvm_rad import CvmRadDisclosureProvider
 
 
 class CvmDisclosureJob:
-    """Acquire and persist the zero-cost official CVM IPE disclosure feed."""
+    """Acquire, normalize and persist the current official CVM IPE feed."""
 
     def __init__(
         self,
         *,
         provider: CvmRadDisclosureProvider | None = None,
+        registry: IssuerRegistry | None = None,
         output_dir: str | Path | None = None,
     ) -> None:
         self.provider = provider or CvmRadDisclosureProvider()
+        self.registry = registry or IssuerRegistry()
+        self.evidence_builder = OfficialEvidenceBuilder(registry=self.registry)
         self.output_dir = Path(
             output_dir or settings.data_dir / "derived" / "cvm_rad_disclosures"
         )
@@ -32,15 +39,14 @@ class CvmDisclosureJob:
 
         rows: list[dict[str, Any]] = []
         for disclosure in result.disclosures:
-            decision = classify_official_disclosure(
-                category=disclosure.category,
-                disclosure_type=disclosure.disclosure_type,
-                species=disclosure.species,
-            )
+            evidence = self.evidence_builder.from_rad(disclosure)
+            metadata = evidence.metadata
             rows.append(
                 {
                     "provider_record_id": disclosure.provider_record_id,
                     "cvm_code": disclosure.cvm_code,
+                    "issuer_ref": metadata.issuer_ref,
+                    "ticker_refs": list(metadata.ticker_refs),
                     "document_type": disclosure.document_type,
                     "category": disclosure.category,
                     "disclosure_type": disclosure.disclosure_type,
@@ -53,9 +59,12 @@ class CvmDisclosureJob:
                     "source_status": disclosure.source_status,
                     "document_url": disclosure.document_url,
                     "retrieved_at": disclosure.retrieved_at.isoformat(),
-                    "materiality": decision.materiality.value,
-                    "materiality_reason": decision.reason,
-                    "materiality_policy_version": decision.policy_version,
+                    "materiality": metadata.materiality,
+                    "materiality_reason": metadata.materiality_reason,
+                    "materiality_policy_version": metadata.materiality_policy_version,
+                    "pit_status": metadata.pit_status,
+                    "evidence_id": evidence.evidence_id,
+                    "evidence": evidence_to_dict(evidence),
                     "raw_attributes": disclosure.raw_attributes,
                 }
             )
@@ -68,6 +77,8 @@ class CvmDisclosureJob:
             "acquisition_status": "SUCCESS",
             "source_error_code": result.source_error_code,
             "document_count": len(rows),
+            "mapped_document_count": sum(bool(row["ticker_refs"]) for row in rows),
+            "unmapped_document_count": sum(not row["ticker_refs"] for row in rows),
             "material_count": sum(row["materiality"] == "MATERIAL" for row in rows),
             "candidate_count": sum(row["materiality"] == "CANDIDATE" for row in rows),
             "non_material_count": sum(
