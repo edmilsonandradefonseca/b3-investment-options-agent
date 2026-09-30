@@ -137,3 +137,33 @@ def test_ollama_client_can_disable_thinking_for_health_preflight(monkeypatch):
     assert captured["payload"]["think"] is False
     assert captured["payload"]["keep_alive"] == "5m"
     assert captured["payload"]["options"]["num_predict"] == 24
+
+
+def test_ollama_client_sends_structured_output_schema(monkeypatch):
+    captured = {}
+    schema = {
+        "type": "object",
+        "properties": {"summary": {"type": "string"}},
+        "required": ["summary"],
+    }
+
+    def fake_urlopen(request, timeout):
+        captured["payload"] = json.loads(request.data.decode("utf-8"))
+        return _Response(
+            {
+                "model": "deepseek-r1:8b",
+                "message": {"content": '{"summary":"ok"}'},
+            }
+        )
+
+    monkeypatch.setattr(module, "urlopen", fake_urlopen)
+
+    result = OllamaClient(
+        timeout=30,
+        num_ctx=512,
+        num_predict=64,
+        format_schema=schema,
+    ).ask("Return JSON")
+
+    assert captured["payload"]["format"] == schema
+    assert result.content == '{"summary":"ok"}'
