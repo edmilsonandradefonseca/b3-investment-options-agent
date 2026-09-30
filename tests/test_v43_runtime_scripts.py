@@ -11,6 +11,7 @@ def test_v43_shell_wrappers_are_syntax_valid():
     scripts = (
         "scripts/run_local_evidence_analyst.sh",
         "scripts/run_v43_async_acceptance.sh",
+        "scripts/run_v43_full_acceptance.sh",
         "scripts/install_nightly_intelligence_timer.sh",
     )
     for relative in scripts:
