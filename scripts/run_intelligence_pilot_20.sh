@@ -19,6 +19,7 @@ sudo systemd-run --unit="$unit" --wait --pipe --collect \
   -p "Environment=B3_AGENT_DATA_DIR=/opt/b3-runtime/data" \
   -p "Nice=10" \
   -p "CPUWeight=20" \
+  -p "LimitNOFILE=4096" \
   -p "TimeoutStartSec=3h" \
   "$repo/.venv/bin/python" "$repo/scripts/intelligence_pilot_20.py" --limit "$limit"
 
