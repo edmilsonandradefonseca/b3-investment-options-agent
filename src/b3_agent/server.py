@@ -575,7 +575,7 @@ def research_news(ticker: str, limit: int = 20) -> dict[str, Any]:
 def nightly_ticker_intelligence(ticker: str) -> dict[str, Any]:
     """Read the local DeepSeek research artifact with its evidence and timestamp."""
     normalized = ticker.strip().upper()
-    if not normalized.isalnum() or not 1 <= len(normalized) <= 20:
+    if not normalized.isalnum() or not 5 <= len(normalized) <= 12:
         raise HTTPException(status_code=400, detail="invalid B3 ticker")
     path = settings.data_dir / "derived" / "nightly_intelligence" / f"{normalized}.json"
     if not path.is_file():
@@ -630,7 +630,7 @@ def intelligence_local_manifest() -> dict[str, Any]:
 def intelligence_local_ticker(ticker: str) -> dict[str, Any]:
     """Read accepted local dossier and latest relevance screen for one ticker."""
     normalized = ticker.strip().upper()
-    if not normalized.isalnum() or not 5 <= len(normalized) <= 12:
+    if not normalized.isalnum() or not 1 <= len(normalized) <= 20:
         raise HTTPException(status_code=400, detail="invalid B3 ticker")
     return local_ticker_intelligence(normalized)
 
