@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 import os
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -59,12 +61,34 @@ class CvmRadDisclosureProvider:
         username: str | None = None,
         password: str | None = None,
         endpoint: str = CVM_RAD_ENDPOINT,
-        timeout: float = 30.0,
+        timeout: float | None = None,
+        max_attempts: int | None = None,
+        retry_backoff_seconds: float | None = None,
     ) -> None:
         self.username = username or os.getenv("CVM_DM_USER") or os.getenv("CVM_LOGIN")
         self.password = password or os.getenv("CVM_DM_PASS") or os.getenv("CVM_PASSWORD")
         self.endpoint = endpoint
-        self.timeout = timeout
+        self.timeout = (
+            float(os.getenv("CVM_RAD_TIMEOUT_SECONDS", "30"))
+            if timeout is None
+            else float(timeout)
+        )
+        self.max_attempts = (
+            int(os.getenv("CVM_RAD_MAX_ATTEMPTS", "3"))
+            if max_attempts is None
+            else int(max_attempts)
+        )
+        self.retry_backoff_seconds = (
+            float(os.getenv("CVM_RAD_RETRY_BACKOFF_SECONDS", "1"))
+            if retry_backoff_seconds is None
+            else float(retry_backoff_seconds)
+        )
+        if self.timeout <= 0:
+            raise ValueError("timeout must be positive")
+        if self.max_attempts < 1:
+            raise ValueError("max_attempts must be >= 1")
+        if self.retry_backoff_seconds < 0:
+            raise ValueError("retry_backoff_seconds must be >= 0")
 
     @property
     def name(self) -> str:
@@ -126,8 +150,7 @@ class CvmRadDisclosureProvider:
             },
         )
 
-        with urllib.request.urlopen(request, timeout=self.timeout) as response:
-            payload = response.read()
+        payload = self._post_with_retry(request)
 
         retrieved_at = datetime.now(timezone.utc)
         root = _parse_xml(payload)
@@ -197,6 +220,41 @@ class CvmRadDisclosureProvider:
             retrieved_at=retrieved_at,
             disclosures=tuple(disclosures),
         )
+
+    def _post_with_retry(self, request: urllib.request.Request) -> bytes:
+        last_error: BaseException | None = None
+        for attempt in range(1, self.max_attempts + 1):
+            try:
+                with urllib.request.urlopen(
+                    request,
+                    timeout=self.timeout,
+                ) as response:
+                    return response.read()
+            except Exception as exc:
+                if not _is_transient_transport_error(exc):
+                    raise
+                last_error = exc
+                if attempt >= self.max_attempts:
+                    break
+                delay = self.retry_backoff_seconds * attempt
+                if delay > 0:
+                    time.sleep(delay)
+
+        assert last_error is not None
+        raise CvmRadError(
+            "CVM Download Multiplo transport failed after "
+            f"{self.max_attempts} attempts "
+            f"(timeout_s={self.timeout:g}): "
+            f"{type(last_error).__name__}: {last_error}"
+        ) from last_error
+
+
+def _is_transient_transport_error(exc: BaseException) -> bool:
+    if isinstance(exc, urllib.error.HTTPError):
+        return exc.code == 429 or 500 <= exc.code <= 599
+    if isinstance(exc, (TimeoutError, ConnectionError, urllib.error.URLError)):
+        return True
+    return False
 
 
 def _parse_xml(payload: bytes) -> ET.Element:
