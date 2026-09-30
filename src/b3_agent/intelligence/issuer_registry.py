@@ -299,6 +299,39 @@ class IssuerRegistry:
             "completed_at": completed_at.isoformat(),
         }
 
+    def resolve_issuer(
+        self,
+        *,
+        cvm_code: str | None = None,
+        cnpj: str | None = None,
+    ) -> Issuer | None:
+        if not cvm_code and not cnpj:
+            raise ValueError("cvm_code or cnpj is required")
+
+        clauses: list[str] = []
+        values: list[str] = []
+        if cvm_code:
+            clauses.append("cvm_code = ?")
+            values.append(_normalize_cvm_code(cvm_code))
+        if cnpj:
+            clauses.append("cnpj = ?")
+            values.append(_normalize_cnpj(cnpj))
+
+        with self._connect() as conn:
+            row = conn.execute(
+                f"""
+                SELECT
+                    issuer_id, cvm_code, cnpj, legal_name,
+                    trading_name, registration_status
+                FROM issuers
+                WHERE {' AND '.join(clauses)}
+                ORDER BY issuer_id
+                LIMIT 1
+                """,
+                values,
+            ).fetchone()
+        return _issuer_from_row(row) if row else None
+
     def resolve_tickers(
         self,
         *,
