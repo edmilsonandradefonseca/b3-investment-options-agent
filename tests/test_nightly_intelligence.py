@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from b3_agent.jobs.nightly_intelligence import NightlyIntelligenceJob
+from b3_agent.knowledge.evidence import Evidence, EvidenceKind, EvidenceMetadata
 
 
 class FakeNews:
@@ -139,3 +140,55 @@ def test_nightly_job_persists_coverage_metadata_for_no_material_result(tmp_path)
     assert item["evidence_conclusion"] == "NO_MATERIAL_FOUND"
     assert item["dated_result_count"] == 1
     assert item["dated_recent_count"] == 1
+
+
+def test_official_material_evidence_triggers_deepseek_when_open_web_is_degraded(tmp_path):
+    now = datetime.now(timezone.utc)
+    official = Evidence(
+        evidence_id="CVM_OPEN_DATA_IPE:abc",
+        kind=EvidenceKind.DOCUMENT,
+        title="Fato Relevante",
+        content="Category: Fato Relevante\nSubject: evento oficial",
+        source_url="https://www.rad.cvm.gov.br/doc/abc",
+        metadata=EvidenceMetadata(
+            document_id="123",
+            source="CVM_OPEN_DATA_IPE",
+            published_at=now,
+            retrieved_at=now,
+            ticker_refs=("PETR4",),
+            issuer_ref="cvm:9512",
+            cvm_code="9512",
+            provider_record_id="CVM_OPEN_DATA_IPE|123|1",
+            source_class="OFFICIAL_REGULATORY",
+            authority_tier=0,
+            discovery_channel="CVM_OPEN_DATA",
+            transport_reliability="STRUCTURED_PUBLIC",
+            first_seen_at=now,
+            observed_at=now,
+            acquisition_status="SUCCESS",
+            pit_status="HISTORICAL_RECONSTRUCTION",
+            materiality="MATERIAL",
+            materiality_reason="OFFICIAL_FATO_RELEVANTE",
+            materiality_policy_version="v4.2-official-1",
+        ),
+    )
+
+    job = NightlyIntelligenceJob(output_dir=tmp_path)
+    job.news = FakeEmptyNews()
+    job.llm = FakeLLM()
+
+    result = job.run(
+        tickers=["PETR4"],
+        official_evidence_by_ticker={"PETR4": (official,)},
+    )
+
+    item = result["results"][0]
+    assert item["status"] == "completed"
+    assert item["evidence_conclusion"] == "MATERIAL_FOUND"
+    assert item["acquisition_status"] == "DEGRADED"
+    assert item["official_evidence_count"] == 1
+    assert item["official_material_count"] == 1
+    assert item["material_evidence_count"] == 1
+    assert job.llm.calls == 1
+    assert item["source_refs"] == ["https://www.rad.cvm.gov.br/doc/abc"]
+    assert item["evidence_events"][0]["materiality_reason"] == "OFFICIAL_FATO_RELEVANTE"
