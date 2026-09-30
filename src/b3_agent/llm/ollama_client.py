@@ -7,6 +7,8 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from b3_agent.llm.host_lock import local_reasoning_lock
+
 
 @dataclass(frozen=True, slots=True)
 class OllamaResult:
@@ -110,8 +112,9 @@ class OllamaClient:
             method="POST",
         )
         try:
-            with urlopen(req, timeout=self.timeout) as response:
-                body = json.loads(response.read().decode("utf-8"))
+            with local_reasoning_lock():
+                with urlopen(req, timeout=self.timeout) as response:
+                    body = json.loads(response.read().decode("utf-8"))
         except (HTTPError, URLError, TimeoutError, OSError) as exc:
             raise RuntimeError(
                 "Ollama request failed "

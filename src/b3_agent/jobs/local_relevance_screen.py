@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from b3_agent.config import settings
+from b3_agent.llm.host_lock import LocalReasoningBusy
 from b3_agent.intelligence.local_evidence_analysis import LocalEvidenceQueue
 from b3_agent.intelligence.relevance_screen import (
     LocalRelevanceAnalyst,
@@ -64,6 +65,18 @@ class LocalRelevanceScreenJob:
                         "dossier_queue_status": promotion,
                     }
                 )
+            except LocalReasoningBusy as exc:
+                self.queue.defer(request, reason=str(exc))
+                results.append(
+                    {
+                        "request_id": request.request_id,
+                        "ticker": request.ticker,
+                        "status": "DEFERRED",
+                        "relevance": None,
+                        "quality_flags": ["LOCAL_REASONING_BUSY"],
+                        "dossier_queue_status": "NOT_PROMOTED",
+                    }
+                )
             except Exception as exc:
                 result = self.queue.fail(
                     request,
@@ -89,6 +102,7 @@ class LocalRelevanceScreenJob:
             "ready": sum(item["status"] == "READY" for item in results),
             "degraded": sum(item["status"] == "DEGRADED" for item in results),
             "failed": sum(item["status"] == "FAILED" for item in results),
+            "deferred": sum(item["status"] == "DEFERRED" for item in results),
             "promoted": sum(
                 item["dossier_queue_status"]
                 in {"ENQUEUED", "ALREADY_QUEUED", "ALREADY_PROCESSED"}

@@ -7,11 +7,16 @@ SERVICE_GROUP="$(id -gn "${SERVICE_USER}")"
 SHARED_ENV_FILE="${B3_SHARED_PLATFORM_ENV:-/opt/joao-runtime/joao.env}"
 RUNTIME_ENV_FILE="${B3_RUNTIME_ENV_FILE:-/etc/b3-runtime.env}"
 RUNTIME_ENV_FILE_2="${B3_RUNTIME_ENV_FILE_2:-/opt/b3-runtime/b3.env}"
+LOCK_PATH="${LOCAL_REASONING_LOCK_PATH:-/var/lock/local-reasoning.lock}"
 
 if [[ ! -x "${REPO}/.venv/bin/python" ]]; then
   echo "Missing Python virtualenv at ${REPO}/.venv/bin/python" >&2
   exit 1
 fi
+
+sudo touch "${LOCK_PATH}"
+sudo chown "${SERVICE_USER}:${SERVICE_GROUP}" "${LOCK_PATH}"
+sudo chmod 0664 "${LOCK_PATH}"
 
 common_env() {
   cat <<EOF
@@ -21,6 +26,8 @@ Environment=B3_INTEL_CURSOR_OVERLAP_MINUTES=30
 Environment=B3_INTEL_INITIAL_LOOKBACK_HOURS=24
 Environment=B3_INTEL_ACTIVE_START_HOUR=8
 Environment=B3_INTEL_ACTIVE_END_HOUR=19
+Environment=LOCAL_REASONING_LOCK_PATH=${LOCK_PATH}
+Environment=LOCAL_REASONING_LOCK_WAIT_SECONDS=5
 EnvironmentFile=-${SHARED_ENV_FILE}
 EnvironmentFile=-${RUNTIME_ENV_FILE}
 EnvironmentFile=-${RUNTIME_ENV_FILE_2}

@@ -296,6 +296,17 @@ class LocalEvidenceQueue:
             },
         )
 
+    def defer(self, request: LocalEvidenceAnalysisRequest, *, reason: str) -> None:
+        _atomic_json_write(
+            self.queue_dir / f"{request.analysis_id}.json",
+            {
+                **request.as_dict(),
+                "status": LocalAnalysisStatus.PENDING.value,
+                "deferred_at": datetime.now(timezone.utc).isoformat(),
+                "defer_reason": reason,
+            },
+        )
+
     def complete(self, dossier: LocalEvidenceDossier) -> None:
         payload = dossier.as_dict()
         _atomic_json_write(self.runs_dir / f"{dossier.analysis_id}.json", payload)

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from b3_agent.config import settings
+from b3_agent.llm.host_lock import LocalReasoningBusy
 from b3_agent.intelligence.local_evidence_analysis import (
     LocalEvidenceAnalyst,
     LocalEvidenceQueue,
@@ -48,6 +49,17 @@ class LocalEvidenceAnalystJob:
                         "evidence_fingerprint": dossier.evidence_fingerprint,
                     }
                 )
+            except LocalReasoningBusy as exc:
+                self.queue.defer(request, reason=str(exc))
+                results.append(
+                    {
+                        "analysis_id": request.analysis_id,
+                        "ticker": request.ticker,
+                        "status": "DEFERRED",
+                        "quality_flags": ["LOCAL_REASONING_BUSY"],
+                        "error": str(exc),
+                    }
+                )
             except Exception as exc:
                 dossier = self.queue.fail(
                     request,
@@ -72,6 +84,7 @@ class LocalEvidenceAnalystJob:
             "ready": sum(item["status"] == "READY" for item in results),
             "degraded": sum(item["status"] == "DEGRADED" for item in results),
             "failed": sum(item["status"] == "FAILED" for item in results),
+            "deferred": sum(item["status"] == "DEFERRED" for item in results),
             "remaining_queue": len(self.queue.pending()),
             "results": results,
         }

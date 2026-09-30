@@ -186,6 +186,17 @@ class LocalRelevanceQueue:
             },
         )
 
+    def defer(self, request: RelevanceRequest, *, reason: str) -> None:
+        _atomic_json_write(
+            self.queue_dir / f"{request.request_id}.json",
+            {
+                **request.as_dict(),
+                "status": RelevanceStatus.PENDING.value,
+                "deferred_at": datetime.now(timezone.utc).isoformat(),
+                "defer_reason": reason,
+            },
+        )
+
     def complete(self, result: RelevanceResult) -> None:
         _atomic_json_write(
             self.runs_dir / f"{result.request_id}.json",
