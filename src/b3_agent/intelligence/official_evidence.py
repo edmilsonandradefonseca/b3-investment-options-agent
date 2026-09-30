@@ -228,6 +228,55 @@ class OfficialEvidenceBuilder:
         return datetime.combine(value, time.min, tzinfo=self.timezone)
 
 
+def evidence_for_reasoning(evidence: Evidence) -> dict[str, Any]:
+    """Bounded canonical Evidence projection for LLM reasoning.
+
+    Append-only/audit payloads retain the full metadata dictionary through
+    evidence_to_dict(). Local/senior reasoning receives only provenance,
+    temporal, identity and materiality fields that can support a claim.
+    Provider raw rows/attributes are intentionally excluded.
+    """
+    metadata = evidence.metadata
+
+    def dt(value: datetime | None) -> str | None:
+        return value.isoformat() if value is not None else None
+
+    return {
+        "evidence_id": evidence.evidence_id,
+        "kind": evidence.kind.value,
+        "title": evidence.title,
+        "content": evidence.content,
+        "source_url": evidence.source_url,
+        "content_hash": evidence.content_hash,
+        "metadata": {
+            "document_id": metadata.document_id,
+            "source": metadata.source,
+            "published_at": dt(metadata.published_at),
+            "retrieved_at": dt(metadata.retrieved_at),
+            "reference_at": dt(metadata.reference_at),
+            "first_seen_at": dt(metadata.first_seen_at),
+            "observed_at": dt(metadata.observed_at),
+            "ticker_refs": list(metadata.ticker_refs),
+            "issuer_ref": metadata.issuer_ref,
+            "cvm_code": metadata.cvm_code,
+            "provider_record_id": metadata.provider_record_id,
+            "source_class": metadata.source_class,
+            "authority_tier": metadata.authority_tier,
+            "discovery_channel": metadata.discovery_channel,
+            "transport_reliability": metadata.transport_reliability,
+            "source_status": metadata.source_status,
+            "acquisition_status": metadata.acquisition_status,
+            "pit_status": metadata.pit_status,
+            "materiality": metadata.materiality,
+            "materiality_reason": metadata.materiality_reason,
+            "materiality_policy_version": metadata.materiality_policy_version,
+            "topic": metadata.topic,
+            "source_quality": metadata.source_quality,
+            "confidence": metadata.confidence,
+        },
+    }
+
+
 def evidence_to_dict(evidence: Evidence) -> dict[str, Any]:
     """JSON-safe representation for append-only job artifacts."""
 
