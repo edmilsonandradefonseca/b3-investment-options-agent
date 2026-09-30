@@ -2,10 +2,10 @@
 set -u
 
 repo=/opt/b3-investment-options-agent
-stage="\${1:-enqueue}"
-ticker="\${2:-PETR4}"
-year="\${3:-2026}"
-unit="b3-v43-async-\${stage,,}-$(date +%s)"
+stage="${1:-enqueue}"
+ticker="${2:-PETR4}"
+year="${3:-2026}"
+unit="b3-v43-async-${stage,,}-$(date +%s)"
 
 if [[ "$stage" != "enqueue" && "$stage" != "worker" && "$stage" != "context" ]]; then
   echo "usage: $0 {enqueue|worker|context} [TICKER] [YEAR]" >&2
