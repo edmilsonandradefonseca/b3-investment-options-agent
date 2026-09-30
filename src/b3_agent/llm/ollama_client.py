@@ -34,6 +34,7 @@ class OllamaClient:
         num_ctx: int | None = None,
         num_predict: int | None = None,
         keep_alive: str | int | None = None,
+        think: bool | None = None,
     ) -> None:
         self.base_url = (
             base_url
@@ -71,6 +72,7 @@ class OllamaClient:
             and raw_keep_alive.strip().lstrip("-").isdigit()
             else raw_keep_alive
         )
+        self.think = think
 
         if self.timeout <= 0:
             raise ValueError("timeout must be positive")
@@ -94,6 +96,9 @@ class OllamaClient:
                 "num_predict": self.num_predict,
             },
         }
+        if self.think is not None:
+            payload["think"] = self.think
+
         req = Request(
             f"{self.base_url}/api/chat",
             data=json.dumps(payload).encode("utf-8"),
