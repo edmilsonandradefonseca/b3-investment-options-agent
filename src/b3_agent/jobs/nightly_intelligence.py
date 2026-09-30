@@ -220,9 +220,11 @@ class NightlyIntelligenceJob:
         if local_analysis_mode not in {"inline", "enqueue"}:
             raise ValueError("local_analysis_mode must be 'inline' or 'enqueue'")
         self.local_analysis_mode = local_analysis_mode
-        self.local_analysis_queue = local_analysis_queue or LocalEvidenceQueue(
-            settings.data_dir / "derived" / "local_evidence_analyst"
-        )
+        self.local_analysis_queue = local_analysis_queue
+        if self.local_analysis_mode == "enqueue" and self.local_analysis_queue is None:
+            self.local_analysis_queue = LocalEvidenceQueue(
+                settings.data_dir / "derived" / "local_evidence_analyst"
+            )
         self.news = SearxngNewsAdapter(
             base_url=os.getenv("B3_SEARXNG_URL", "http://127.0.0.1:8080")
         )
@@ -427,6 +429,8 @@ class NightlyIntelligenceJob:
             }
 
         if self.local_analysis_mode == "enqueue":
+            if self.local_analysis_queue is None:
+                raise RuntimeError("local analysis queue is not configured")
             queued = self.local_analysis_queue.enqueue(ticker, events)
             return {
                 **base,
