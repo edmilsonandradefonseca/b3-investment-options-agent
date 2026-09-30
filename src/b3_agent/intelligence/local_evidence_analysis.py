@@ -14,6 +14,32 @@ from b3_agent.llm.ollama_client import OllamaClient
 POLICY_VERSION = "v4.3-local-evidence-1"
 PROMPT_VERSION = "b3_local_evidence_analyst_v1"
 
+LOCAL_ANALYSIS_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "summary": {"type": "string"},
+        "risks": {"type": "array", "items": {"type": "string"}},
+        "catalysts": {"type": "array", "items": {"type": "string"}},
+        "contradictions": {"type": "array", "items": {"type": "string"}},
+        "questions_for_senior_review": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "escalation_recommended": {"type": "boolean"},
+        "evidence_refs": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": [
+        "summary",
+        "risks",
+        "catalysts",
+        "contradictions",
+        "questions_for_senior_review",
+        "escalation_recommended",
+        "evidence_refs",
+    ],
+}
+
 
 class LocalAnalysisStatus(str, Enum):
     PENDING = "PENDING"
@@ -309,7 +335,7 @@ class LocalEvidenceQueue:
 
 class LocalEvidenceAnalyst:
     def __init__(self, client: OllamaClient | None = None):
-        self.client = client or OllamaClient()
+        self.client = client or OllamaClient(format_schema=LOCAL_ANALYSIS_SCHEMA)
 
     def analyze(self, request: LocalEvidenceAnalysisRequest) -> LocalEvidenceDossier:
         prompt = _analysis_prompt(request)
@@ -433,15 +459,6 @@ class LocalEvidenceContextSelector:
 
 
 def _analysis_prompt(request: LocalEvidenceAnalysisRequest) -> str:
-    contract = {
-        "summary": "string",
-        "risks": ["string"],
-        "catalysts": ["string"],
-        "contradictions": ["string"],
-        "questions_for_senior_review": ["string"],
-        "escalation_recommended": "boolean",
-        "evidence_refs": ["only refs present in input"],
-    }
     return (
         "You are the B3 V4.3 local asynchronous Evidence Analyst. "
         "Analyze only the supplied canonical evidence. Do not invent prices, "
