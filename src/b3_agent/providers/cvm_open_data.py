@@ -359,7 +359,10 @@ class CvmOpenDataProvider:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 payload = response.read()
         except Exception as exc:
-            raise CvmOpenDataError(f"failed to download official CVM dataset: {url}") from exc
+            raise CvmOpenDataError(
+                "failed to download official CVM dataset: "
+                f"{url}: {type(exc).__name__}: {exc}"
+            ) from exc
 
         if not payload:
             raise CvmOpenDataError(f"official CVM dataset was empty: {url}")
