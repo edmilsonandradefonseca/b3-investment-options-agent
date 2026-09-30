@@ -200,7 +200,7 @@ class NightlyIntelligenceJob:
         news_limit: int = 8,
         max_deepseek_calls: int | None = None,
         output_dir: str | Path | None = None,
-        local_analysis_mode: str = "inline",
+        local_analysis_mode: str = "enqueue",
         local_analysis_queue: LocalEvidenceQueue | None = None,
     ) -> None:
         self.news_limit = news_limit
