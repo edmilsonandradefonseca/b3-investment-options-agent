@@ -15,6 +15,7 @@ class AgentContext:
     request: str
     deterministic_context: Mapping[str, Any] = field(default_factory=dict)
     retrieved_evidence: tuple[Mapping[str, Any], ...] = ()
+    derived_intelligence: Mapping[str, Any] = field(default_factory=dict)
 
     def to_payload(self) -> dict[str, Any]:
         """Return the stable payload used at the LLM boundary."""
@@ -22,4 +23,5 @@ class AgentContext:
             "request": self.request,
             "deterministic_context": self.deterministic_context,
             "retrieved_evidence": list(self.retrieved_evidence),
+            "derived_intelligence": dict(self.derived_intelligence),
         }
