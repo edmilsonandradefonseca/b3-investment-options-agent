@@ -42,7 +42,8 @@ class SynthesisAgent:
                 "Reconcile the supplied independent specialist analyses against the supplied "
                 "deterministic facts and evidence. Do not invent data, perform new calculations, "
                 "rerank opportunities, or execute trades. Identify agreements, conflicts, material "
-                "uncertainties and evidence gaps. This is decision-support context for a separate "
+                "uncertainties and evidence gaps. Optional derived intelligence is non-authoritative "
+                "and must never override deterministic facts or Evidence. This is decision-support context for a separate "
                 "decision proposal and human review."
             ),
             input_text=json.dumps(
@@ -51,6 +52,7 @@ class SynthesisAgent:
                     "deterministic_facts": deterministic_facts,
                     "specialist_analyses": specialist_outputs,
                     "retrieved_evidence": payload.get("retrieved_evidence", []),
+                    "derived_intelligence": payload.get("derived_intelligence", {}),
                 },
                 ensure_ascii=False,
                 default=str,
