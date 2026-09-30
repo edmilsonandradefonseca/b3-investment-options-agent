@@ -16,12 +16,10 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from b3_agent.config import settings
-from b3_agent.intelligence.issuer_registry import IssuerRegistry
-from b3_agent.intelligence.official_evidence import OfficialEvidenceBuilder
+from b3_agent.intelligence.official_sources import load_open_data_official_evidence
 from b3_agent.jobs.nightly_intelligence import NightlyIntelligenceJob
 from b3_agent.llm.client import OpenClawStructuredClient
 from b3_agent.orchestration.live_providers import LiveProviderService
-from b3_agent.providers.cvm_open_data import CvmOpenDataProvider
 from b3_agent.routing import FastRouter, RouteTarget
 
 TICKERS = (
@@ -82,56 +80,6 @@ def market_evidence(ticker: str) -> dict:
         "as_of": latest.observation_timestamp.isoformat(),
         "source": latest.source, "source_record_id": latest.source_record_id,
     }
-
-
-def load_official_evidence(tickers: tuple[str, ...]) -> tuple[dict[str, tuple], dict]:
-    """Load public CVM registry + current-year IPE once for the whole pilot."""
-    year = datetime.now(timezone.utc).year
-    provider = CvmOpenDataProvider()
-    registry = IssuerRegistry()
-    sync = registry.sync_from_cvm(provider=provider, year=year)
-
-    issuer_rows = {}
-    cvm_codes = []
-    unresolved = []
-    for ticker in tickers:
-        issuer = registry.resolve_issuer_by_ticker(ticker)
-        if issuer is None:
-            unresolved.append(ticker)
-            continue
-        issuer_rows[ticker] = issuer
-        if issuer.cvm_code and issuer.cvm_code not in cvm_codes:
-            cvm_codes.append(issuer.cvm_code)
-
-    ipe = provider.fetch_ipe_year(year, cvm_codes=tuple(cvm_codes))
-    builder = OfficialEvidenceBuilder(registry=registry)
-    by_ticker: dict[str, list] = {ticker: [] for ticker in tickers}
-    material_total = 0
-    candidate_total = 0
-
-    for record in ipe.records:
-        evidence = builder.from_open_data_ipe(record)
-        if evidence.metadata.materiality == "MATERIAL":
-            material_total += 1
-        elif evidence.metadata.materiality == "CANDIDATE":
-            candidate_total += 1
-        for ticker in evidence.metadata.ticker_refs:
-            if ticker in by_ticker:
-                by_ticker[ticker].append(evidence)
-
-    coverage = {
-        "status": "SUCCESS" if not unresolved else "PARTIAL",
-        "year": year,
-        "registry_sync": sync,
-        "requested_tickers": len(tickers),
-        "resolved_tickers": len(issuer_rows),
-        "unresolved_tickers": unresolved,
-        "ipe_document_count": len(ipe.records),
-        "ipe_material_count": material_total,
-        "ipe_candidate_count": candidate_total,
-        "source_url": ipe.source_url,
-    }
-    return {key: tuple(value) for key, value in by_ticker.items()}, coverage
 
 
 def analyze(
@@ -236,7 +184,9 @@ def main() -> int:
                                       timeout=settings.openclaw_timeout_seconds, executable=settings.openclaw_bin)
     selected = TICKERS[:args.limit]
     try:
-        official_map, official_coverage = load_official_evidence(selected)
+        official_snapshot = load_open_data_official_evidence(selected)
+        official_map = official_snapshot.by_ticker
+        official_coverage = official_snapshot.coverage
     except Exception as exc:
         official_map = {ticker: () for ticker in selected}
         official_coverage = {
