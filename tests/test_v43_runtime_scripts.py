@@ -16,6 +16,7 @@ def test_v43_shell_wrappers_are_syntax_valid():
         "scripts/run_continuous_intelligence.sh",
         "scripts/install_continuous_intelligence_timers.sh",
         "scripts/run_v43_continuous_acceptance.sh",
+        "scripts/deploy_v43_continuous_backend.sh",
     )
     for relative in scripts:
         subprocess.run(
@@ -49,3 +50,16 @@ def test_v43_continuous_acceptance_enforces_nonblocking_and_shared_lock():
     assert "LocalRelevanceScreenJob" in text
     assert "CvmReconciliationJob" in text
     assert "/intelligence/local/status" in text
+
+
+def test_v43_deploy_is_acceptance_first_and_verifies_production():
+    text = (ROOT / "scripts/deploy_v43_continuous_backend.sh").read_text(
+        encoding="utf-8"
+    )
+    assert text.index("run_v43_continuous_acceptance.sh") < text.index(
+        "install_continuous_intelligence_timers.sh"
+    )
+    assert "BACKEND_CONTINUOUS_READY=PASS" in text
+    assert "b3-continuous-intelligence.timer" in text
+    assert "/intelligence/local/status" in text
+    assert "restart joao-scheduler.service" in text
