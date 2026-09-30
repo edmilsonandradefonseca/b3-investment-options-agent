@@ -823,3 +823,91 @@ The continuous intelligence extension is accepted only when all are demonstrated
 - backend observability exposes queue/dossier/source-cursor status;
 - daily Open Data reconciliation detects/reconciles missed records;
 - senior reasoning remains fully functional when DeepSeek is absent, busy or degraded.
+
+
+---
+
+## 23. As-built production freeze — 2026-09-30
+
+V4.3 Continuous Intelligence is production validated and frozen.
+
+The as-built production loop is:
+
+```text
+CVM Download Múltiplo
+        |
+        v
+durable cursor + overlap
+        |
+        v
+canonical Evidence + append-only dedupe
+        |
+        v
+deterministic materiality + triage
+        |
+        +--> NON_MATERIAL / out of scope -> store/skip
+        |
+        +--> CANDIDATE -> short async relevance screen
+        |                    |
+        |                    +--> relevant -> dossier queue
+        |                    +--> non-ready -> defer/omit
+        |
+        +--> MATERIAL ----------------------> dossier queue
+                                                |
+                                                v
+                                      DeepSeek async worker
+                                                |
+                                     READY -----+----- DEGRADED/DEFERRED
+                                        |                 |
+                                        v                 v
+                               optional derived       diagnostics/requeue
+                               senior context          never canonical
+                                        |
+canonical Evidence --------------------+-----------------> OpenClaw/Luna
+                                                          |
+                                                          v
+                                                        HUMAN
+```
+
+Operational invariants frozen by this version:
+
+1. canonical Evidence acquisition never waits for DeepSeek;
+2. deterministic materiality always precedes local LLM reasoning;
+3. DeepSeek output is derived intelligence only;
+4. a local-model failure is deferred/requeued and cannot suppress official Evidence;
+5. a DeepSeek `NOT_RELEVANT` result cannot suppress deterministic official `MATERIAL`;
+6. only READY/current/reference-valid dossiers may enter senior context;
+7. OpenClaw/Luna never waits for DeepSeek;
+8. B3 and João share one host-level local reasoning lock;
+9. discovery cursor advances only after successful Evidence persistence/routing;
+10. Open Data reconciliation never rewrites historical reconstruction as observed-live Evidence;
+11. official issuer/security identity is deterministic;
+12. CVM FCA trading codes admitted to the registry must match `[A-Z]{4}[0-9]{1,2}`;
+13. no autonomous trading is introduced.
+
+Production acceptance markers:
+
+```text
+V4_3_CONTINUOUS_ACCEPTANCE=PASS
+PRODUCTION_TIMERS=PASS
+PRODUCTION_DISCOVERY=PASS
+OBSERVABILITY_API=PASS
+SHARED_LOCAL_REASONING_LOCK=PASS
+BACKEND_CONTINUOUS_READY=PASS
+
+V4_3_IDENTITY_ACCEPTANCE=PASS
+B3_RUNTIME_READY=PASS
+PETR4_HTTP=200
+PSEUDO_TICKER_1_HTTP=400
+V4_3_IDENTITY_RUNTIME=PASS
+```
+
+Final pre-freeze CI:
+
+- GitHub Actions CI #1130;
+- Python: 623 passed;
+- React: PASS.
+
+Detailed freeze record:
+
+`docs/V4.3_CONTINUOUS_INTELLIGENCE_FREEZE_2026-09-30.md`
