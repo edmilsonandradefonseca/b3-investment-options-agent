@@ -38,6 +38,12 @@ def test_synthesis_separates_deterministic_facts_from_specialist_outputs():
             "options_agent_analysis": {"agent": "options_analysis"},
         },
         retrieved_evidence=({"source_ref": "obsidian:PETR4.md"},),
+        derived_intelligence={
+            "local_evidence_dossier": {
+                "status": "READY",
+                "summary": "background only",
+            }
+        },
     )
 
     result = agent.synthesize(context)
@@ -57,3 +63,26 @@ def test_synthesis_separates_deterministic_facts_from_specialist_outputs():
         "options_agent_analysis": {"agent": "options_analysis"},
     }
     assert call["input"]["retrieved_evidence"] == [{"source_ref": "obsidian:PETR4.md"}]
+
+
+def test_synthesis_receives_derived_intelligence_as_separate_context():
+    llm = FakeLLM()
+    agent = SynthesisAgent(llm)
+    agent.synthesize(
+        AgentContext(
+            request="Assess PETR4",
+            deterministic_context={"market_analysis": {"price": 38.0}},
+            retrieved_evidence=({"source_ref": "CVM:1"},),
+            derived_intelligence={
+                "local_evidence_dossier": {
+                    "status": "READY",
+                    "summary": "pre-analysis",
+                }
+            },
+        )
+    )
+
+    payload = llm.calls[0]["input"]
+    assert payload["retrieved_evidence"] == [{"source_ref": "CVM:1"}]
+    assert payload["derived_intelligence"]["local_evidence_dossier"]["status"] == "READY"
+    assert "local_evidence_dossier" not in payload["deterministic_facts"]
