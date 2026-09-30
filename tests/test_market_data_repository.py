@@ -1,4 +1,5 @@
 ﻿from datetime import datetime, timezone
+from pathlib import Path
 
 from b3_agent.repositories.market_data import MarketDataRepository
 from b3_agent.schemas.market import StockMarketData
@@ -67,3 +68,20 @@ def test_market_data_repository_preserves_quality_metadata(tmp_path):
     assert result.schema_version == "1.0"
     assert result.quality_status == "VALID"
     assert result.quality_flags == ()
+
+
+def test_market_data_repository_repeated_reads_do_not_leak_file_descriptors(tmp_path):
+    fd_root = Path("/proc/self/fd")
+    if not fd_root.is_dir():
+        return
+
+    repository = MarketDataRepository(tmp_path / "market")
+    repository.write([make_record()])
+
+    before = len(list(fd_root.iterdir()))
+    for _ in range(100):
+        result = repository.read("ITUB4")
+        assert result[0].ticker == "ITUB4"
+    after = len(list(fd_root.iterdir()))
+
+    assert after <= before + 2
