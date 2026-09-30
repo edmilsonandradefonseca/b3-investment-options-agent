@@ -52,3 +52,25 @@ jobs:
       - name: Build React frontend
         working-directory: frontend
         run: npm run build
+
+
+  v42-live-cvm-open-data:
+    if: github.head_ref == 'feature/v4.2-official-sources'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: "pip"
+
+      - name: Install project
+        run: python -m pip install -e ".[dev]"
+
+      - name: Validate live public CVM Open Data
+        run: python scripts/validate_v42_official_sources.py --ticker PETR4 --year 2026
