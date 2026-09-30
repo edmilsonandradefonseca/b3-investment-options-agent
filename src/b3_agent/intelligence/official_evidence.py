@@ -104,6 +104,8 @@ class OfficialEvidenceBuilder:
                     "protocol": record.protocol,
                     "version": record.version,
                     "content_status": "METADATA_ONLY",
+                    "published_at_semantics": "CVM_DATA_ENTREGA",
+                    "published_at_precision": _delivery_precision(record.raw_row),
                     "raw_row": record.raw_row,
                 },
             ),
@@ -292,3 +294,14 @@ def _official_content(
     if not lines:
         return "Official CVM disclosure metadata."
     return "\n".join(lines)
+
+
+def _delivery_precision(raw_row: dict[str, str]) -> str:
+    value = str(raw_row.get("data_entrega") or "").strip()
+    if not value:
+        return "UNKNOWN"
+    if len(value) == 10:
+        return "DATE"
+    if ":" in value:
+        return "SECOND" if value.count(":") >= 2 else "MINUTE"
+    return "UNKNOWN"
