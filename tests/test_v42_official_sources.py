@@ -1,4 +1,6 @@
 from datetime import date, datetime, timezone
+from pathlib import Path
+import resource
 from types import SimpleNamespace
 
 from b3_agent.intelligence.issuer_registry import IssuerRegistry
@@ -114,3 +116,67 @@ def test_official_snapshot_loads_once_and_maps_evidence_to_each_security(tmp_pat
     evidence = snapshot.by_ticker["PETR4"][0]
     assert evidence.metadata.issuer_ref == "cvm:9512"
     assert evidence.metadata.materiality_reason == "OFFICIAL_FATO_RELEVANTE"
+
+
+def test_official_snapshot_survives_low_nofile_with_many_ipe_records(tmp_path):
+    class ManyRecordsProvider(FakeProvider):
+        def fetch_ipe_year(self, year, *, cvm_codes=(), cnpjs=(), categories=()):
+            assert cvm_codes == ("9512",)
+            records = tuple(
+                CvmOpenDataIpeRecord(
+                    provider_record_id=f"CVM_OPEN_DATA_IPE|{index}|1",
+                    cnpj="33000167000101",
+                    cvm_code="9512",
+                    company_name="PETROBRAS",
+                    reference_date=date(2026, 9, 30),
+                    category="Fato Relevante",
+                    disclosure_type="Fato Relevante",
+                    species=None,
+                    subject=f"Evento material {index}",
+                    delivered_at=NOW,
+                    presentation_type=None,
+                    protocol=str(index),
+                    version="1",
+                    document_url=f"https://www.rad.cvm.gov.br/doc/{index}",
+                    retrieved_at=NOW,
+                    raw_row={"data_entrega": "2026-09-30"},
+                )
+                for index in range(1000)
+            )
+            return SimpleNamespace(
+                year=year,
+                source_url=f"https://cvm.test/ipe_{year}.zip",
+                retrieved_at=NOW,
+                records=records,
+            )
+
+    fd_root = Path("/proc/self/fd")
+    original_soft, original_hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    target_soft = min(original_soft, 128)
+    if target_soft < 64:
+        return
+
+    try:
+        resource.setrlimit(resource.RLIMIT_NOFILE, (target_soft, original_hard))
+        before = len(list(fd_root.iterdir())) if fd_root.is_dir() else 0
+
+        snapshot = load_open_data_official_evidence(
+            ["PETR4", "PETR3"],
+            year=2026,
+            provider=ManyRecordsProvider(),
+            registry=IssuerRegistry(tmp_path / "issuer-low-fd.sqlite3"),
+        )
+
+        assert snapshot.coverage["status"] == "SUCCESS"
+        assert snapshot.coverage["ipe_document_count"] == 1000
+        assert len(snapshot.by_ticker["PETR4"]) == 1000
+        assert len(snapshot.by_ticker["PETR3"]) == 1000
+
+        if fd_root.is_dir():
+            after = len(list(fd_root.iterdir()))
+            assert after <= before + 4
+    finally:
+        resource.setrlimit(
+            resource.RLIMIT_NOFILE,
+            (original_soft, original_hard),
+        )
