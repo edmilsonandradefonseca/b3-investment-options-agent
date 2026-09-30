@@ -39,7 +39,10 @@ def main() -> int:
             "error": f"{type(exc).__name__}: {exc}",
         }
 
-    result = NightlyIntelligenceJob(news_limit=args.news_limit).run(
+    result = NightlyIntelligenceJob(
+        news_limit=args.news_limit,
+        local_analysis_mode="enqueue",
+    ).run(
         tickers=list(selected),
         official_evidence_by_ticker=official_map,
     )
@@ -51,6 +54,9 @@ def main() -> int:
         "coverage_insufficient": result["coverage_insufficient"],
         "failed": result["failed"],
         "deepseek_calls": result["deepseek_calls"],
+        "local_analysis_mode": result["local_analysis_mode"],
+        "local_analysis_enqueues": result["local_analysis_enqueues"],
+        "queued_local_analysis": result["queued_local_analysis"],
         "official_sources": official_coverage,
         "as_of": result["as_of"],
     }
