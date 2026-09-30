@@ -26,6 +26,7 @@ from b3_agent.intelligence.official_evidence import (
 from b3_agent.knowledge.evidence import Evidence
 from b3_agent.llm.client import OpenClawStructuredClient
 from b3_agent.llm.ollama_client import OllamaClient
+from b3_agent.llm.ollama_runtime import ollama_preflight
 from b3_agent.providers.cvm_open_data import CvmOpenDataProvider
 
 
@@ -133,24 +134,29 @@ def main() -> int:
     provider = CvmOpenDataProvider()
     registry = IssuerRegistry()
     started_at = datetime.now(timezone.utc)
+    stage = "registry_sync"
 
     try:
         registry_sync = registry.sync_from_cvm(provider=provider, year=args.year)
+        stage = "issuer_resolution"
         issuer = registry.resolve_issuer_by_ticker(ticker)
         if issuer is None:
             raise RuntimeError(f"issuer registry did not resolve {ticker}")
 
+        stage = "official_evidence_acquisition"
         ipe = provider.fetch_ipe_year(
             args.year,
             cvm_codes=(issuer.cvm_code,) if issuer.cvm_code else (),
             cnpjs=(issuer.cnpj,) if issuer.cnpj else (),
             categories=("Fato Relevante",),
         )
+        stage = "official_evidence_normalization"
         builder = OfficialEvidenceBuilder(registry=registry)
         evidences = tuple(
             builder.from_open_data_ipe(record)
             for record in ipe.records
         )
+        stage = "material_evidence_selection"
         evidence = select_material_evidence(
             evidences,
             protocol=args.protocol,
@@ -221,7 +227,11 @@ def main() -> int:
             )
             return 0
 
+        stage = "ollama_preflight"
         deepseek_client = OllamaClient()
+        preflight = ollama_preflight(client=deepseek_client)
+
+        stage = "deepseek_reasoning"
         deepseek = deepseek_client.ask(prompt)
         deepseek_payload = {
             "model": deepseek.model,
@@ -241,6 +251,7 @@ def main() -> int:
             "eval_duration_ns": deepseek.eval_duration_ns,
         }
 
+        stage = "openclaw_escalation"
         senior = OpenClawStructuredClient(
             agent=settings.openclaw_agent,
             model=settings.openclaw_model,
@@ -297,6 +308,7 @@ def main() -> int:
                 "unknown_evidence_refs": False,
                 "zero_paid_acquisition": True,
             },
+            "ollama_preflight": preflight.as_dict(),
             "deepseek": deepseek_payload,
             "openclaw": {
                 "model": settings.openclaw_model,
@@ -314,6 +326,7 @@ def main() -> int:
             "status": "FAIL",
             "ticker": ticker,
             "year": args.year,
+            "stage": stage,
             "error": f"{type(exc).__name__}: {exc}",
         }
         print(json.dumps(failure, ensure_ascii=False, indent=2))
