@@ -242,6 +242,7 @@ def main() -> int:
         news_limit=8,
         max_deepseek_calls=1,
         output_dir=output / "deepseek",
+        local_analysis_mode="inline",
     )
 
     rows = []

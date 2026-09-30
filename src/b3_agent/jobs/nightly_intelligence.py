@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 from b3_agent.config import settings
 from b3_agent.intelligence import AcquisitionStatus, EvidenceConclusion
+from b3_agent.intelligence.local_evidence_analysis import LocalEvidenceQueue
 from b3_agent.knowledge.evidence import Evidence
 from b3_agent.llm.ollama_client import OllamaClient
 from b3_agent.portfolio.snapshot import load_active_snapshots
@@ -199,16 +200,31 @@ class NightlyIntelligenceJob:
         news_limit: int = 8,
         max_deepseek_calls: int | None = None,
         output_dir: str | Path | None = None,
+        local_analysis_mode: str = "enqueue",
+        local_analysis_queue: LocalEvidenceQueue | None = None,
     ) -> None:
         self.news_limit = news_limit
         self.max_deepseek_calls = (
             max_deepseek_calls
             if max_deepseek_calls is not None
-            else int(os.getenv("B3_NIGHTLY_MAX_DEEPSEEK_CALLS", "5"))
+            else int(
+                os.getenv(
+                    "B3_NIGHTLY_MAX_LOCAL_ANALYSIS_ENQUEUES",
+                    os.getenv("B3_NIGHTLY_MAX_DEEPSEEK_CALLS", "5"),
+                )
+            )
         )
         self.output_dir = Path(
             output_dir or settings.data_dir / "derived" / "nightly_intelligence"
         )
+        if local_analysis_mode not in {"inline", "enqueue"}:
+            raise ValueError("local_analysis_mode must be 'inline' or 'enqueue'")
+        self.local_analysis_mode = local_analysis_mode
+        self.local_analysis_queue = local_analysis_queue
+        if self.local_analysis_mode == "enqueue" and self.local_analysis_queue is None:
+            self.local_analysis_queue = LocalEvidenceQueue(
+                settings.data_dir / "derived" / "local_evidence_analyst"
+            )
         self.news = SearxngNewsAdapter(
             base_url=os.getenv("B3_SEARXNG_URL", "http://127.0.0.1:8080")
         )
@@ -232,16 +248,27 @@ class NightlyIntelligenceJob:
         run_started_at = datetime.now(timezone.utc)
         results: list[dict[str, Any]] = []
         deepseek_calls = 0
+        local_analysis_enqueues = 0
 
         for ticker in selected:
             try:
+                budget_used = (
+                    deepseek_calls
+                    if self.local_analysis_mode == "inline"
+                    else local_analysis_enqueues
+                )
                 result = self._process_ticker(
                     ticker=ticker,
-                    deepseek_allowed=deepseek_calls < self.max_deepseek_calls,
+                    deepseek_allowed=budget_used < self.max_deepseek_calls,
                     official_evidence=official_map.get(ticker.upper().strip(), ()),
                 )
                 if result["status"] == "completed":
                     deepseek_calls += 1
+                if (
+                    result["status"] == "queued_local_analysis"
+                    and result.get("local_analysis_queue_status") == "ENQUEUED"
+                ):
+                    local_analysis_enqueues += 1
                 results.append(result)
             except Exception as exc:
                 results.append({
@@ -255,13 +282,25 @@ class NightlyIntelligenceJob:
             "run_started_at": run_started_at.isoformat(),
             "ticker_count": len(selected),
             "completed": sum(1 for item in results if item["status"] == "completed"),
+            "queued_local_analysis": sum(
+                1 for item in results if item["status"] == "queued_local_analysis"
+            ),
             "skipped": sum(1 for item in results if item["status"].startswith("skipped_")),
-            "deferred": sum(1 for item in results if item["status"] == "deferred_deepseek_budget"),
+            "deferred": sum(
+                1
+                for item in results
+                if item["status"] in {
+                    "deferred_deepseek_budget",
+                    "deferred_local_analysis_budget",
+                }
+            ),
             "coverage_insufficient": sum(
                 1 for item in results if item["status"] == "coverage_insufficient"
             ),
             "failed": sum(1 for item in results if item["status"] == "failed"),
             "deepseek_calls": deepseek_calls,
+            "local_analysis_enqueues": local_analysis_enqueues,
+            "local_analysis_mode": self.local_analysis_mode,
             "max_deepseek_calls": self.max_deepseek_calls,
             "results": results,
         }
@@ -380,9 +419,27 @@ class NightlyIntelligenceJob:
         if not deepseek_allowed:
             return {
                 **base,
-                "status": "deferred_deepseek_budget",
+                "status": (
+                    "deferred_local_analysis_budget"
+                    if self.local_analysis_mode == "enqueue"
+                    else "deferred_deepseek_budget"
+                ),
                 "source_refs": source_refs,
                 "evidence_events": events,
+            }
+
+        if self.local_analysis_mode == "enqueue":
+            if self.local_analysis_queue is None:
+                raise RuntimeError("local analysis queue is not configured")
+            queued = self.local_analysis_queue.enqueue(ticker, events)
+            return {
+                **base,
+                "status": "queued_local_analysis",
+                "source_refs": source_refs,
+                "evidence_events": events,
+                "local_analysis_id": queued.request.analysis_id,
+                "local_analysis_fingerprint": queued.request.evidence_fingerprint,
+                "local_analysis_queue_status": queued.queue_status,
             }
 
         llm_result = self.llm.ask(_prompt(ticker, events))

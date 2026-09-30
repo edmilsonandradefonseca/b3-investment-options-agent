@@ -152,3 +152,67 @@ def test_issuer_registry_repeated_resolution_does_not_leak_sqlite_descriptors(tm
     after = len(list(fd_root.iterdir()))
 
     assert after <= before + 2
+
+
+def test_issuer_registry_rejects_and_purges_invalid_trading_codes(tmp_path):
+    class InvalidSecurityProvider(FakeProvider):
+        def fetch_fca_securities(self, year):
+            base = super().fetch_fca_securities(year)
+            invalid = CvmOpenDataSecurityRecord(
+                cnpj="33000167000101",
+                company_name="PETROBRAS",
+                reference_date=date(2026, 1, 1),
+                ticker="1",
+                security_type="Ações",
+                security_description="invalid",
+                market="Bolsa",
+                exchange="B3",
+                trading_start=date(2000, 1, 1),
+                trading_end=None,
+                retrieved_at=NOW,
+                raw_row={},
+            )
+            return SimpleNamespace(
+                source_url=base.source_url,
+                securities=base.securities + (invalid,),
+            )
+
+    registry = IssuerRegistry(tmp_path / "issuer_registry.sqlite3")
+    with registry._connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO issuers (
+                issuer_id, cvm_code, cnpj, legal_name, trading_name,
+                registration_status, source, source_retrieved_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "cvm:9512", "9512", "33000167000101", "PETROBRAS",
+                "PETROBRAS", "ATIVO", "CVM_CAD_OPEN_DATA",
+                NOW.isoformat(), NOW.isoformat(),
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO securities (
+                instrument_id, ticker, issuer_id, asset_type, description,
+                market, exchange_name, trading_start, trading_end,
+                reference_date, source, source_retrieved_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "cvm-security:cvm:9512:1", "1", "cvm:9512", "Ações", "bad",
+                "Bolsa", "B3", "2000-01-01", None, "2026-01-01",
+                "CVM_FCA_OPEN_DATA", NOW.isoformat(), NOW.isoformat(),
+            ),
+        )
+
+    summary = registry.sync_from_cvm(
+        provider=InvalidSecurityProvider(),
+        year=2026,
+        as_of=date(2026, 9, 30),
+    )
+
+    assert summary["invalid_security_count"] == 1
+    assert summary["purged_invalid_security_count"] == 1
+    assert registry.resolve_tickers(cvm_code="9512") == ("PETR3", "PETR4")

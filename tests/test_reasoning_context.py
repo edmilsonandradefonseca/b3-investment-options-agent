@@ -114,12 +114,20 @@ def test_deterministic_context_reaches_reasoning_without_mutation(tmp_path: Path
             "user_question": "PETR4 investment thesis valuation",
             "portfolio_context": context["portfolio"],
             "opportunities": context["opportunities"]["ranked_opportunities"],
+            "derived_intelligence": {
+                "local_evidence_dossier": {
+                    "status": "READY",
+                    "summary": "background local context",
+                }
+            },
         }
     )
 
     deterministic_context = llm.context["deterministic_context"]
     assert deterministic_context["portfolio_context"] == context["portfolio"]
     assert deterministic_context["opportunities"] == context["opportunities"]["ranked_opportunities"]
+    assert llm.context["derived_intelligence"]["local_evidence_dossier"]["status"] == "READY"
+    assert "local_evidence_dossier" not in deterministic_context
     assert result["decision_proposal"]["subject_id"] == "PETR4"
     assert result["risk_validation"]["status"] == "PASS"
     assert result["status"] == "PASS"

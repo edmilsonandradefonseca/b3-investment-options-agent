@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from urllib.parse import parse_qs
+from urllib.error import HTTPError
 
 import pytest
 
@@ -9,6 +10,7 @@ from b3_agent.providers.cvm_rad import (
     CvmRadAuthenticationError,
     CvmRadDisclosureProvider,
     CvmRadCredentialsMissing,
+    CvmRadError,
 )
 
 
@@ -116,3 +118,106 @@ def test_cvm_rad_requires_runtime_credentials(monkeypatch):
     provider = CvmRadDisclosureProvider()
     with pytest.raises(CvmRadCredentialsMissing):
         provider.query_ipe(date(2026, 9, 29))
+
+
+def test_cvm_rad_retries_transient_timeout_then_succeeds(monkeypatch):
+    xml = b"""<DownloadMultiplo DataSolicitada="29/09/2026 00:00" TipoDocumento="IPE">
+  <Link url="https://example.test/doc.zip"
+        Documento="IPE"
+        ccvm="9512"
+        DataRef="29/09/2026"
+        Situacao="Liberado"
+        Categoria="Fato Relevante"
+        Tipo="Fato Relevante" />
+</DownloadMultiplo>"""
+    calls = {"count": 0}
+
+    def fake_urlopen(request, timeout):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise TimeoutError("read timed out")
+        return _Response(xml)
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("time.sleep", lambda seconds: None)
+
+    result = CvmRadDisclosureProvider(
+        username="user",
+        password="secret",
+        endpoint="https://cvm.test/rad",
+        timeout=1,
+        max_attempts=3,
+        retry_backoff_seconds=0,
+    ).query_ipe(date(2026, 9, 29))
+
+    assert calls["count"] == 2
+    assert len(result.disclosures) == 1
+
+
+def test_cvm_rad_persistent_timeout_is_bounded_and_wrapped(monkeypatch):
+    calls = {"count": 0}
+
+    def fake_urlopen(request, timeout):
+        calls["count"] += 1
+        raise TimeoutError("read timed out")
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("time.sleep", lambda seconds: None)
+
+    provider = CvmRadDisclosureProvider(
+        username="user",
+        password="secret",
+        endpoint="https://cvm.test/rad",
+        timeout=1,
+        max_attempts=2,
+        retry_backoff_seconds=0,
+    )
+    with pytest.raises(CvmRadError, match="transport failed after 2 attempts"):
+        provider.query_ipe(date(2026, 9, 29))
+
+    assert calls["count"] == 2
+
+
+def test_cvm_rad_does_not_retry_non_transient_http_error(monkeypatch):
+    calls = {"count": 0}
+
+    def fake_urlopen(request, timeout):
+        calls["count"] += 1
+        raise HTTPError(
+            request.full_url,
+            400,
+            "Bad Request",
+            hdrs=None,
+            fp=None,
+        )
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("time.sleep", lambda seconds: None)
+
+    provider = CvmRadDisclosureProvider(
+        username="user",
+        password="secret",
+        endpoint="https://cvm.test/rad",
+        timeout=1,
+        max_attempts=3,
+        retry_backoff_seconds=0,
+    )
+    with pytest.raises(HTTPError):
+        provider.query_ipe(date(2026, 9, 29))
+
+    assert calls["count"] == 1
+
+
+def test_cvm_rad_runtime_retry_configuration(monkeypatch):
+    monkeypatch.setenv("CVM_RAD_TIMEOUT_SECONDS", "45")
+    monkeypatch.setenv("CVM_RAD_MAX_ATTEMPTS", "4")
+    monkeypatch.setenv("CVM_RAD_RETRY_BACKOFF_SECONDS", "0.5")
+
+    provider = CvmRadDisclosureProvider(
+        username="user",
+        password="secret",
+    )
+
+    assert provider.timeout == 45.0
+    assert provider.max_attempts == 4
+    assert provider.retry_backoff_seconds == 0.5

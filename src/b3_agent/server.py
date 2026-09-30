@@ -5,6 +5,7 @@ from dataclasses import asdict
 import hashlib
 import json
 import os
+import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -37,6 +38,12 @@ from b3_agent.orchestration.live_providers import LiveProviderService
 from b3_agent.providers.searxng_news import SearxngNewsAdapter
 from b3_agent.research_events import ResearchEventService
 from b3_agent.runtime import RuntimeManager
+from b3_agent.intelligence.observability import (
+    local_intelligence_manifests,
+    local_intelligence_queues,
+    local_intelligence_status,
+    local_ticker_intelligence,
+)
 
 
 class OrchestrateRequest(BaseModel):
@@ -600,6 +607,33 @@ def pilot_ticker_intelligence(ticker: str) -> dict[str, Any]:
         raise HTTPException(status_code=503, detail="pilot artifact identity mismatch")
     result["status"] = "COMPLETED" if result.get("deepseek_status") == result.get("openclaw_status") == "completed" else "PARTIAL"
     return result
+
+
+@app.get("/intelligence/local/status")
+def intelligence_local_status() -> dict[str, Any]:
+    """Read continuous-intelligence cursor, queue and worker status."""
+    return local_intelligence_status()
+
+
+@app.get("/intelligence/local/queue")
+def intelligence_local_queue() -> dict[str, Any]:
+    """Read pending relevance and dossier queues without mutating them."""
+    return local_intelligence_queues()
+
+
+@app.get("/intelligence/local/manifest")
+def intelligence_local_manifest() -> dict[str, Any]:
+    """Read latest discovery, worker and reconciliation manifests."""
+    return local_intelligence_manifests()
+
+
+@app.get("/intelligence/local/{ticker}")
+def intelligence_local_ticker(ticker: str) -> dict[str, Any]:
+    """Read accepted local dossier and latest relevance screen for one ticker."""
+    normalized = ticker.strip().upper()
+    if re.fullmatch(r"[A-Z]{4}\d{1,2}", normalized) is None:
+        raise HTTPException(status_code=400, detail="invalid B3 ticker")
+    return local_ticker_intelligence(normalized)
 
 
 @app.get("/version")

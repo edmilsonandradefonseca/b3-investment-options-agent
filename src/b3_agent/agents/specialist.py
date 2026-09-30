@@ -25,16 +25,23 @@ class SpecialistAgent:
         deterministic = payload.get("deterministic_context", {})
         focused = {key: deterministic[key] for key in self.focus_keys if key in deterministic}
         evidence = payload.get("retrieved_evidence", [])
+        derived = payload.get("derived_intelligence", {})
         result = self.llm.complete_json(
             instructions=(
                 f"Act as the {self.agent_name} of an investment decision copilot. "
                 "Interpret only the supplied deterministic facts relevant to your role "
                 "and supplied evidence. Do not invent data, prices, calculations, rankings, "
-                "or recommendations. Produce analysis for a separate synthesis agent. "
+                "or recommendations. Optional derived intelligence is non-authoritative and may only "
+                "be used when consistent with supplied facts/evidence. Produce analysis for a separate synthesis agent. "
                 "Clearly state uncertainty and risks."
             ),
             input_text=json.dumps(
-                {"request": payload.get("request"), "facts": focused, "evidence": evidence},
+                {
+                    "request": payload.get("request"),
+                    "facts": focused,
+                    "evidence": evidence,
+                    "derived_intelligence": derived,
+                },
                 ensure_ascii=False,
                 default=str,
             ),

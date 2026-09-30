@@ -7,6 +7,8 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from b3_agent.llm.host_lock import local_reasoning_lock
+
 
 @dataclass(frozen=True, slots=True)
 class OllamaResult:
@@ -35,6 +37,7 @@ class OllamaClient:
         num_predict: int | None = None,
         keep_alive: str | int | None = None,
         think: bool | None = None,
+        format_schema: dict[str, Any] | None = None,
     ) -> None:
         self.base_url = (
             base_url
@@ -73,6 +76,7 @@ class OllamaClient:
             else raw_keep_alive
         )
         self.think = think
+        self.format_schema = dict(format_schema) if format_schema is not None else None
 
         if self.timeout <= 0:
             raise ValueError("timeout must be positive")
@@ -98,6 +102,8 @@ class OllamaClient:
         }
         if self.think is not None:
             payload["think"] = self.think
+        if self.format_schema is not None:
+            payload["format"] = self.format_schema
 
         req = Request(
             f"{self.base_url}/api/chat",
@@ -106,9 +112,46 @@ class OllamaClient:
             method="POST",
         )
         try:
-            with urlopen(req, timeout=self.timeout) as response:
-                body = json.loads(response.read().decode("utf-8"))
-        except (HTTPError, URLError, TimeoutError, OSError) as exc:
+            with local_reasoning_lock():
+                body = self._post(req)
+        except HTTPError as exc:
+            detail = _http_error_detail(exc)
+            if (
+                exc.code == 400
+                and self.think is not None
+                and "think" in detail.casefold()
+            ):
+                compatibility_payload = dict(payload)
+                compatibility_payload.pop("think", None)
+                compatibility_req = Request(
+                    f"{self.base_url}/api/chat",
+                    data=json.dumps(compatibility_payload).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                try:
+                    with local_reasoning_lock():
+                        body = self._post(compatibility_req)
+                except (HTTPError, URLError, TimeoutError, OSError) as retry_exc:
+                    retry_detail = (
+                        _http_error_detail(retry_exc)
+                        if isinstance(retry_exc, HTTPError)
+                        else str(retry_exc)
+                    )
+                    raise RuntimeError(
+                        "Ollama request failed after think compatibility retry "
+                        f"model={self.model} timeout_s={self.timeout:g} "
+                        f"num_ctx={self.num_ctx} num_predict={self.num_predict}: "
+                        f"{type(retry_exc).__name__}: {retry_detail}"
+                    ) from retry_exc
+            else:
+                raise RuntimeError(
+                    "Ollama request failed "
+                    f"model={self.model} timeout_s={self.timeout:g} "
+                    f"num_ctx={self.num_ctx} num_predict={self.num_predict}: "
+                    f"HTTPError {exc.code}: {detail}"
+                ) from exc
+        except (URLError, TimeoutError, OSError) as exc:
             raise RuntimeError(
                 "Ollama request failed "
                 f"model={self.model} timeout_s={self.timeout:g} "
@@ -132,6 +175,18 @@ class OllamaClient:
             eval_count=_as_int(body.get("eval_count")),
             eval_duration_ns=_as_int(body.get("eval_duration")),
         )
+
+    def _post(self, req: Request) -> dict[str, Any]:
+        with urlopen(req, timeout=self.timeout) as response:
+            return json.loads(response.read().decode("utf-8"))
+
+
+def _http_error_detail(exc: HTTPError) -> str:
+    try:
+        raw = exc.read().decode("utf-8", errors="replace").strip()
+    except Exception:
+        raw = ""
+    return raw[:1000] or str(exc)
 
 
 def _as_int(value: Any) -> int | None:

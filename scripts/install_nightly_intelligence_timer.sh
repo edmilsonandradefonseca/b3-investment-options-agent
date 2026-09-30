@@ -15,7 +15,7 @@ fi
 
 sudo tee /etc/systemd/system/b3-nightly-intelligence.service >/dev/null <<EOF
 [Unit]
-Description=B3 V4.2 nightly intelligence
+Description=B3 V4.3 nightly Evidence acquisition and enqueue
 After=network-online.target ollama.service
 Wants=network-online.target
 
@@ -26,7 +26,7 @@ Group=${SERVICE_GROUP}
 WorkingDirectory=${REPO}
 Environment=B3_AGENT_PROJECT_ROOT=${REPO}
 Environment=B3_AGENT_TIMEZONE=America/Sao_Paulo
-Environment=B3_NIGHTLY_MAX_DEEPSEEK_CALLS=5
+Environment=B3_NIGHTLY_MAX_LOCAL_ANALYSIS_ENQUEUES=5
 EnvironmentFile=-${SHARED_ENV_FILE}
 EnvironmentFile=-${RUNTIME_ENV_FILE}
 EnvironmentFile=-${RUNTIME_ENV_FILE_2}
@@ -52,16 +52,56 @@ Unit=b3-nightly-intelligence.service
 WantedBy=timers.target
 EOF
 
+sudo tee /etc/systemd/system/b3-local-evidence-analyst.service >/dev/null <<EOF
+[Unit]
+Description=B3 V4.3 asynchronous local Evidence analyst
+After=network-online.target ollama.service b3-nightly-intelligence.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=${SERVICE_USER}
+Group=${SERVICE_GROUP}
+WorkingDirectory=${REPO}
+Environment=B3_AGENT_PROJECT_ROOT=${REPO}
+Environment=B3_AGENT_TIMEZONE=America/Sao_Paulo
+EnvironmentFile=-${SHARED_ENV_FILE}
+EnvironmentFile=-${RUNTIME_ENV_FILE}
+EnvironmentFile=-${RUNTIME_ENV_FILE_2}
+ExecStart=${REPO}/.venv/bin/python ${REPO}/scripts/run_local_evidence_analyst.py --limit 5
+Nice=15
+CPUWeight=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+TimeoutStartSec=45min
+EOF
+
+sudo tee /etc/systemd/system/b3-local-evidence-analyst.timer >/dev/null <<'EOF'
+[Unit]
+Description=Run B3 V4.3 local Evidence analyst after nightly acquisition
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 22:15:00 America/Sao_Paulo
+Persistent=true
+AccuracySec=1min
+Unit=b3-local-evidence-analyst.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
 sudo systemctl daemon-reload
 sudo systemctl enable --now b3-nightly-intelligence.timer
+sudo systemctl enable --now b3-local-evidence-analyst.timer
 
-echo "===== B3 NIGHTLY TIMER INSTALLED ====="
+echo "===== B3 V4.3 NIGHTLY + LOCAL ANALYST TIMERS INSTALLED ====="
 echo "shared env:  ${SHARED_ENV_FILE}"
 echo "runtime env: ${RUNTIME_ENV_FILE}"
 echo "runtime env2:${RUNTIME_ENV_FILE_2}"
 systemctl status b3-nightly-intelligence.timer --no-pager
 echo
-systemctl list-timers b3-nightly-intelligence.timer --no-pager
+systemctl list-timers b3-nightly-intelligence.timer b3-local-evidence-analyst.timer --no-pager
 echo
 echo "===== SERVICE ENV FILES ====="
 systemctl cat b3-nightly-intelligence.service --no-pager | grep -E 'Environment(File)?='
+systemctl cat b3-local-evidence-analyst.service --no-pager | grep -E 'Environment(File)?='

@@ -189,6 +189,7 @@ def build_workflow(
             request=state["user_question"],
             deterministic_context=facts,
             retrieved_evidence=tuple(state.get("evidence", [])),
+            derived_intelligence=dict(state.get("derived_intelligence", {})),
         )
 
     def market_analysis(state: B3State) -> dict[str, Any]:

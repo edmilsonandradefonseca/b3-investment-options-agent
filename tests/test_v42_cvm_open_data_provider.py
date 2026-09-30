@@ -131,3 +131,35 @@ def test_cvm_open_data_parses_cad_and_fca_security_mapping(monkeypatch):
 
     assert [item.ticker for item in security_result.securities] == ["PETR3", "PETR4"]
     assert all(item.is_active(as_of=date(2026, 9, 30)) for item in security_result.securities)
+
+
+def test_cvm_open_data_fca_rejects_non_trading_codes(monkeypatch):
+    fca_text = (
+        "CNPJ_Companhia;Data_Referencia;Nome_Companhia;"
+        "Tipo_Valor_Mobiliario;Valor_Mobiliario;Mercado;"
+        "Sigla_Entidade_Administradora;Codigo_Negociacao;"
+        "Data_Inicio_Negociacao;Data_Fim_Negociacao\n"
+        "11.111.111/0001-11;2026-01-01;VALID;Ações;ON;Bolsa;B3;TEND3;2020-01-01;\n"
+        "22.222.222/0001-22;2026-01-01;BDR;BDR;BDR;Bolsa;B3;XPBR31;2020-01-01;\n"
+        "33.333.333/0001-33;2026-01-01;RIGHT;Direito;Direito;Bolsa;B3;AXIA17;2020-01-01;\n"
+        "44.444.444/0001-44;2026-01-01;BAD1;Ações;ON;Bolsa;B3;1;2020-01-01;\n"
+        "55.555.555/0001-55;2026-01-01;BAD2;Ações;PN;Bolsa;B3;BRADPN;2020-01-01;\n"
+    )
+    payload = _zip_csv(
+        "fca_cia_aberta_valor_mobiliario_2026.csv",
+        fca_text,
+    )
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _Response(payload),
+    )
+
+    result = CvmOpenDataProvider(
+        fca_url_template="https://cvm.test/fca_{year}.zip"
+    ).fetch_fca_securities(2026)
+
+    assert [item.ticker for item in result.securities] == [
+        "TEND3",
+        "XPBR31",
+        "AXIA17",
+    ]
