@@ -13,6 +13,9 @@ def test_v43_shell_wrappers_are_syntax_valid():
         "scripts/run_v43_async_acceptance.sh",
         "scripts/run_v43_full_acceptance.sh",
         "scripts/install_nightly_intelligence_timer.sh",
+        "scripts/run_continuous_intelligence.sh",
+        "scripts/install_continuous_intelligence_timers.sh",
+        "scripts/run_v43_continuous_acceptance.sh",
     )
     for relative in scripts:
         subprocess.run(
@@ -34,3 +37,15 @@ def test_v43_nightly_script_is_enqueue_only():
         encoding="utf-8"
     )
     assert 'local_analysis_mode="enqueue"' in text
+
+
+def test_v43_continuous_acceptance_enforces_nonblocking_and_shared_lock():
+    text = (ROOT / "scripts/validate_v43_continuous_runtime.py").read_text(
+        encoding="utf-8"
+    )
+    assert '"deepseek_inline": False' in text
+    assert "LOCAL_REASONING_LOCK_WAIT_SECONDS" in text
+    assert "overlap_dedupe" in text
+    assert "LocalRelevanceScreenJob" in text
+    assert "CvmReconciliationJob" in text
+    assert "/intelligence/local/status" in text
