@@ -71,14 +71,25 @@ class SpecialistAgent:
 
 class MarketAnalysisAgent(SpecialistAgent):
     agent_name = "market_analysis"
-    focus_keys = ("market_analysis", "signals", "threats")
+    focus_keys = ("market_analysis", "signals", "threats", "workspace_result")
 
 
 class PortfolioAnalysisAgent(SpecialistAgent):
     agent_name = "portfolio_analysis"
-    focus_keys = ("portfolio_context", "risk_analysis", "action_candidates")
+    focus_keys = (
+        "portfolio_context",
+        "risk_analysis",
+        "action_candidates",
+        "workspace_result",
+    )
 
 
 class OptionsAnalysisAgent(SpecialistAgent):
     agent_name = "options_analysis"
-    focus_keys = ("options_analysis", "options_transactions", "opportunities", "action_candidates")
+    focus_keys = (
+        "options_analysis",
+        "options_transactions",
+        "opportunities",
+        "action_candidates",
+        "workspace_result",
+    )
