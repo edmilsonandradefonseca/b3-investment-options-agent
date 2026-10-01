@@ -18,6 +18,7 @@ export type HealthResponse = {
     neo4j_uri: string;
     qdrant_collection: string;
     oplab_token_configured: boolean;
+    brapi_token_configured: boolean;
   };
 };
 
