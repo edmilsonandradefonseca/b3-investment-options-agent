@@ -10,6 +10,7 @@ from typing import Any
 from b3_agent.config import settings
 from b3_agent.intelligence.observability import local_ticker_intelligence
 from b3_agent.llm.client import OpenClawStructuredClient
+from b3_agent.opportunity_live import LiveOpportunityService
 from b3_agent.providers.oplab.adapter import OplabAdapter
 from b3_agent.providers.searxng_news import SearxngNewsAdapter
 from b3_agent.repositories.macro import MacroDataRepository
@@ -271,6 +272,7 @@ class WorkspaceIntelligenceContextService:
         asset_evidence_service: StrategyEvidenceService | None = None,
         joao_memory_client: JoaoMemoryContextClient | None = None,
         joao_service: JoaoResolvePerspectiveService | None = None,
+        opportunity_service: LiveOpportunityService | None = None,
     ) -> None:
         self.current_quote_provider = current_quote_provider or OplabAdapter()
         self.news_provider = news_provider or SearxngNewsAdapter(
@@ -286,6 +288,7 @@ class WorkspaceIntelligenceContextService:
             joao_memory_client or JoaoMemoryContextClient()
         )
         self.joao_service = joao_service
+        self.opportunity_service = opportunity_service or LiveOpportunityService()
 
     def build(
         self,
@@ -416,27 +419,61 @@ class WorkspaceIntelligenceContextService:
                 }
 
         market_overview_research: list[dict[str, Any]] = []
+        market_overview_diagnostics: list[dict[str, Any]] = []
         if normalized_workspace in {"market intelligence", "opportunities"}:
-            try:
-                overview_records = self.news_provider.search(
-                    "IBOV",
-                    query=(
-                        "Ibovespa B3 Brasil mercado juros Selic dólar inflação "
-                        "commodities fluxo estrangeiro resultados empresas"
-                    ),
-                    limit=news_limit,
-                )
-                overview = ResearchEventService().build(
-                    overview_records,
-                    as_of=as_of,
-                )
-                market_overview_research = [
-                    asdict(item) for item in overview.events
-                ]
-                source_refs.extend(overview.source_refs)
-            except (OSError, RuntimeError, ValueError) as exc:
+            overview_queries = (
+                "Ibovespa B3 Brasil mercado hoje juros Selic dólar inflação commodities fluxo estrangeiro",
+                "Ibovespa hoje bolsa brasileira dólar juros mercado",
+                "B3 fluxo estrangeiro bolsa Brasil mercado hoje",
+            )
+            seen_refs: set[str] = set()
+            for query in overview_queries:
+                try:
+                    overview_records = self.news_provider.search(
+                        "IBOV",
+                        query=query,
+                        limit=news_limit,
+                    )
+                    diagnostics = getattr(
+                        self.news_provider,
+                        "last_diagnostics",
+                        None,
+                    )
+                    if diagnostics is not None:
+                        market_overview_diagnostics.append({
+                            "query": diagnostics.query,
+                            "primary_raw_result_count": diagnostics.primary_raw_result_count,
+                            "fallback_raw_result_count": diagnostics.fallback_raw_result_count,
+                            "normalized_result_count": diagnostics.normalized_result_count,
+                            "fallback_used": diagnostics.fallback_used,
+                            "fallback_strategy": diagnostics.fallback_strategy,
+                            "unresponsive_engines": [
+                                {"engine": name, "reason": reason}
+                                for name, reason in diagnostics.unresponsive_engines
+                            ],
+                        })
+                    overview = ResearchEventService().build(
+                        overview_records,
+                        as_of=as_of,
+                    )
+                    for item in overview.events:
+                        if item.source_ref in seen_refs:
+                            continue
+                        seen_refs.add(item.source_ref)
+                        market_overview_research.append(asdict(item))
+                    source_refs.extend(overview.source_refs)
+                    if len(market_overview_research) >= news_limit:
+                        break
+                except (OSError, RuntimeError, ValueError) as exc:
+                    market_overview_diagnostics.append({
+                        "query": query,
+                        "error": str(exc),
+                    })
+            market_overview_research = market_overview_research[:news_limit]
+            if not market_overview_research:
                 limitations.append(
-                    f"Current broad-market research unavailable: {exc}"
+                    "Broad-market research returned zero normalized events; "
+                    "macro and asset-specific evidence remain available."
                 )
 
         macro: dict[str, Any] = {}
@@ -452,25 +489,55 @@ class WorkspaceIntelligenceContextService:
                 macro[indicator] = asdict(item)
                 source_refs.append(item.source)
 
+        workspace_result = dict(deterministic_result or {})
+        if normalized_workspace == "opportunities" and normalized_tickers:
+            if "opportunity_set" not in workspace_result:
+                try:
+                    live_opportunities = self.opportunity_service.build(
+                        normalized_tickers[0],
+                        as_of=as_of,
+                        limit=20,
+                    )
+                    live_payload = self.opportunity_service.as_payload(
+                        live_opportunities
+                    )
+                    workspace_result["opportunity_set"] = live_payload[
+                        "opportunity_set"
+                    ]
+                    workspace_result["option_marketability"] = live_payload[
+                        "option_marketability"
+                    ]
+                    workspace_result["opportunity_limitations"] = live_payload[
+                        "limitations"
+                    ]
+                    source_refs.extend(
+                        live_opportunities.opportunity_set.source_refs
+                    )
+                    limitations.extend(live_opportunities.limitations)
+                except (OSError, RuntimeError, ValueError) as exc:
+                    limitations.append(
+                        "Canonical live option OpportunitySet unavailable for "
+                        f"{normalized_tickers[0]}: {exc}"
+                    )
+
         if (
             normalized_workspace == "opportunities"
-            and not deterministic_result
+            and "opportunity_set" not in workspace_result
         ):
             limitations.append(
-                "No canonical UC-03 OpportunitySet was supplied for this request; "
-                "B3/João intelligence may interpret market evidence but must not "
-                "invent or rank stock opportunities without validated valuation "
-                "and opportunity inputs."
+                "No canonical UC-03 OpportunitySet is available. B3/João may "
+                "interpret evidence but must not invent stock ranking or valuation."
             )
 
         deterministic_context: dict[str, Any] = {
             "workspace": workspace,
-            "workspace_result": dict(deterministic_result or {}),
+            "workspace_result": workspace_result,
             "market_analysis": {
                 "as_of": as_of.isoformat(),
                 "tickers": market_by_ticker,
                 "macro": macro,
                 "market_overview_research": market_overview_research,
+                "market_overview_diagnostics": market_overview_diagnostics,
                 "authority": (
                     "provider/evidence facts only; interpretation belongs to agents"
                 ),
