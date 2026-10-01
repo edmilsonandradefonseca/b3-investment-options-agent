@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 import json
 import os
+import urllib.request
 from typing import Any
 
 from b3_agent.config import settings
@@ -72,6 +73,77 @@ class WorkspaceIntelligenceContext:
                 "source_refs": list(self.source_refs),
                 "limitations": list(self.limitations),
             },
+        }
+
+
+class JoaoMemoryContextClient:
+    """Read-only boundary to João Resolve's memory service.
+
+    This client never accesses João's SQLite/Qdrant/Neo4j directly. It consumes
+    only the existing HTTP context API and returns a bounded, non-authoritative
+    context for B3 reasoning.
+    """
+
+    def __init__(
+        self,
+        *,
+        base_url: str | None = None,
+        timeout: float = 5.0,
+    ) -> None:
+        self.base_url = (
+            base_url
+            or os.getenv(
+                "B3_JOAO_MEMORY_URL",
+                "http://127.0.0.1:8091",
+            )
+        ).rstrip("/")
+        self.timeout = timeout
+
+    def context(
+        self,
+        query: str,
+        *,
+        memory_limit: int = 5,
+        relation_limit: int = 10,
+    ) -> dict[str, Any]:
+        normalized = " ".join(query.split()).strip()
+        if not normalized:
+            raise ValueError("João memory query must not be empty")
+        payload = json.dumps(
+            {
+                "query": normalized,
+                "memory_limit": max(1, min(memory_limit, 10)),
+                "relation_limit": max(1, min(relation_limit, 20)),
+            }
+        ).encode("utf-8")
+        request = urllib.request.Request(
+            f"{self.base_url}/context",
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(
+            request,
+            timeout=self.timeout,
+        ) as response:
+            result = json.loads(response.read().decode("utf-8"))
+        if not isinstance(result, dict):
+            raise ValueError("João memory context returned a non-object")
+        memories = result.get("memories")
+        relations = result.get("relations")
+        return {
+            "query": str(result.get("query") or normalized),
+            "memories": (
+                memories[:10] if isinstance(memories, list) else []
+            ),
+            "relations": (
+                relations[:20] if isinstance(relations, list) else []
+            ),
+            "authority": "derived_non_authoritative",
+            "source": "joao-memory-api",
         }
 
 
@@ -157,6 +229,7 @@ class WorkspaceIntelligenceContextService:
         news_provider: SearxngNewsAdapter | None = None,
         macro_repository: MacroDataRepository | None = None,
         asset_evidence_service: StrategyEvidenceService | None = None,
+        joao_memory_client: JoaoMemoryContextClient | None = None,
         joao_service: JoaoResolvePerspectiveService | None = None,
     ) -> None:
         self.current_quote_provider = current_quote_provider or OplabAdapter()
@@ -168,6 +241,9 @@ class WorkspaceIntelligenceContextService:
         )
         self.asset_evidence_service = (
             asset_evidence_service or StrategyEvidenceService()
+        )
+        self.joao_memory_client = (
+            joao_memory_client or JoaoMemoryContextClient()
         )
         self.joao_service = joao_service
 
@@ -365,6 +441,34 @@ class WorkspaceIntelligenceContextService:
             "b3_local_evidence_analyst": local_by_ticker,
         }
 
+        joao_memory_context: dict[str, Any] | None = None
+        if include_joao:
+            try:
+                joao_memory_context = self.joao_memory_client.context(
+                    " ".join(
+                        [
+                            "B3",
+                            workspace,
+                            *normalized_tickers,
+                            "mercado oportunidades riscos evidências pesquisa",
+                        ]
+                    )
+                )
+                derived_intelligence["joao_memory_context"] = (
+                    joao_memory_context
+                )
+                source_refs.append("joao-memory-api")
+            except (OSError, RuntimeError, ValueError) as exc:
+                derived_intelligence["joao_memory_context"] = {
+                    "status": "UNAVAILABLE",
+                    "authority": "derived_non_authoritative",
+                    "source": "joao-memory-api",
+                    "error": str(exc),
+                }
+                limitations.append(
+                    f"João Resolve memory context unavailable: {exc}"
+                )
+
         if include_joao:
             try:
                 joao = (self.joao_service or JoaoResolvePerspectiveService()).analyze(
@@ -374,6 +478,7 @@ class WorkspaceIntelligenceContextService:
                         "tickers": list(normalized_tickers),
                         "deterministic_context": deterministic_context,
                         "b3_local_intelligence": local_by_ticker,
+                        "joao_memory_context": joao_memory_context,
                         "source_refs": list(dict.fromkeys(source_refs)),
                     }
                 )
@@ -409,6 +514,7 @@ class WorkspaceIntelligenceContextService:
 
 
 __all__ = [
+    "JoaoMemoryContextClient",
     "JoaoResolvePerspectiveService",
     "WorkspaceIntelligenceContext",
     "WorkspaceIntelligenceContextService",
