@@ -1,33 +1,39 @@
 #!/usr/bin/env python3
+"""Read-only runtime inventory. Never construct repositories or initialize stores."""
 from __future__ import annotations
 
+import argparse
+from contextlib import closing
+import json
 import os
-import sqlite3
 from pathlib import Path
+import sqlite3
+import time
 
-from b3_agent.repositories.option_ledger import OptionTransactionLedger
-from b3_agent.repositories.source_manifest import SourceManifestRepository
-
-
-RUNTIME_ENV_FILES = (
-    Path("/etc/b3-runtime.env"),
-    Path("/opt/b3-runtime/b3.env"),
-)
+RUNTIME_ENV_FILES = (Path("/etc/b3-runtime.env"), Path("/opt/b3-runtime/b3.env"))
 DEFAULT_RUNTIME_DATA = Path("/opt/b3-runtime/data")
+# Never print arbitrary table payloads, credentials or source-document text.
+SAFE_COLUMNS = frozenset("""
+transaction_id option_ticker ticker broker quantity average_cost total_cost as_of
+note_number source_type source_id executed_at action instrument_type price
+imported_at record_count coverage_start coverage_end scope completeness
+underlying underlying_id option_type strike expiry expiration available_at
+""".split())
+DATE_COLUMNS = ("as_of", "executed_at", "imported_at", "coverage_start", "coverage_end", "available_at")
 
 
 def _env_file_values(path: Path) -> dict[str, str]:
-    values: dict[str, str] = {}
     if not path.is_file():
-        return values
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        if key:
-            values[key] = value.strip().strip('"').strip("'")
+        return {}
+    values = {}
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if line.startswith("export "):
+            line = line[7:]
+        if "=" in line and not line.startswith("#"):
+            key, value = line.split("=", 1)
+            if key.strip() == "B3_AGENT_DATA_DIR":
+                values[key.strip()] = value.strip().strip('"').strip("'")
     return values
 
 
@@ -35,142 +41,155 @@ def _canonical_data_dir() -> Path:
     configured = os.getenv("B3_AGENT_DATA_DIR")
     if configured:
         return Path(configured).expanduser().resolve()
-    merged: dict[str, str] = {}
+    merged = {}
     for path in RUNTIME_ENV_FILES:
         merged.update(_env_file_values(path))
     configured = merged.get("B3_AGENT_DATA_DIR")
-    if configured:
-        return Path(configured).expanduser().resolve()
-    return DEFAULT_RUNTIME_DATA.resolve()
+    return Path(configured).expanduser().resolve() if configured else DEFAULT_RUNTIME_DATA.resolve()
 
 
-def _candidate_data_dirs() -> tuple[Path, ...]:
-    repo_root = Path(__file__).resolve().parent.parent
-    canonical_data_dir = _canonical_data_dir()
-    values = [
-        canonical_data_dir,
-        repo_root / "data",
-        Path("/opt/b3-runtime/data"),
+def _candidate_data_dirs(canonical_data_dir: Path | None = None) -> tuple[Path, ...]:
+    values = (
+        canonical_data_dir or _canonical_data_dir(),
+        Path(__file__).resolve().parent.parent / "data",
+        DEFAULT_RUNTIME_DATA,
         Path("/opt/b3-investment-options-agent/data"),
-        Path.home() / "b3-investment-options-agent" / "data",
-    ]
-    unique: list[Path] = []
-    seen: set[str] = set()
-    for value in values:
-        resolved = value.expanduser().resolve()
-        key = str(resolved)
-        if key not in seen:
-            seen.add(key)
-            unique.append(resolved)
-    return tuple(unique)
+        Path.home() / "b3-investment-options-agent/data",
+    )
+    return tuple(dict.fromkeys(path.expanduser().resolve() for path in values))
 
 
-def _sqlite_row_count(path: Path, table: str) -> int | None:
-    if not path.is_file():
-        return None
+def _identifier(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"'
+
+
+def _groups(conn, table, column):
+    sql = f'SELECT {_identifier(column)}, COUNT(*) FROM {_identifier(table)} GROUP BY 1 ORDER BY 2 DESC LIMIT 40'
+    return [{"value": row[0], "count": row[1]} for row in conn.execute(sql)]
+
+
+def inspect_database(path: Path, *, sample_limit: int = 3, timeout_seconds: float = 15) -> dict:
+    """Consistent per-file snapshot, including WAL. No immutable=1 shortcut."""
+    result = {"path": str(path), "exists": path.is_file(), "tables": {}}
+    if not result["exists"]:
+        result["status"] = "MISSING"
+        return result
+    started = time.monotonic()
     try:
-        with sqlite3.connect(path) as conn:
-            row = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
-            return int(row[0]) if row else 0
-    except sqlite3.Error:
-        return None
+        with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=2)) as conn:
+            conn.execute("PRAGMA query_only=ON")
+            conn.set_progress_handler(lambda: int(time.monotonic() - started > timeout_seconds), 1000)
+            conn.execute("BEGIN")
+            names = [row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+            for name in names:
+                quoted = _identifier(name)
+                schema = list(conn.execute(f"PRAGMA table_info({quoted})"))
+                columns = {row[1] for row in schema}
+                entry = {
+                    "schema": [{"name": row[1], "type": row[2], "not_null": bool(row[3]), "primary_key": row[5]} for row in schema],
+                    "row_count": conn.execute(f"SELECT COUNT(*) FROM {quoted}").fetchone()[0],
+                    "date_coverage": {},
+                }
+                result["tables"][name] = entry
+                for column in DATE_COLUMNS:
+                    if column in columns:
+                        col = _identifier(column)
+                        lo, hi, missing = conn.execute(f"SELECT MIN({col}), MAX({col}), COUNT(*)-COUNT({col}) FROM {quoted}").fetchone()
+                        entry["date_coverage"][column] = {"min": lo, "max": hi, "null_count": missing}
+                if name not in {"option_transactions", "transactions", "source_manifest"}:
+                    continue
+                for column in ("source_type", "completeness", "scope", "action", "instrument_type"):
+                    if column in columns:
+                        entry[column + "_counts"] = _groups(conn, name, column)
+                selected = sorted(columns & SAFE_COLUMNS)
+                if selected and sample_limit:
+                    order_col = next((c for c in ("as_of", "executed_at", "imported_at") if c in columns), selected[0])
+                    select = ",".join(_identifier(c) for c in selected)
+                    rows = conn.execute(f"SELECT {select} FROM {quoted} ORDER BY {_identifier(order_col)} DESC LIMIT ?", (sample_limit,))
+                    entry["representative_rows"] = [dict(zip(selected, row)) for row in rows]
+                ticker = next((c for c in ("option_ticker", "ticker") if c in columns), None)
+                if ticker:
+                    col = _identifier(ticker)
+                    entry["petr4_exact_rows"] = conn.execute(f"SELECT COUNT(*) FROM {quoted} WHERE UPPER({col})='PETR4'").fetchone()[0]
+                    entry["petr_prefix_rows_underlying_unverified"] = conn.execute(f"SELECT COUNT(*) FROM {quoted} WHERE UPPER({col}) LIKE 'PETR%'").fetchone()[0]
+                    entry["symbol_counts"] = _groups(conn, name, ticker)
+                    if name == "option_transactions":
+                        # This is a diagnostic hint only. Not canonical type/expiry metadata.
+                        hint = f"CASE WHEN length({col})>=6 AND UPPER(substr({col},5,1)) BETWEEN 'A' AND 'L' THEN 'CALL_LETTER_HINT' WHEN length({col})>=6 AND UPPER(substr({col},5,1)) BETWEEN 'M' AND 'X' THEN 'PUT_LETTER_HINT' ELSE 'UNKNOWN' END"
+                        entry["symbol_type_hints_not_contract_metadata"] = dict(conn.execute(f"SELECT {hint}, COUNT(*) FROM {quoted} GROUP BY 1"))
+                if "quantity" in columns:
+                    entry["quantity_sign_counts"] = dict(conn.execute(f"SELECT CASE WHEN quantity>0 THEN 'POSITIVE' WHEN quantity<0 THEN 'NEGATIVE' WHEN quantity=0 THEN 'ZERO' ELSE 'UNKNOWN' END, COUNT(*) FROM {quoted} GROUP BY 1"))
+                if name == "option_transactions" and {"as_of", "average_cost", "quantity"} <= columns:
+                    entry["canonical_uc07_usable_rows"] = conn.execute(f"SELECT COUNT(*) FROM {quoted} WHERE as_of IS NOT NULL AND average_cost IS NOT NULL AND average_cost>=0 AND quantity!=0").fetchone()[0]
+                    entry["usable_definition"] = "candidate rows only; date parsing, metadata, source completeness, broker identity and PIT still require validation"
+                    if "total_cost" in columns:
+                        entry["amount_sign_mismatch_rows"] = conn.execute(f"SELECT COUNT(*) FROM {quoted} WHERE quantity * total_cost < 0").fetchone()[0]
+                        entry["amount_price_mismatch_rows"] = conn.execute(f"SELECT COUNT(*) FROM {quoted} WHERE ABS(total_cost-quantity*average_cost)>0.011").fetchone()[0]
+            conn.rollback()
+        result["status"] = "READ_OK"
+    except (sqlite3.Error, OSError) as exc:
+        result["status"] = "READ_ERROR"
+        result["error"] = f"{type(exc).__name__}: {exc}"
+    result["latency_ms"] = round((time.monotonic() - started) * 1000, 3)
+    return result
+
+
+def build_report(canonical_data_dir: Path, *, sample_limit: int = 3) -> dict:
+    canonical = canonical_data_dir / "options.sqlite3"
+    canonical_manifest = canonical_data_dir / "source_manifest.sqlite3"
+    directories = _candidate_data_dirs(canonical_data_dir)
+    paths = {canonical, canonical_manifest, canonical_data_dir / "b3_agent.db"}
+    inventory = []
+    for directory in directories:
+        if directory.is_dir():
+            paths.update(directory.glob("*.sqlite3"))
+            paths.update(directory.glob("*.sqlite"))
+            paths.update(directory.glob("*.db"))
+        notes = directory / "imports/brokerage_notes"
+        inventory.append({"data_dir": str(directory), "archived_brokerage_pdfs": sum(1 for _ in notes.glob("*.pdf")) if notes.is_dir() else 0})
+    databases = [inspect_database(path, sample_limit=sample_limit) for path in sorted(paths)]
+    ledger = next(item for item in databases if item["path"] == str(canonical))
+    table = ledger["tables"].get("option_transactions", {})
+    usable = table.get("canonical_uc07_usable_rows")
+    if ledger["status"] == "READ_ERROR":
+        diagnosis = "CANONICAL_LEDGER_READ_ERROR"
+    elif ledger["exists"]:
+        diagnosis = "CANONICAL_LEDGER_READY" if usable else "CANONICAL_LEDGER_PRESENT_BUT_NO_UC07_USABLE_ROWS"
+    elif any(item["exists"] and "option_transactions" in item["tables"] for item in databases):
+        diagnosis = "LEDGER_EXISTS_OUTSIDE_CANONICAL_DATA_DIR"
+    elif inventory[0]["archived_brokerage_pdfs"]:
+        diagnosis = "CANONICAL_PDFS_PRESENT_LEDGER_MISSING"
+    else:
+        diagnosis = "NO_CANONICAL_LEDGER_OR_ARCHIVED_BROKERAGE_PDFS_FOUND"
+    return {
+        "canonical_data_dir": str(canonical_data_dir),
+        "diagnosis": diagnosis,
+        "canonical_uc07_usable_rows": usable,
+        "database_snapshots": "consistent per database; not an atomic cross-database snapshot",
+        "limitations": [
+            "READ_OK/READY is inventory only, not UC-07 lifecycle acceptance.",
+            "Symbol hints cannot establish PETR4 identity, strike, expiry, assignment, roll or covered state.",
+            "Date range does not establish complete brokerage-note coverage.",
+            "No LLM, ingestion, migration, new tables or provider calls executed.",
+        ],
+        "inventory": inventory,
+        "databases": databases,
+    }
 
 
 def main() -> int:
-    print("===== B3 HISTORICAL LEDGER DIAGNOSTIC =====")
-    canonical_data_dir = _canonical_data_dir()
-    print(f"canonical_data_dir={canonical_data_dir}")
-    print(f"B3_AGENT_DATA_DIR={os.getenv('B3_AGENT_DATA_DIR') or '<unset>'}")
-    print()
-
-    canonical = canonical_data_dir / "options.sqlite3"
-    canonical_manifest = canonical_data_dir / "source_manifest.sqlite3"
-
-    for data_dir in _candidate_data_dirs():
-        ledger = data_dir / "options.sqlite3"
-        manifest = data_dir / "source_manifest.sqlite3"
-        notes_dir = data_dir / "imports" / "brokerage_notes"
-        options_xlsx = data_dir / "imports" / "options_transactions.xlsx"
-
-        ledger_count = _sqlite_row_count(ledger, "option_transactions")
-        manifest_count = _sqlite_row_count(manifest, "source_manifest")
-        pdf_count = len(tuple(notes_dir.glob("*.pdf"))) if notes_dir.is_dir() else 0
-
-        print(f"DATA_DIR {data_dir}")
-        print(f"  ledger_exists={ledger.is_file()} ledger_rows={ledger_count}")
-        print(f"  manifest_exists={manifest.is_file()} manifest_rows={manifest_count}")
-        print(f"  archived_brokerage_pdfs={pdf_count}")
-        print(f"  options_transactions_xlsx={options_xlsx.is_file()}")
-
-        if ledger.is_file():
-            try:
-                rows = OptionTransactionLedger(ledger).list_all()
-                dated = sum(1 for row in rows if row.as_of is not None)
-                priced = sum(1 for row in rows if row.execution_price is not None)
-                source_types = sorted({row.source_type for row in rows})
-                dates = sorted(row.as_of for row in rows if row.as_of is not None)
-                print(
-                    "  ledger_quality="
-                    f"dated={dated}/{len(rows)} priced={priced}/{len(rows)} "
-                    f"source_types={source_types}"
-                )
-                if dates:
-                    print(f"  coverage={dates[0]}..{dates[-1]}")
-            except Exception as exc:
-                print(f"  ledger_read_error={type(exc).__name__}: {exc}")
-
-        if manifest.is_file():
-            try:
-                records = SourceManifestRepository(manifest).list_all()
-                note_records = [item for item in records if item.source_type == "BROKERAGE_NOTE"]
-                print(f"  brokerage_note_manifest_rows={len(note_records)}")
-                if note_records:
-                    starts = [item.coverage_start for item in note_records if item.coverage_start]
-                    ends = [item.coverage_end for item in note_records if item.coverage_end]
-                    total_records = sum(item.record_count for item in note_records)
-                    print(f"  brokerage_note_manifest_records={total_records}")
-                    if starts and ends:
-                        print(f"  brokerage_note_manifest_coverage={min(starts)}..{max(ends)}")
-            except Exception as exc:
-                print(f"  manifest_read_error={type(exc).__name__}: {exc}")
-        print()
-
-    print("===== CANONICAL EXPECTATION =====")
-    print(f"canonical_ledger={canonical}")
-    print(f"canonical_manifest={canonical_manifest}")
-
-    if canonical.is_file():
-        rows = OptionTransactionLedger(canonical).list_all()
-        usable = [
-            row
-            for row in rows
-            if row.as_of is not None and row.execution_price is not None
-        ]
-        print(f"canonical_rows={len(rows)}")
-        print(f"canonical_uc07_usable_rows={len(usable)}")
-        if usable:
-            print("DIAGNOSIS=CANONICAL_LEDGER_READY")
-            return 0
-        print("DIAGNOSIS=CANONICAL_LEDGER_PRESENT_BUT_NO_UC07_USABLE_ROWS")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--data-dir", type=Path, help="Override canonical runtime data directory")
+    parser.add_argument("--samples", type=int, default=3, choices=range(0, 11))
+    args = parser.parse_args()
+    try:
+        data_dir = (args.data_dir or _canonical_data_dir()).expanduser().resolve()
+        report = build_report(data_dir, sample_limit=args.samples)
+    except OSError as exc:
+        print(json.dumps({"diagnosis": "CONFIG_READ_ERROR", "error": str(exc)}))
         return 2
-
-    other_ledgers = [
-        data_dir / "options.sqlite3"
-        for data_dir in _candidate_data_dirs()
-        if data_dir != canonical_data_dir and (data_dir / "options.sqlite3").is_file()
-    ]
-    canonical_pdfs = canonical_data_dir / "imports" / "brokerage_notes"
-    if other_ledgers:
-        print("DIAGNOSIS=LEDGER_EXISTS_OUTSIDE_CANONICAL_DATA_DIR")
-        for item in other_ledgers:
-            print(f"candidate_ledger={item}")
-        return 3
-    if canonical_pdfs.is_dir() and any(canonical_pdfs.glob("*.pdf")):
-        print("DIAGNOSIS=CANONICAL_PDFS_PRESENT_LEDGER_MISSING")
-        return 4
-
-    print("DIAGNOSIS=NO_CANONICAL_LEDGER_OR_ARCHIVED_BROKERAGE_PDFS_FOUND")
-    return 5
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    return 0 if report["diagnosis"] == "CANONICAL_LEDGER_READY" else 2
 
 
 if __name__ == "__main__":
