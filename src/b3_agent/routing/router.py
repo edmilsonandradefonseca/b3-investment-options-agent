@@ -39,6 +39,26 @@ class FastRouter:
                 "B3_MACRO_REFRESH_V1", meta,
             )
 
+        # Structured Strategy Lab requests use the deterministic UC-04 composer
+        # before any senior-LLM escalation. Unsupported strategy types continue
+        # to OpenClaw until their deterministic builders are implemented.
+        workspace = str(meta.get("workspace") or meta.get("dashboard_page") or "").strip().lower()
+        comparison_assets = meta.get("comparison_assets")
+        strategy_a = str(meta.get("strategy_a") or "").strip()
+        strategy_b = str(meta.get("strategy_b") or "").strip()
+        if (
+            workspace == "strategy lab"
+            and isinstance(comparison_assets, (list, tuple))
+            and len(comparison_assets) == 2
+            and self._strategy_supported(strategy_a)
+            and self._strategy_supported(strategy_b)
+        ):
+            return self._decision(
+                "strategy_comparison", "UC-04", "sync", "deterministic",
+                RouteTarget.STRATEGY_ENGINE, MatchClass.MATCH_EXACT,
+                "B3_STRATEGY_COMPARISON_V1", meta,
+            )
+
         # Explicitly complex intent always wins over dashboard metadata.
         if self._contains_any(
             normalized,
@@ -133,6 +153,18 @@ class FastRouter:
             None, None, "sync", "senior_llm", RouteTarget.OPENCLAW,
             MatchClass.AMBIGUOUS, None, meta,
         )
+
+    @staticmethod
+    def _strategy_supported(value: str) -> bool:
+        normalized = " ".join(value.casefold().split())
+        return normalized in {
+            "comprar ação",
+            "comprar acao",
+            "buy stock",
+            "buy_stock",
+            "manter",
+            "hold",
+        }
 
     @staticmethod
     def _contains_any(text: str, values: tuple[str, ...]) -> bool:
