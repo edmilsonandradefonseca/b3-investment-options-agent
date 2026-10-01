@@ -388,8 +388,11 @@ class WorkspaceIntelligenceContextService:
                 # initial workspace timestamp is not incorrectly classified as future.
                 # Historical/PIT replay paths still pass their explicit historical
                 # as_of directly to ResearchEventService.
+                dated_records = tuple(
+                    item for item in records if item.published_at is not None
+                )
                 research = ResearchEventService().build(
-                    records,
+                    dated_records,
                     as_of=datetime.now(timezone.utc),
                 )
                 ticker_events = [asdict(item) for item in research.events]
@@ -404,8 +407,13 @@ class WorkspaceIntelligenceContextService:
                         query=f"{ticker_query} when:2d",
                         limit=news_limit,
                     )
+                    fallback_dated = tuple(
+                        item
+                        for item in fallback_records
+                        if item.published_at is not None
+                    )
                     fallback_research = ResearchEventService().build(
-                        fallback_records,
+                        fallback_dated,
                         as_of=datetime.now(timezone.utc),
                     )
                     ticker_events = [
@@ -490,8 +498,23 @@ class WorkspaceIntelligenceContextService:
                                 for name, reason in diagnostics.unresponsive_engines
                             ],
                         })
+                    dated_overview_records = tuple(
+                        item
+                        for item in overview_records
+                        if item.published_at is not None
+                    )
+                    if diagnostics is not None:
+                        market_overview_diagnostics[-1][
+                            "dated_result_count"
+                        ] = len(dated_overview_records)
+                        market_overview_diagnostics[-1][
+                            "undated_filtered_count"
+                        ] = (
+                            len(overview_records)
+                            - len(dated_overview_records)
+                        )
                     overview = ResearchEventService().build(
-                        overview_records,
+                        dated_overview_records,
                         as_of=datetime.now(timezone.utc),
                     )
                     for item in overview.events:
@@ -519,8 +542,13 @@ class WorkspaceIntelligenceContextService:
                         query=fallback_query,
                         limit=news_limit,
                     )
+                    fallback_dated = tuple(
+                        item
+                        for item in fallback_records
+                        if item.published_at is not None
+                    )
                     fallback_snapshot = ResearchEventService().build(
-                        fallback_records,
+                        fallback_dated,
                         as_of=datetime.now(timezone.utc),
                     )
                     market_overview_research = [
@@ -533,6 +561,10 @@ class WorkspaceIntelligenceContextService:
                         "source": self.fallback_news_provider.name,
                         "normalized_result_count": len(
                             market_overview_research
+                        ),
+                        "dated_result_count": len(fallback_dated),
+                        "undated_filtered_count": (
+                            len(fallback_records) - len(fallback_dated)
                         ),
                         "fallback_used": True,
                         "fallback_strategy": "google_news_rss",
