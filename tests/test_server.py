@@ -290,6 +290,21 @@ def test_opportunities_workspace_runs_intelligence_even_without_fast_route(monke
                 "deterministic_context": {
                     "workspace": "Opportunities",
                     "workspace_result": {},
+                    "market_analysis": {
+                        "tickers": {
+                            "WEGE3": {
+                                "asset_evidence": {
+                                    "ticker": "WEGE3",
+                                    "market": {
+                                        "current_quote": {
+                                            "source": "oplab",
+                                            "close": 49.4,
+                                        }
+                                    },
+                                }
+                            }
+                        }
+                    },
                 },
                 "derived_intelligence": self.derived_intelligence,
             }
@@ -328,3 +343,4 @@ def test_opportunities_workspace_runs_intelligence_even_without_fast_route(monke
     assert body["result"]["workspace_intelligence"]["limitations"] == [
         "No canonical stock valuation supplied."
     ]
+    assert body["result"]["asset_evidence"]["WEGE3"]["market"]["current_quote"]["source"] == "oplab"
