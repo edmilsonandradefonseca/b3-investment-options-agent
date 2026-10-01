@@ -73,3 +73,34 @@ def test_oplab_options_rejects_unsupported_option_type():
             assert str(exc) == "oplab returned unsupported option type: FUTURE"
         else:
             raise AssertionError("Expected ValueError")
+
+
+def test_oplab_current_option_quote_uses_provider_time_and_ignores_zero_prices(monkeypatch):
+    payload = [{
+        "symbol": "WEGEV500",
+        "type": "PUT",
+        "strike": 50.0,
+        "due_date": "2026-11-20",
+        "bid": 1.20,
+        "ask": 1.40,
+        "last": 1.30,
+        "mid": None,
+        "volume": 1500,
+        "time": 1790823600000,
+    }]
+    adapter = OplabOptionsAdapter()
+    monkeypatch.setattr(adapter, "_get_payload", lambda ticker: payload)
+
+    quote = adapter.get_current_option_quote(
+        "WEGE3",
+        "WEGEV500",
+        datetime(2026, 10, 1, 16, 0),
+    )
+
+    assert quote.option_id == "WEGEV500"
+    assert quote.bid == 1.20
+    assert quote.ask == 1.40
+    assert quote.last == 1.30
+    assert quote.mid == 1.30
+    assert quote.source == "oplab"
+    assert quote.observation_timestamp.timestamp() == 1790823600
