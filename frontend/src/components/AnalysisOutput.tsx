@@ -61,6 +61,8 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
   const broadMarketResearch = asArray(workspaceMarket?.market_overview_research);
   const broadMarketDiagnostics = asArray(workspaceMarket?.market_overview_diagnostics);
   const opportunitySet = asObject(result.opportunity_set);
+  const opportunityRankingStatus = asText(result.opportunity_ranking_status);
+  const opportunityRankingReason = asText(result.opportunity_ranking_reason);
   const rankedOpportunities = asArray(opportunitySet?.ranked_opportunities)
     .map(asObject)
     .filter((item): item is Obj => item !== null);
@@ -192,9 +194,13 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
     {rankedOpportunities.length > 0 && <section className="analysis-section">
       <h4>Oportunidades canônicas</h4>
       <p className="muted">
-        Ranking determinístico · política {asText(opportunitySet?.ranking_policy_version) ?? 'não informada'}.
+        {opportunityRankingStatus === 'DEFERRED_INCOMPLETE_CONTEXT'
+          ? 'Ranking econômico adiado · candidatos em ordenação técnica reproduzível'
+          : 'Ranking determinístico'}
+        {' · '}política {asText(opportunitySet?.ranking_policy_version) ?? 'não informada'}.
         A inteligência dos agentes interpreta estes fatos, mas não altera a ordem canônica.
       </p>
+      {opportunityRankingReason && <p className="muted">{opportunityRankingReason}</p>}
       <div className="evidence-grid">
         {rankedOpportunities.slice(0, 10).map((item, index) => {
           const optionId = asText(item.options_analysis_ref);
@@ -206,17 +212,25 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
           const bid = numberValue(marketability?.bid);
           const ask = numberValue(marketability?.ask);
           const volume = numberValue(marketability?.volume);
+          const dte = numberValue(marketability?.days_to_expiration);
+          const premiumYield = numberValue(marketability?.premium_yield);
+          const spreadPct = numberValue(marketability?.spread_pct_of_mid);
+          const effectivePrice = numberValue(marketability?.effective_price);
           return <article className="evidence-card" key={asText(item.opportunity_id) ?? String(index)}>
             <h5>{asText(item.ticker) ?? 'Ativo'} · {asText(item.action) ?? 'Ação'}</h5>
             <dl>
               {optionId && <div><dt>Contrato</dt><dd>{optionId}</dd></div>}
-              <div><dt>Retorno anualizado</dt><dd>{pct(expectedReturn) ?? 'Indisponível'}</dd></div>
+              <div><dt>Retorno anualizado</dt><dd>{pct(expectedReturn) ?? 'Indisponível'}{opportunityRankingStatus === 'DEFERRED_INCOMPLETE_CONTEXT' ? ' · evidência, não ranking' : ''}</dd></div>
+              <div><dt>Retorno do prêmio</dt><dd>{pct(premiumYield) ?? 'Indisponível'}</dd></div>
+              <div><dt>DTE</dt><dd>{dte == null ? 'Indisponível' : dte.toFixed(0)}</dd></div>
+              <div><dt>Preço efetivo</dt><dd>{brl(effectivePrice) ?? 'Indisponível'}</dd></div>
               <div><dt>Capital requerido</dt><dd>{brl(capital) ?? 'Indisponível'}</dd></div>
               <div><dt>Atratividade</dt><dd>{asText(item.attractiveness) ?? 'UNKNOWN'}</dd></div>
               <div><dt>Fit carteira</dt><dd>{asText(item.portfolio_fit) ?? 'UNKNOWN'}</dd></div>
               {marketability && <>
                 <div><dt>Bid atual</dt><dd>{brl(bid) ?? 'Indisponível'}</dd></div>
                 <div><dt>Ask atual</dt><dd>{brl(ask) ?? 'Indisponível'}</dd></div>
+                <div><dt>Spread/mid</dt><dd>{pct(spreadPct) ?? 'Indisponível'}</dd></div>
                 <div><dt>Volume</dt><dd>{volume == null ? 'Indisponível' : new Intl.NumberFormat('pt-BR').format(volume)}</dd></div>
               </>}
             </dl>
