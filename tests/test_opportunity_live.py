@@ -112,7 +112,7 @@ def test_live_opportunity_service_builds_only_executable_sell_puts():
         MARKETABILITY_POLICY
     )
     assert result.option_marketability["WEGEV500"]["eligible"] is True
-    assert result.option_marketability["WEGEV520"]["eligible"] is False
+    assert "WEGEV520" not in result.option_marketability
     assert any(
         "Stock BUY/ACCUMULATE opportunities are not ranked" in item
         for item in result.limitations
