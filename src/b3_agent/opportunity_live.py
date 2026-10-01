@@ -12,6 +12,7 @@ from b3_agent.schemas.opportunity import OpportunitySet
 
 
 MARKETABILITY_POLICY = "B3_OPTION_MARKETABILITY_V1"
+CANDIDATE_ORDER_POLICY = "B3_LIVE_OPTION_CANDIDATE_ORDER_V1"
 
 
 @dataclass(frozen=True)
@@ -20,6 +21,8 @@ class LiveOpportunityResult:
     as_of: datetime
     opportunity_set: OpportunitySet
     option_marketability: dict[str, dict[str, Any]]
+    ranking_status: str
+    ranking_reason: str
     limitations: tuple[str, ...]
 
 
@@ -144,7 +147,32 @@ class LiveOpportunityService:
             source_refs=snapshot.source_refs,
         )
 
-        ranked = tuple(built.ranked_opportunities[:limit])
+        # UC-03 requires valuation, risk, liquidity, portfolio impact and
+        # prior experience for an economic ranking. The live path does not yet
+        # have all of those canonical dimensions, so annualized return must not
+        # silently become the deciding score. Preserve a deterministic candidate
+        # order by expiration/strike/id and explicitly defer economic ranking.
+        def candidate_order(item):
+            option_id = item.options_analysis_ref or ""
+            contract = contracts.get(option_id)
+            return (
+                contract.expiration_date if contract is not None else effective_as_of.date(),
+                contract.strike if contract is not None else float("inf"),
+                item.opportunity_id,
+            )
+
+        ranked = tuple(
+            sorted(
+                built.ranked_opportunities,
+                key=candidate_order,
+            )[:limit]
+        )
+        ranking_status = "DEFERRED_INCOMPLETE_CONTEXT"
+        ranking_reason = (
+            "Economic ranking is deferred because canonical valuation, risk, "
+            "portfolio impact, calibrated liquidity and prior-experience inputs "
+            "are not all available. Annualized return remains evidence only."
+        )
         selected_ids = {item.opportunity_id for item in ranked}
         action_candidates = tuple(
             item
@@ -162,7 +190,8 @@ class LiveOpportunityService:
             events=built.events,
             impacts=built.impacts,
             ranking_policy_version=(
-                f"{built.ranking_policy_version}+{MARKETABILITY_POLICY}"
+                f"{built.ranking_policy_version}+{MARKETABILITY_POLICY}+"
+                f"{CANDIDATE_ORDER_POLICY}"
             ),
             source_refs=built.source_refs,
             quality_status="WARNING",
@@ -175,6 +204,7 @@ class LiveOpportunityService:
             "Marketability requires a positive two-sided bid/ask market; "
             "volume, open interest and spread are reported but not used as "
             "unversioned liquidity thresholds.",
+            ranking_reason,
         ]
         if not ranked:
             limitations.append(
@@ -197,6 +227,8 @@ class LiveOpportunityService:
             as_of=effective_as_of,
             opportunity_set=bounded,
             option_marketability=bounded_marketability,
+            ranking_status=ranking_status,
+            ranking_reason=ranking_reason,
             limitations=tuple(limitations),
         )
 
@@ -207,6 +239,8 @@ class LiveOpportunityService:
             "as_of": result.as_of,
             "opportunity_set": asdict(result.opportunity_set),
             "option_marketability": result.option_marketability,
+            "opportunity_ranking_status": result.ranking_status,
+            "opportunity_ranking_reason": result.ranking_reason,
             "limitations": list(result.limitations),
         }
 
@@ -215,4 +249,5 @@ __all__ = [
     "LiveOpportunityResult",
     "LiveOpportunityService",
     "MARKETABILITY_POLICY",
+    "CANDIDATE_ORDER_POLICY",
 ]
