@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from b3_agent.intelligence import workspace_context
-from b3_agent.intelligence.workspace_context import WorkspaceIntelligenceContextService
+from b3_agent.intelligence.workspace_context import JoaoResolvePerspectiveService, WorkspaceIntelligenceContextService
 from b3_agent.schemas.macro import MacroObservation
 from b3_agent.schemas.market import StockMarketData
 from b3_agent.schemas.news import NewsEvidence
@@ -183,3 +183,30 @@ def test_workspace_context_omits_degraded_local_and_fails_soft_on_joao(monkeypat
     joao = result.derived_intelligence["joao_resolve"]
     assert joao["status"] == "UNAVAILABLE"
     assert any("João Resolve perspective unavailable" in item for item in result.limitations)
+
+
+
+def test_joao_perspective_rejects_unknown_source_refs():
+    class FakeClient:
+        def complete_json(self, **kwargs):
+            return {
+                "summary": "Perspective",
+                "market_observations": [],
+                "risks": [],
+                "contradictions": [],
+                "questions_for_b3": [],
+                "source_refs": ["https://invented.test/source"],
+            }
+
+    service = JoaoResolvePerspectiveService(client=FakeClient())
+    try:
+        service.analyze(
+            {
+                "workspace": "Market Intelligence",
+                "source_refs": ["https://example.test/known"],
+            }
+        )
+    except RuntimeError as exc:
+        assert "outside the supplied evidence" in str(exc)
+    else:
+        raise AssertionError("unknown João source refs must be rejected")
