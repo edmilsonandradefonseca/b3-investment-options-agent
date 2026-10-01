@@ -198,3 +198,25 @@ export type ResearchNewsResponse = {
   source_refs: string[];
   events: Array<Record<string, unknown>>;
 };
+
+
+export type CurrentMarketQuoteResponse = {
+  ticker: string;
+  as_of: string;
+  source: string;
+  quote: StockMarketData;
+};
+
+export type CurrentOptionRow = {
+  contract: OptionContract;
+  quote: OptionQuote;
+};
+
+export type CurrentOptionsResponse = {
+  ticker: string;
+  as_of: string;
+  source: string;
+  option_type: "PUT" | "CALL" | null;
+  count: number;
+  options: CurrentOptionRow[];
+};
