@@ -114,12 +114,16 @@ class LiveOpportunityService:
                 "spread_pct_of_mid": spread_pct_of_mid,
                 "source": quote.source,
                 "as_of": quote.observation_timestamp,
+                "strike": contract.strike,
+                "expiration_date": contract.expiration_date,
+                "days_to_expiration": (
+                    contract.expiration_date - effective_as_of.date()
+                ).days,
             }
             if not eligible:
                 continue
 
-            puts.append(
-                PutAnalysisEngine().analyze(
+            put_analysis = PutAnalysisEngine().analyze(
                     option_id=contract.option_id,
                     underlying_ticker=contract.underlying_ticker,
                     strike=contract.strike,
@@ -128,7 +132,14 @@ class LiveOpportunityService:
                     contract_multiplier=contract.contract_multiplier,
                     as_of=effective_as_of.date(),
                 )
-            )
+            marketability[option_id].update({
+                "effective_price": put_analysis.effective_price,
+                "premium_yield": (
+                    put_analysis.premium / put_analysis.effective_price
+                ),
+                "annualized_return": put_analysis.annualized_return,
+            })
+            puts.append(put_analysis)
 
         analysis = OptionsAnalysis(
             puts=tuple(puts),
