@@ -9,7 +9,7 @@ from b3_agent.schemas.market import StockMarketData
 from b3_agent.schemas.news import NewsEvidence
 
 
-NOW = datetime(2026, 10, 1, 17, 30, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 1, 16, 0, tzinfo=timezone.utc)
 
 
 class FakeCurrentQuoteProvider:
