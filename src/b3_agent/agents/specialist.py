@@ -23,7 +23,7 @@ class SpecialistAgent:
             context = SpecialistContext.from_agent_context(context)
         payload = context.to_payload() if isinstance(context, SpecialistContext) else context
         deterministic = payload.get("deterministic_context", {})
-        focused = {key: deterministic[key] for key in self.focus_keys if key in deterministic}
+        focused = {key: deterministic[key] for key in (*self.focus_keys, "personal_history") if key in deterministic}
         evidence = payload.get("retrieved_evidence", [])
         derived = payload.get("derived_intelligence", {})
         result = self.llm.complete_json(

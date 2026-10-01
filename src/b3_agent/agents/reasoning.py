@@ -49,6 +49,10 @@ class InvestmentReasoningAgent:
                 "use it to identify agreements, conflicts, uncertainties and evidence gaps, but do not treat it "
                 "as a replacement for deterministic facts or evidence. Optional derived_intelligence is "
                 "non-authoritative background context: use it only when consistent with supplied facts/evidence. "
+                "Personal history cash flows and net-flat sequences are not verified lifecycle outcomes. "
+                "UNKNOWN assignment/expiry/roll statistics must remain unknown; personal frequency is not market probability. "
+                "When no specialist synthesis is supplied, synthesize supporting and contradicting evidence directly, "
+                "including risks, prior executions, limitations and explicit alternatives for PUT, CALL or stock. "
                 "Do not invent data or calculations. "
                 "If evidence is insufficient, prefer WAIT or NO_CHANGE. Return a structured proposal for human review."
             ),

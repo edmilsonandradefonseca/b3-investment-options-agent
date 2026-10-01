@@ -12,6 +12,8 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from uuid import uuid4
 from typing import Any
+from time import monotonic
+from b3_agent.intelligence.personal_history import PersonalHistoryService
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
@@ -178,7 +180,9 @@ def _workspace_intelligence_response(
     *,
     deterministic_response: OrchestratorResponse | None,
 ) -> OrchestratorResponse:
+    started = monotonic()
     workspace = _workspace_name(request)
+    deterministic_only = request.context.get("analysis_mode") == "deterministic"
     context = WorkspaceIntelligenceContextService().build(
         workspace=workspace,
         tickers=_workspace_tickers(request),
@@ -187,10 +191,25 @@ def _workspace_intelligence_response(
             if deterministic_response is not None
             else None
         ),
-        include_joao=True,
+        include_joao=not deterministic_only,
+        **({"history_as_of": request.context["as_of"]} if request.context.get("as_of") is not None else {}),
+        **({"history_since": request.context["history_since"]} if request.context.get("history_since") is not None else {}),
+        include_joao_perspective=(not deterministic_only and os.getenv("B3_JOAO_SYNC_PERSPECTIVE", "true").lower() == "true"),
     )
 
     context_payload = context.as_context()
+    if deterministic_only:
+        return OrchestratorResponse(
+            status="COMPLETED",
+            result={
+                **(deterministic_response.result if deterministic_response else {}),
+                "deterministic_context": context_payload.get("deterministic_context", {}),
+                "personal_history": context_payload.get("deterministic_context", {}).get("personal_history", {}),
+                "derived_synthesis_status": "NOT_REQUESTED",
+                "telemetry": {"total_ms": (monotonic()-started)*1000, "llm_calls": 0},
+            },
+            sources=context.source_refs,
+        )
     senior_context = {
         **request.context,
         **context_payload,
@@ -235,15 +254,17 @@ def _workspace_intelligence_response(
                 workspace_asset_evidence[str(ticker)] = pack
 
     merged_result = {
+        **senior.result,
         **workspace_result,
         **deterministic_result,
-        **senior.result,
         **(
             {"asset_evidence": workspace_asset_evidence}
             if workspace_asset_evidence
             and "asset_evidence" not in deterministic_result
             else {}
         ),
+        "personal_history": context_payload.get("deterministic_context", {}).get("personal_history", {}),
+        "telemetry": {"total_ms": (monotonic()-started)*1000, "stages": senior.result.get("stage_telemetry", {})},
         "workspace_intelligence": {
             "workspace": context.workspace,
             "as_of": context.as_of.isoformat(),
@@ -419,6 +440,15 @@ def current_portfolio() -> dict[str, Any]:
         "positions": [asdict(position) for position in context.positions],
         "intelligence": asdict(PortfolioIntelligenceEngine().build(context)),
     }
+
+
+@app.get("/history/context")
+def personal_history_context(ticker: str | None = None, as_of: datetime | None = None, since: str | None = None):
+    """Deterministic read projection; no models, providers, migrations or ingestion."""
+    try:
+        return PersonalHistoryService(settings.data_dir).build(ticker=ticker, as_of=as_of, since=since)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/options/ledger")

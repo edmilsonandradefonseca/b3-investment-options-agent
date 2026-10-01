@@ -6,6 +6,8 @@ import json
 import os
 import urllib.request
 from typing import Any
+from time import monotonic
+from b3_agent.intelligence.personal_history import PersonalHistoryService
 
 from b3_agent.config import settings
 from b3_agent.intelligence.observability import local_ticker_intelligence
@@ -303,7 +305,11 @@ class WorkspaceIntelligenceContextService:
         deterministic_result: dict[str, Any] | None = None,
         include_joao: bool = True,
         news_limit: int = 8,
+        include_joao_perspective: bool = True,
+        history_as_of: datetime | str | None = None,
+        history_since: str | None = None,
     ) -> WorkspaceIntelligenceContext:
+        started = monotonic()
         normalized_workspace = " ".join(workspace.casefold().split())
         if normalized_workspace not in self.SUPPORTED_WORKSPACES:
             raise ValueError(
@@ -326,6 +332,11 @@ class WorkspaceIntelligenceContextService:
             candidate = deterministic_result.get("asset_evidence")
             if isinstance(candidate, dict):
                 supplied_asset_evidence = candidate
+
+        history_service = PersonalHistoryService(settings.data_dir)
+        personal_history = {ticker or "ALL": history_service.build(ticker=ticker, as_of=history_as_of, since=history_since) for ticker in (normalized_tickers or (None,))}
+        for history in personal_history.values():
+            source_refs.extend(history.get("source_refs", []))
 
         market_by_ticker: dict[str, Any] = {}
         local_by_ticker: dict[str, Any] = {}
@@ -644,6 +655,7 @@ class WorkspaceIntelligenceContextService:
 
         deterministic_context: dict[str, Any] = {
             "workspace": workspace,
+            "personal_history": personal_history,
             "workspace_result": workspace_result,
             "market_analysis": {
                 "as_of": as_of.isoformat(),
@@ -694,7 +706,7 @@ class WorkspaceIntelligenceContextService:
                     f"João Resolve memory context unavailable: {exc}"
                 )
 
-        if include_joao:
+        if include_joao and include_joao_perspective:
             try:
                 joao = (self.joao_service or JoaoResolvePerspectiveService()).analyze(
                     {
@@ -727,6 +739,7 @@ class WorkspaceIntelligenceContextService:
                     f"João Resolve perspective unavailable: {exc}"
                 )
 
+        deterministic_context["context_telemetry"] = {"build_ms": (monotonic()-started)*1000, "joao_perspective_requested": include_joao and include_joao_perspective}
         return WorkspaceIntelligenceContext(
             workspace=workspace,
             as_of=as_of,

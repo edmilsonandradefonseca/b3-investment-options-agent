@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Any, TypedDict
+from typing import Annotated, Any, TypedDict
+from operator import or_
 
 AS_OF = date | datetime
 
@@ -28,6 +29,10 @@ class OrchestratorRequest:
 
 class B3State(TypedDict, total=False):
     """Typed LangGraph state boundary defined by Architecture V3.1."""
+    workspace_intelligence: bool
+    personal_history: dict[str, Any]
+    history_since: str
+    stage_telemetry: Annotated[dict[str, Any], or_]
     user_question: str
     ticker: str | None
     request: str

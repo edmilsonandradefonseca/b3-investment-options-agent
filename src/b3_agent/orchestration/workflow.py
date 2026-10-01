@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
+from time import monotonic
 
 from langgraph.graph import END, START, StateGraph
 
@@ -33,6 +34,8 @@ def build_workflow(
     memory_manager: ObsidianMemoryManager | None = None,
     knowledge_context_builder: KnowledgeContextBuilder | None = None,
     experience_context_service: ExperienceContextService | None = None,
+    personal_history_service=None,
+    single_synthesis: bool = False,
     market_agent: MarketAnalysisAgent | None = None,
     portfolio_agent: PortfolioAnalysisAgent | None = None,
     options_agent: OptionsAnalysisAgent | None = None,
@@ -68,6 +71,25 @@ def build_workflow(
             "action_candidates": context["action_candidates"],
             "deterministic_context": deterministic,
         }
+
+    def personal_history_context(state: B3State) -> dict[str, Any]:
+        if personal_history_service is None:
+            return {}
+        built = personal_history_service.build(
+            ticker=state.get("ticker"), as_of=state.get("as_of"),
+            since=state.get("history_since"),
+        )
+        return {"personal_history": built, "deterministic_context": {
+            **state.get("deterministic_context", {}), "personal_history": built,
+        }}
+
+    def measured(name, action, agent=None):
+        def call(state):
+            started = monotonic()
+            result = action(state)
+            detail = getattr(getattr(agent, "llm", None), "last_telemetry", {})
+            return {**result, "stage_telemetry": {name: {"latency_ms": (monotonic()-started)*1000, **detail}}}
+        return call
 
     def experience_context(state: B3State) -> dict[str, Any]:
         if experience_context_service is None:
@@ -158,6 +180,7 @@ def build_workflow(
 
     def _agent_context(state: B3State) -> AgentContext:
         keys = (
+            "personal_history",
             "portfolio_context",
             "options_transactions",
             "signals",
@@ -327,29 +350,35 @@ def build_workflow(
     graph.add_node("deterministic_context", deterministic_context)
     if experience_context_service is not None:
         graph.add_node("experience_context", experience_context)
-    graph.add_node("knowledge_context", knowledge_context)
-    graph.add_node("market_analysis", market_analysis)
-    graph.add_node("portfolio_analysis", portfolio_analysis)
-    graph.add_node("options_analysis", options_analysis)
-    graph.add_node("reason", reason)
+    graph.add_node("knowledge_context", measured("knowledge_context", knowledge_context))
+    graph.add_node("personal_history", measured("personal_history", personal_history_context))
+    graph.add_node("market_analysis", measured("market_analysis", market_analysis, market_agent))
+    graph.add_node("portfolio_analysis", measured("portfolio_analysis", portfolio_analysis, portfolio_agent))
+    graph.add_node("options_analysis", measured("options_analysis", options_analysis, options_agent))
+    graph.add_node("reason", measured("reason", reason, reasoning_agent))
     graph.add_node("validate", validate)
 
     if memory_manager is not None:
         graph.add_node("persist_legacy_memory", persist_legacy_memory)
     if synthesis_agent is not None:
-        graph.add_node("synthesis", synthesis)
+        graph.add_node("synthesis", measured("synthesis", synthesis, synthesis_agent))
 
     graph.add_edge(START, "retrieve")
     graph.add_edge("retrieve", "deterministic_context")
+    graph.add_edge("deterministic_context", "personal_history")
     if experience_context_service is not None:
-        graph.add_edge("deterministic_context", "experience_context")
+        graph.add_edge("personal_history", "experience_context")
         graph.add_edge("experience_context", "knowledge_context")
     else:
-        graph.add_edge("deterministic_context", "knowledge_context")
+        graph.add_edge("personal_history", "knowledge_context")
 
-    graph.add_edge("knowledge_context", "market_analysis")
-    graph.add_edge("knowledge_context", "portfolio_analysis")
-    graph.add_edge("knowledge_context", "options_analysis")
+    def senior_route(state):
+        if single_synthesis and state.get("workspace_intelligence"):
+            return ["reason"]
+        return ["market_analysis", "portfolio_analysis", "options_analysis"]
+
+    graph.add_conditional_edges("knowledge_context", senior_route,
+        {name: name for name in ("reason", "market_analysis", "portfolio_analysis", "options_analysis")})
 
     if synthesis_agent is not None:
         graph.add_edge("market_analysis", "synthesis")
