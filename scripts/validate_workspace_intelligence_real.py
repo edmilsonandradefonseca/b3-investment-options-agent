@@ -8,7 +8,7 @@ import urllib.request
 
 
 BASE_URL = os.getenv("B3_API_URL", "http://127.0.0.1:8000").rstrip("/")
-TIMEOUT = float(os.getenv("B3_WORKSPACE_VALIDATION_TIMEOUT_SECONDS", "300"))
+TIMEOUT = float(os.getenv("B3_WORKSPACE_VALIDATION_TIMEOUT_SECONDS", "180"))
 
 
 def post_orchestrate(payload: dict) -> tuple[dict, float]:
@@ -156,6 +156,7 @@ def require_intelligence(
 def main() -> None:
     report: dict[str, dict] = {}
 
+    print("[1/3] Strategy Lab: validando B3 + João + mercado...", flush=True)
     strategy_response, strategy_seconds = post_orchestrate(
         {
             "task": (
@@ -192,6 +193,8 @@ def main() -> None:
         "limitations": strategy["limitations"],
     }
 
+    print(f"[1/3] Strategy Lab OK em {strategy_seconds:.1f}s", flush=True)
+    print("[2/3] Market Intelligence: validando macro + pesquisa + agentes...", flush=True)
     market_response, market_seconds = post_orchestrate(
         {
             "task": (
@@ -226,6 +229,8 @@ def main() -> None:
         "limitations": market["limitations"],
     }
 
+    print(f"[2/3] Market Intelligence OK em {market_seconds:.1f}s", flush=True)
+    print("[3/3] Opportunities: validando OpportunitySet + agentes...", flush=True)
     opportunities_response, opportunities_seconds = post_orchestrate(
         {
             "task": (
@@ -246,10 +251,18 @@ def main() -> None:
         expected_tickers=("WEGE3",),
     )
     opportunity_result = opportunities["result"]
-    canonical_present = bool(
-        opportunity_result.get("opportunity_set")
-        or opportunity_result.get("opportunities")
-    )
+    canonical_set = opportunity_result.get("opportunity_set") or {}
+    canonical_present = bool(canonical_set)
+    if not canonical_present:
+        raise SystemExit(
+            "FAIL Opportunities: canonical UC-03 OpportunitySet missing"
+        )
+    ranked = canonical_set.get("ranked_opportunities") or []
+    if not ranked:
+        raise SystemExit(
+            "FAIL Opportunities: canonical OpportunitySet has no executable candidates"
+        )
+    print(f"[3/3] Opportunities OK em {opportunities_seconds:.1f}s", flush=True)
     report["opportunities"] = {
         "seconds": round(opportunities_seconds, 2),
         "status": opportunities["status"],
@@ -260,6 +273,9 @@ def main() -> None:
         "asset_evidence": opportunities["asset_evidence"],
         "b3_local_intelligence": opportunities["b3_local_intelligence"],
         "canonical_opportunity_set_present": canonical_present,
+        "ranked_opportunity_count": len(ranked),
+        "ranking_policy_version": canonical_set.get("ranking_policy_version"),
+        "top_opportunity": ranked[0] if ranked else None,
         "limitations": opportunities["limitations"],
     }
 
