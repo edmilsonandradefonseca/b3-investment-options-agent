@@ -213,6 +213,9 @@ def _workspace_intelligence_response(
             "workspace": context.workspace,
             "as_of": context.as_of.isoformat(),
             "tickers": list(context.tickers),
+            "market_context": context.deterministic_context.get(
+                "market_analysis", {}
+            ),
             "derived_intelligence": context.derived_intelligence,
             "limitations": list(context.limitations),
             "source_refs": list(context.source_refs),
