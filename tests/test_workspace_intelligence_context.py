@@ -366,3 +366,47 @@ def test_joao_memory_client_bounds_fields_and_emits_provenance(monkeypatch):
     assert result["memories"][0]["content"] == "Relevant prior research"
     assert "metadata_json" not in result["memories"][0]
     assert "private_field" not in result["relations"][0]
+
+
+def test_live_workspace_research_uses_post_fetch_cutoff():
+    class FreshNewsProvider:
+        last_diagnostics = None
+
+        def search(self, ticker: str, *, query=None, limit=20):
+            fresh = datetime.now(timezone.utc)
+            return (
+                NewsEvidence(
+                    instrument_id=ticker,
+                    ticker=ticker,
+                    observation_timestamp=fresh,
+                    available_timestamp=fresh,
+                    source="fresh-test",
+                    ingested_at=fresh,
+                    source_record_id=f"{ticker}:fresh",
+                    headline="Mercado atualiza expectativas",
+                    source_name="fresh-test",
+                    url=f"https://example.test/{ticker}/fresh",
+                    published_date=fresh.date(),
+                    published_at=fresh,
+                    event_type="NEWS",
+                    summary="Evidência capturada durante a requisição interativa.",
+                ),
+            )
+
+    service = WorkspaceIntelligenceContextService(
+        news_provider=FreshNewsProvider(),
+        fallback_news_provider=FreshNewsProvider(),
+        macro_repository=FakeMacroRepository(),
+        joao_memory_client=FakeJoaoMemory(),
+        joao_service=FailingJoao(),
+    )
+    result = service.build(
+        workspace="Market Intelligence",
+        tickers=(),
+        deterministic_result={},
+        include_joao=False,
+    )
+
+    market = result.deterministic_context["market_analysis"]
+    assert len(market["market_overview_research"]) >= 1
+    assert market["market_overview_research"][0]["source_name"] == "fresh-test"
