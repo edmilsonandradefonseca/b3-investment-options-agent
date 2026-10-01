@@ -7,6 +7,7 @@ from typing import Any, Protocol
 from b3_agent.orchestration.live_providers import LiveProviderService
 from b3_agent.portfolio.snapshot import load_active_snapshots
 from b3_agent.providers.brapi.fundamentals import BrapiFundamentalsAdapter
+from b3_agent.providers.oplab.adapter import OplabAdapter
 from b3_agent.quant_engine import compute_quant_features
 from b3_agent.schemas.position import PortfolioContext
 from b3_agent.schemas.strategy_comparison import StrategyAlternative
@@ -25,6 +26,13 @@ class FundamentalsProvider(Protocol):
     def name(self) -> str: ...
 
     def get_financial_data(self, ticker: str): ...
+
+
+class CurrentQuoteProvider(Protocol):
+    @property
+    def name(self) -> str: ...
+
+    def get_current_quote(self, ticker: str): ...
 
 
 @dataclass(frozen=True)
@@ -55,6 +63,7 @@ class StrategyEvidenceService:
         *,
         market_provider: MarketProvider | None = None,
         fundamentals_provider: FundamentalsProvider | None = None,
+        current_quote_provider: CurrentQuoteProvider | None = None,
         history_days: int = 120,
     ) -> None:
         if history_days < 1:
@@ -63,6 +72,7 @@ class StrategyEvidenceService:
         self.fundamentals_provider = (
             fundamentals_provider or BrapiFundamentalsAdapter()
         )
+        self.current_quote_provider = current_quote_provider or OplabAdapter()
         self.history_days = history_days
 
     def build(
@@ -93,6 +103,15 @@ class StrategyEvidenceService:
         quant = compute_quant_features(market_records, as_of=as_of)
 
         limitations: list[str] = []
+        current_quote = None
+        try:
+            current_quote = self.current_quote_provider.get_current_quote(
+                normalized
+            )
+        except (OSError, RuntimeError, ValueError) as exc:
+            limitations.append(
+                f"Current quote unavailable for {normalized}: {exc}"
+            )
         fundamental_rows = ()
         try:
             fundamental_rows = tuple(
@@ -147,6 +166,11 @@ class StrategyEvidenceService:
             dict.fromkeys(
                 [
                     *(row.source for row in market_records if row.source),
+                    *(
+                        (current_quote.source,)
+                        if current_quote is not None and current_quote.source
+                        else ()
+                    ),
                     *(row.source for row in fundamental_rows if row.source),
                     *(
                         portfolio.source_refs
@@ -167,7 +191,15 @@ class StrategyEvidenceService:
             ticker=normalized,
             as_of=as_of,
             market={
+                "current_quote": (
+                    asdict(current_quote)
+                    if current_quote is not None
+                    else None
+                ),
                 "history_count": len(market_records),
+                "history_latest": asdict(latest),
+                # Backward-compatible alias; new consumers must use
+                # current_quote for the actual current stock price.
                 "latest": asdict(latest),
                 "history_start": min(
                     row.observation_timestamp for row in market_records
