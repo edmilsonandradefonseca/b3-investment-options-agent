@@ -153,3 +153,30 @@ def test_live_provider_fetches_oplab_chain_once(monkeypatch):
     assert calls == ["PETR4"]
     assert result.option_contracts[0].option_id == result.option_quotes[0].option_id
     assert len(result.options_analysis.calls) == 1
+
+
+class FailingCurrentMarketProvider:
+    name = "oplab"
+
+    def get_current_quote(self, ticker):
+        raise ValueError("current quote unavailable")
+
+
+def test_live_provider_does_not_substitute_history_when_current_quote_fails():
+    as_of = datetime(2026, 9, 27, 16, 0, tzinfo=timezone.utc)
+    service = LiveProviderService(
+        market_provider=FakeMarketProvider(),
+        options_provider=FakeOptionsProvider(),
+        current_market_provider=FailingCurrentMarketProvider(),
+    )
+
+    result = service.load("PETR4", as_of=as_of)
+
+    assert result.current_stock_quote is None
+    assert result.options_analysis.assumptions["current_stock_price_source"] == "unavailable"
+    assert "current_stock_quote_error" in result.options_analysis.assumptions
+    assert result.options_analysis.calls == ()
+    assert any(
+        item == "missing_current_price:PETRJ320"
+        for item in result.options_analysis.rejected_quotes
+    )
