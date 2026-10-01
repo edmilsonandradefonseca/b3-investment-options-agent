@@ -137,6 +137,11 @@ class OpenClawStructuredClient:
             raise RuntimeError(
                 f"OpenClaw timed out after {self.timeout:.0f}s for {schema_name}"
             ) from exc
+        except OSError as exc:
+            raise RuntimeError(
+                f"OpenClaw launch failed for {schema_name}: "
+                f"{type(exc).__name__}: {exc}"
+            ) from exc
 
         if result.returncode != 0:
             message = (
