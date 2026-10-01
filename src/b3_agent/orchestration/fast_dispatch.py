@@ -13,6 +13,7 @@ from b3_agent.portfolio.pnl import PnlEngine
 from b3_agent.portfolio.snapshot import load_active_snapshots
 from b3_agent.routing import FastRouter, RouteDecision, RouteTarget
 from b3_agent.scenario import ScenarioStressEngine
+from b3_agent.strategy_live import LiveStrategyComparisonService
 from b3_agent.schemas.position import PortfolioContext
 from b3_agent.schemas.scenario import ScenarioDefinition
 
@@ -63,6 +64,8 @@ class FastRouteDispatcher:
             return self._market_snapshot(decision)
         if decision.target == RouteTarget.STRESS_ENGINE:
             return self._stress_snapshot(decision, task)
+        if decision.target == RouteTarget.STRATEGY_ENGINE:
+            return self._strategy_comparison(decision)
 
         return None
 
@@ -206,6 +209,41 @@ class FastRouteDispatcher:
                 ],
             },
             sources=tuple(dict.fromkeys(item.source for item in records)),
+        )
+
+    def _strategy_comparison(
+        self,
+        decision: RouteDecision,
+    ) -> OrchestratorResponse:
+        context = decision.metadata
+        raw_assets = context.get("comparison_assets")
+        if not isinstance(raw_assets, (list, tuple)) or len(raw_assets) != 2:
+            raise ValueError("strategy comparison requires two explicit assets")
+
+        assets = tuple(str(item).upper().strip() for item in raw_assets)
+        strategies = (
+            str(context.get("strategy_a") or "").strip(),
+            str(context.get("strategy_b") or "").strip(),
+        )
+
+        raw_amount = context.get("comparison_amount")
+        amount = None
+        if raw_amount not in (None, ""):
+            amount = float(raw_amount)
+
+        portfolio = self._portfolio()
+        result = LiveStrategyComparisonService().compare(
+            assets=(assets[0], assets[1]),
+            strategies=strategies,
+            amount=amount,
+            portfolio=portfolio,
+        )
+        sources = tuple(str(item) for item in result.pop("source_refs", ()))
+        return self._response(
+            decision,
+            status="COMPLETED",
+            result=result,
+            sources=sources,
         )
 
     def _stress_snapshot(
