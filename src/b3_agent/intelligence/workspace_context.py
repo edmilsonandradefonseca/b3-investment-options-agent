@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+import json
 import os
 from typing import Any
 
@@ -88,7 +89,7 @@ class JoaoResolvePerspectiveService:
             timeout=float(
                 os.getenv(
                     "B3_JOAO_OPENCLAW_TIMEOUT_SECONDS",
-                    str(settings.openclaw_timeout_seconds),
+                    str(min(settings.openclaw_timeout_seconds, 45.0)),
                 )
             ),
             executable=settings.openclaw_bin,
@@ -106,7 +107,7 @@ class JoaoResolvePerspectiveService:
                 "questions that the B3 specialists should consider. Every factual "
                 "claim must be traceable to supplied source_refs."
             ),
-            input_text=__import__("json").dumps(
+            input_text=json.dumps(
                 payload,
                 ensure_ascii=False,
                 default=str,
@@ -239,6 +240,30 @@ class WorkspaceIntelligenceContextService:
                     ),
                 }
 
+        market_overview_research: list[dict[str, Any]] = []
+        if normalized_workspace == "market intelligence":
+            try:
+                overview_records = self.news_provider.search(
+                    "IBOV",
+                    query=(
+                        "Ibovespa B3 Brasil mercado juros Selic dólar inflação "
+                        "commodities fluxo estrangeiro resultados empresas"
+                    ),
+                    limit=news_limit,
+                )
+                overview = ResearchEventService().build(
+                    overview_records,
+                    as_of=as_of,
+                )
+                market_overview_research = [
+                    asdict(item) for item in overview.events
+                ]
+                source_refs.extend(overview.source_refs)
+            except (OSError, RuntimeError, ValueError) as exc:
+                limitations.append(
+                    f"Current broad-market research unavailable: {exc}"
+                )
+
         macro: dict[str, Any] = {}
         for indicator in ("SELIC", "CDI", "IPCA"):
             try:
@@ -259,6 +284,7 @@ class WorkspaceIntelligenceContextService:
                 "as_of": as_of.isoformat(),
                 "tickers": market_by_ticker,
                 "macro": macro,
+                "market_overview_research": market_overview_research,
                 "authority": (
                     "provider/evidence facts only; interpretation belongs to agents"
                 ),
