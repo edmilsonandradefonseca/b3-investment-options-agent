@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
 
+from b3_agent.options.call import CallAnalysisEngine
 from b3_agent.options.put import PutAnalysisEngine
 from b3_agent.orchestration.live_providers import LiveProviderService
 from b3_agent.portfolio.snapshot import load_active_snapshots
@@ -257,8 +258,8 @@ class LiveStrategyComparisonService:
     """Compose UC-04 alternatives from live deterministic facts.
 
     BUY_STOCK and HOLD use the current OPLAB underlying quote plus historical
-    evidence. SELL_PUT requires an explicit OPLAB option identifier; the service
-    never chooses an option contract silently.
+    evidence. SELL_PUT and covered SELL_CALL require an explicit OPLAB option
+    identifier; the service never chooses an option contract silently.
     """
 
     _STRATEGY_ALIASES = {
@@ -271,6 +272,11 @@ class LiveStrategyComparisonService:
         "vender put": "SELL_PUT",
         "sell put": "SELL_PUT",
         "sell_put": "SELL_PUT",
+        "vender call": "SELL_CALL",
+        "vender call coberta": "SELL_CALL",
+        "covered call": "SELL_CALL",
+        "sell call": "SELL_CALL",
+        "sell_call": "SELL_CALL",
     }
 
     def __init__(
@@ -301,7 +307,7 @@ class LiveStrategyComparisonService:
             normalized = cls.normalize_strategy(strategy)
             if normalized is None:
                 return False
-            if normalized == "SELL_PUT" and not str(option_id or "").strip():
+            if normalized in {"SELL_PUT", "SELL_CALL"} and not str(option_id or "").strip():
                 return False
         return True
 
@@ -327,11 +333,11 @@ class LiveStrategyComparisonService:
         )
         if any(value is None for value in normalized_strategies):
             raise ValueError(
-                "live deterministic comparison supports BUY_STOCK, HOLD and SELL_PUT"
+                "live deterministic comparison supports BUY_STOCK, HOLD, SELL_PUT and covered SELL_CALL"
             )
         if not self.supports(strategies, option_ids=option_ids):
             raise ValueError(
-                "SELL_PUT requires an explicit current OPLAB option identifier"
+                "SELL_PUT/SELL_CALL require an explicit current OPLAB option identifier"
             )
 
         effective_as_of = as_of or datetime.now(timezone.utc)
@@ -380,7 +386,7 @@ class LiveStrategyComparisonService:
             label = f"{original} · {pack.ticker}"
             alternative_sources = list(pack.source_refs)
 
-            if normalized_strategy == "SELL_PUT":
+            if normalized_strategy in {"SELL_PUT", "SELL_CALL"}:
                 normalized_option = str(option_id or "").upper().strip()
                 if pack.ticker not in option_snapshots:
                     option_snapshots[pack.ticker] = self.options_provider.get_snapshot(
@@ -408,9 +414,10 @@ class LiveStrategyComparisonService:
                     raise ValueError(
                         f"OPLAB contract {normalized_option} was not found for {pack.ticker}"
                     )
-                if contract.option_type.upper() != "PUT":
+                expected_type = "PUT" if normalized_strategy == "SELL_PUT" else "CALL"
+                if contract.option_type.upper() != expected_type:
                     raise ValueError(
-                        f"{normalized_option} is not a PUT contract"
+                        f"{normalized_option} is not a {expected_type} contract"
                     )
                 if contract.expiration_date <= effective_as_of.date():
                     raise ValueError(
@@ -425,31 +432,8 @@ class LiveStrategyComparisonService:
                         f"{normalized_option} has no executable current bid"
                     )
 
-                put = PutAnalysisEngine().analyze(
-                    option_id=contract.option_id,
-                    underlying_ticker=pack.ticker,
-                    strike=contract.strike,
-                    expiration_date=contract.expiration_date,
-                    premium=quote.bid,
-                    contract_multiplier=contract.contract_multiplier,
-                    as_of=effective_as_of.date(),
-                )
                 subject_id = contract.option_id
                 label = f"{original} {contract.option_id} · {pack.ticker}"
-                capital_required = (
-                    contract.strike * contract.contract_multiplier
-                )
-                max_loss = (
-                    put.effective_price * contract.contract_multiplier
-                )
-                assumptions.update({
-                    "contract_count": 1,
-                    "cash_secured": True,
-                    "premium_basis": "current_bid",
-                    "option_id": contract.option_id,
-                    "current_option_quote": asdict(quote),
-                    "put_analysis": asdict(put),
-                })
                 spread_abs = (
                     quote.ask - quote.bid
                     if quote.bid is not None
@@ -483,15 +467,94 @@ class LiveStrategyComparisonService:
                     "liquidity_assessment": "not_scored_without_versioned_policy",
                 }
                 assumptions["option_marketability"] = marketability
-                option_evidence[contract.option_id] = {
-                    "underlying_ticker": pack.ticker,
-                    "contract": asdict(contract),
-                    "current_quote": asdict(quote),
-                    "put_analysis": asdict(put),
-                    "premium_basis": "current_bid",
-                    "contract_count": 1,
-                    "marketability": marketability,
-                }
+
+                if normalized_strategy == "SELL_PUT":
+                    put = PutAnalysisEngine().analyze(
+                        option_id=contract.option_id,
+                        underlying_ticker=pack.ticker,
+                        strike=contract.strike,
+                        expiration_date=contract.expiration_date,
+                        premium=quote.bid,
+                        contract_multiplier=contract.contract_multiplier,
+                        as_of=effective_as_of.date(),
+                    )
+                    capital_required = (
+                        contract.strike * contract.contract_multiplier
+                    )
+                    max_loss = (
+                        put.effective_price * contract.contract_multiplier
+                    )
+                    assumptions.update({
+                        "contract_count": 1,
+                        "cash_secured": True,
+                        "premium_basis": "current_bid",
+                        "option_id": contract.option_id,
+                        "current_option_quote": asdict(quote),
+                        "put_analysis": asdict(put),
+                    })
+                    option_evidence[contract.option_id] = {
+                        "underlying_ticker": pack.ticker,
+                        "contract": asdict(contract),
+                        "current_quote": asdict(quote),
+                        "put_analysis": asdict(put),
+                        "premium_basis": "current_bid",
+                        "contract_count": 1,
+                        "marketability": marketability,
+                    }
+                else:
+                    current_quote = pack.market.get("current_quote")
+                    current_price = (
+                        float(current_quote.get("close"))
+                        if isinstance(current_quote, dict)
+                        and isinstance(current_quote.get("close"), (int, float))
+                        else None
+                    )
+                    if current_price is None or current_price <= 0:
+                        raise ValueError(
+                            f"{pack.ticker} current OPLAB price is required for covered CALL"
+                        )
+                    stock_quantity = float(pack.portfolio.get("stock_quantity") or 0.0)
+                    covered_shares = float(contract.contract_multiplier)
+                    if stock_quantity < covered_shares:
+                        raise ValueError(
+                            f"{normalized_option} is not covered: requires "
+                            f"{covered_shares:g} shares of {pack.ticker}, "
+                            f"portfolio has {stock_quantity:g}"
+                        )
+                    call = CallAnalysisEngine().analyze(
+                        option_id=contract.option_id,
+                        underlying_ticker=pack.ticker,
+                        strike=contract.strike,
+                        expiration_date=contract.expiration_date,
+                        premium=quote.bid,
+                        contract_multiplier=contract.contract_multiplier,
+                        as_of=effective_as_of.date(),
+                        current_price=current_price,
+                    )
+                    capital_required = 0.0
+                    max_loss = None
+                    assumptions.update({
+                        "contract_count": 1,
+                        "covered_call": True,
+                        "premium_basis": "current_bid",
+                        "option_id": contract.option_id,
+                        "current_option_quote": asdict(quote),
+                        "call_analysis": asdict(call),
+                        "covered_shares_required": covered_shares,
+                        "stock_shares_available": stock_quantity,
+                    })
+                    option_evidence[contract.option_id] = {
+                        "underlying_ticker": pack.ticker,
+                        "contract": asdict(contract),
+                        "current_quote": asdict(quote),
+                        "call_analysis": asdict(call),
+                        "premium_basis": "current_bid",
+                        "contract_count": 1,
+                        "covered_shares_required": covered_shares,
+                        "stock_shares_available": stock_quantity,
+                        "marketability": marketability,
+                    }
+
                 alternative_sources.append(quote.source)
                 all_sources.append(quote.source)
 
@@ -528,13 +591,23 @@ class LiveStrategyComparisonService:
             for item in pack.limitations
         ]
         if any(
-            strategy == "SELL_PUT"
+            strategy in {"SELL_PUT", "SELL_CALL"}
             for strategy in normalized_strategies
         ):
-            limitations.append(
-                "SELL_PUT uses one cash-secured contract and the current OPLAB bid; "
-                "no option contract or execution price is inferred."
-            )
+            if any(strategy == "SELL_PUT" for strategy in normalized_strategies):
+                limitations.append(
+                    "SELL_PUT uses one cash-secured contract and the current OPLAB bid; "
+                    "no option contract or execution price is inferred."
+                )
+            if any(strategy == "SELL_CALL" for strategy in normalized_strategies):
+                limitations.append(
+                    "SELL_CALL is accepted only as one covered contract using shares "
+                    "already present in the canonical portfolio and the current OPLAB bid."
+                )
+                limitations.append(
+                    "Covered CALL fair value/upside-surrender valuation remains UNKNOWN "
+                    "without an explicit versioned stock valuation."
+                )
             limitations.append(
                 "Option marketability facts are reported directly from OPLAB; "
                 "liquidity is not scored until a versioned liquidity policy is defined."
