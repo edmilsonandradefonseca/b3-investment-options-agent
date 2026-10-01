@@ -241,7 +241,7 @@ class WorkspaceIntelligenceContextService:
                 }
 
         market_overview_research: list[dict[str, Any]] = []
-        if normalized_workspace == "market intelligence":
+        if normalized_workspace in {"market intelligence", "opportunities"}:
             try:
                 overview_records = self.news_provider.search(
                     "IBOV",
@@ -276,6 +276,17 @@ class WorkspaceIntelligenceContextService:
             if item is not None:
                 macro[indicator] = asdict(item)
                 source_refs.append(item.source)
+
+        if (
+            normalized_workspace == "opportunities"
+            and not deterministic_result
+        ):
+            limitations.append(
+                "No canonical UC-03 OpportunitySet was supplied for this request; "
+                "B3/João intelligence may interpret market evidence but must not "
+                "invent or rank stock opportunities without validated valuation "
+                "and opportunity inputs."
+            )
 
         deterministic_context: dict[str, Any] = {
             "workspace": workspace,
