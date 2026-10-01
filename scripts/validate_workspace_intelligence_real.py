@@ -80,8 +80,10 @@ def require_intelligence(
 
     market = workspace.get("market_context") or {}
     by_ticker = market.get("tickers") or {}
+    asset_checks: dict[str, dict] = {}
     for ticker in expected_tickers:
-        current = (by_ticker.get(ticker) or {}).get("current_quote") or {}
+        ticker_market = by_ticker.get(ticker) or {}
+        current = ticker_market.get("current_quote") or {}
         if current.get("source") != "oplab":
             raise SystemExit(
                 f"FAIL {name}: {ticker} current quote is not from OPLAB"
@@ -90,6 +92,40 @@ def require_intelligence(
             raise SystemExit(
                 f"FAIL {name}: {ticker} current OPLAB price missing"
             )
+
+        pack = ticker_market.get("asset_evidence") or {}
+        if not isinstance(pack, dict) or not pack:
+            raise SystemExit(
+                f"FAIL {name}: deterministic asset_evidence missing for {ticker}"
+            )
+        pack_market = pack.get("market") or {}
+        quant = pack.get("quant") or {}
+        fundamentals = pack.get("fundamentals") or {}
+        if int(pack_market.get("history_count") or 0) < 1:
+            raise SystemExit(
+                f"FAIL {name}: deterministic history missing for {ticker}"
+            )
+        if not isinstance(quant, dict) or not quant:
+            raise SystemExit(
+                f"FAIL {name}: deterministic quant evidence missing for {ticker}"
+            )
+        if int(fundamentals.get("metric_count") or 0) < 1:
+            raise SystemExit(
+                f"FAIL {name}: deterministic fundamentals missing for {ticker}"
+            )
+        asset_checks[ticker] = {
+            "current_price": current.get("close"),
+            "history_count": pack_market.get("history_count"),
+            "fundamental_metric_count": fundamentals.get("metric_count"),
+            "quality_status": pack.get("quality_status"),
+        }
+
+    local = derived.get("b3_local_evidence_analyst") or {}
+    local_status = {
+        ticker: (item or {}).get("status")
+        for ticker, item in local.items()
+        if isinstance(item, dict)
+    }
 
     return {
         "status": response.get("status"),
@@ -109,6 +145,8 @@ def require_intelligence(
             "proposal": bool(result.get("proposal")),
         },
         "sources": len(response.get("sources") or []),
+        "asset_evidence": asset_checks,
+        "b3_local_intelligence": local_status,
         "limitations": workspace.get("limitations") or [],
         "market": market,
         "result": result,
@@ -149,6 +187,8 @@ def main() -> None:
         "joao_memory": strategy["joao_memory"],
         "b3_agents": strategy["b3_agents"],
         "sources": strategy["sources"],
+        "asset_evidence": strategy["asset_evidence"],
+        "b3_local_intelligence": strategy["b3_local_intelligence"],
         "limitations": strategy["limitations"],
     }
 
@@ -178,6 +218,7 @@ def main() -> None:
         "joao_memory": market["joao_memory"],
         "b3_agents": market["b3_agents"],
         "sources": market["sources"],
+        "b3_local_intelligence": market["b3_local_intelligence"],
         "macro_indicators": sorted(macro),
         "broad_market_events": len(
             market["market"].get("market_overview_research") or []
@@ -216,6 +257,8 @@ def main() -> None:
         "joao_memory": opportunities["joao_memory"],
         "b3_agents": opportunities["b3_agents"],
         "sources": opportunities["sources"],
+        "asset_evidence": opportunities["asset_evidence"],
+        "b3_local_intelligence": opportunities["b3_local_intelligence"],
         "canonical_opportunity_set_present": canonical_present,
         "limitations": opportunities["limitations"],
     }
