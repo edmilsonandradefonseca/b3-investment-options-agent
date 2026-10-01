@@ -207,22 +207,42 @@ def _workspace_intelligence_response(
         if deterministic_response is not None
         else {}
     )
+    deterministic_context_payload = context_payload.get(
+        "deterministic_context", {}
+    )
+    market_context = (
+        deterministic_context_payload.get("market_analysis", {})
+        if isinstance(deterministic_context_payload, dict)
+        else {}
+    )
+    workspace_asset_evidence: dict[str, Any] = {}
+    ticker_context = (
+        market_context.get("tickers", {})
+        if isinstance(market_context, dict)
+        else {}
+    )
+    if isinstance(ticker_context, dict):
+        for ticker, entry in ticker_context.items():
+            if not isinstance(entry, dict):
+                continue
+            pack = entry.get("asset_evidence")
+            if isinstance(pack, dict):
+                workspace_asset_evidence[str(ticker)] = pack
+
     merged_result = {
         **deterministic_result,
         **senior.result,
+        **(
+            {"asset_evidence": workspace_asset_evidence}
+            if workspace_asset_evidence
+            and "asset_evidence" not in deterministic_result
+            else {}
+        ),
         "workspace_intelligence": {
             "workspace": context.workspace,
             "as_of": context.as_of.isoformat(),
             "tickers": list(context.tickers),
-            "market_context": (
-                context_payload.get("deterministic_context", {}).get(
-                    "market_analysis", {}
-                )
-                if isinstance(
-                    context_payload.get("deterministic_context"), dict
-                )
-                else {}
-            ),
+            "market_context": market_context,
             "derived_intelligence": context.derived_intelligence,
             "limitations": list(context.limitations),
             "source_refs": list(context.source_refs),
