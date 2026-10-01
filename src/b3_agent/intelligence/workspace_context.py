@@ -574,6 +574,12 @@ class WorkspaceIntelligenceContextService:
                     workspace_result["option_marketability"] = live_payload[
                         "option_marketability"
                     ]
+                    workspace_result["opportunity_ranking_status"] = live_payload[
+                        "opportunity_ranking_status"
+                    ]
+                    workspace_result["opportunity_ranking_reason"] = live_payload[
+                        "opportunity_ranking_reason"
+                    ]
                     workspace_result["opportunity_limitations"] = live_payload[
                         "limitations"
                     ]
