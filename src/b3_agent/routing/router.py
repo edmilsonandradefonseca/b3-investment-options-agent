@@ -48,12 +48,22 @@ class FastRouter:
         strategy_b = str(meta.get("strategy_b") or "").strip()
         option_a = str(meta.get("option_a") or "").strip() or None
         option_b = str(meta.get("option_b") or "").strip() or None
+        comparison_amount = meta.get("comparison_amount")
+        stock_reduction_present = (
+            self._is_stock_reduction(strategy_a)
+            or self._is_stock_reduction(strategy_b)
+        )
+        stock_reduction_amount_ok = (
+            not stock_reduction_present
+            or self._positive_number(comparison_amount)
+        )
         if (
             workspace == "strategy lab"
             and isinstance(comparison_assets, (list, tuple))
             and len(comparison_assets) == 2
             and self._strategy_supported(strategy_a, option_a)
             and self._strategy_supported(strategy_b, option_b)
+            and stock_reduction_amount_ok
         ):
             return self._decision(
                 "strategy_comparison", "UC-04", "sync", "deterministic",
@@ -155,6 +165,29 @@ class FastRouter:
             None, None, "sync", "senior_llm", RouteTarget.OPENCLAW,
             MatchClass.AMBIGUOUS, None, meta,
         )
+
+    @staticmethod
+    def _is_stock_reduction(value: str) -> bool:
+        normalized = " ".join(value.casefold().split())
+        return normalized in {
+            "vender ação",
+            "vender acao",
+            "vender/reduzir ação",
+            "vender/reduzir acao",
+            "reduzir ação",
+            "reduzir acao",
+            "sell stock",
+            "sell_stock",
+            "reduce stock",
+            "reduce_stock",
+        }
+
+    @staticmethod
+    def _positive_number(value: object) -> bool:
+        try:
+            return float(value) > 0
+        except (TypeError, ValueError):
+            return False
 
     @staticmethod
     def _strategy_supported(value: str, option_id: str | None = None) -> bool:
