@@ -36,6 +36,29 @@ class FakeMarketProvider:
         return rows
 
 
+class FakeCurrentQuoteProvider:
+    name = "oplab"
+
+    def get_current_quote(self, ticker):
+        ts = datetime(2026, 10, 1, 15, 59, tzinfo=timezone.utc)
+        price = 69.74 if ticker == "VALE3" else 49.74
+        return StockMarketData(
+            instrument_id=ticker,
+            ticker=ticker,
+            observation_timestamp=ts,
+            available_timestamp=ts,
+            source=self.name,
+            ingested_at=ts,
+            source_record_id=f"{ticker}:current",
+            quality_flags=("current_quote",),
+            open=price,
+            high=price,
+            low=price,
+            close=price,
+            volume=2_000_000,
+        )
+
+
 class FakeFundamentalsProvider:
     name = "fake-fundamentals"
 
@@ -84,6 +107,7 @@ def test_live_strategy_comparison_builds_two_asset_evidence_packs_without_rankin
     evidence = StrategyEvidenceService(
         market_provider=FakeMarketProvider(),
         fundamentals_provider=FakeFundamentalsProvider(),
+        current_quote_provider=FakeCurrentQuoteProvider(),
         history_days=120,
     )
     service = LiveStrategyComparisonService(evidence_service=evidence)
@@ -99,6 +123,8 @@ def test_live_strategy_comparison_builds_two_asset_evidence_packs_without_rankin
 
     assert set(result["asset_evidence"]) == {"VALE3", "WEGE3"}
     assert result["asset_evidence"]["VALE3"]["market"]["history_count"] == 70
+    assert result["asset_evidence"]["VALE3"]["market"]["current_quote"]["close"] == 69.74
+    assert result["asset_evidence"]["WEGE3"]["market"]["current_quote"]["close"] == 49.74
     assert result["asset_evidence"]["VALE3"]["fundamentals"]["metric_count"] == 1
     assert result["asset_evidence"]["VALE3"]["portfolio"]["held"] is False
     assert result["strategy_comparison"]["alternatives"][0]["capital_required"] == 50_000.0
