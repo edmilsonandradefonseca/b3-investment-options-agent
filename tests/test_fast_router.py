@@ -148,3 +148,18 @@ def test_structured_strategy_lab_covered_call_without_contract_escalates():
         },
     )
     assert d.target == RouteTarget.OPENCLAW
+
+
+def test_structured_strategy_lab_stock_reduction_routes_deterministically():
+    d = FastRouter().route(
+        "UC-04: compare Manter WEGE3 e Vender/reduzir ação WEGE3",
+        metadata={
+            "workspace": "Strategy Lab",
+            "comparison_assets": ["WEGE3", "WEGE3"],
+            "strategy_a": "Manter",
+            "strategy_b": "Vender/reduzir ação",
+            "comparison_amount": 2000,
+        },
+    )
+    assert d.target == RouteTarget.STRATEGY_ENGINE
+    assert d.use_case == "UC-04"
