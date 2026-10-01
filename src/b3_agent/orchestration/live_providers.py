@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
-from typing import Sequence
+from datetime import datetime, timedelta, timezone
 
+from b3_agent.config import settings
 from b3_agent.options.analysis import OptionsAnalysis, OptionsAnalysisEngine
 from b3_agent.providers.brapi.adapter import BrapiAdapter
 from b3_agent.providers.brapi.cache import CachedBrapiAdapter
 from b3_agent.providers.local_market_history import LocalFirstMarketDataAdapter
-from b3_agent.config import settings
+from b3_agent.providers.oplab.historical import OplabHistoricalAdapter
 from b3_agent.providers.oplab.options import OplabOptionsAdapter
 from b3_agent.schemas.market import StockMarketData
 from b3_agent.schemas.option import OptionContract, OptionQuote
@@ -28,15 +28,21 @@ class LiveProviderSnapshot:
 class LiveProviderService:
     """Acquire current provider data and normalize it for deterministic engines.
 
-    COTAHIST supplies the locally archived daily history. Cached BRAPI fills
-    uncovered dates and recent updates; OPLAB supplies the current option chain.
-    The service performs no investment recommendation or LLM reasoning.
+    Daily-market precedence is COTAHIST -> OPLAB -> cached BRAPI. OPLAB also
+    supplies the current option chain. The service performs no investment
+    recommendation or LLM reasoning.
     """
 
     def __init__(
         self,
         *,
-        market_provider: BrapiAdapter | CachedBrapiAdapter | LocalFirstMarketDataAdapter | None = None,
+        market_provider: (
+            BrapiAdapter
+            | CachedBrapiAdapter
+            | LocalFirstMarketDataAdapter
+            | OplabHistoricalAdapter
+            | None
+        ) = None,
         options_provider: OplabOptionsAdapter | None = None,
         history_days: int = 120,
     ) -> None:
@@ -45,6 +51,7 @@ class LiveProviderService:
         self.market_provider = market_provider or LocalFirstMarketDataAdapter(
             settings.data_dir / "archive" / "cotahist_raw",
             settings.data_dir / "cache" / "brapi_daily",
+            oplab_provider=OplabHistoricalAdapter(),
         )
         self.options_provider = options_provider or OplabOptionsAdapter()
         self.history_days = history_days
@@ -70,8 +77,12 @@ class LiveProviderService:
                 normalized, effective_as_of
             )
         else:
-            option_contracts = self.options_provider.get_options(normalized, effective_as_of)
-            option_quotes = self.options_provider.get_option_quotes(normalized, effective_as_of)
+            option_contracts = self.options_provider.get_options(
+                normalized, effective_as_of
+            )
+            option_quotes = self.options_provider.get_option_quotes(
+                normalized, effective_as_of
+            )
         contracts = tuple(option_contracts)
         quotes = tuple(option_quotes)
 
@@ -79,8 +90,12 @@ class LiveProviderService:
             market_records,
             key=lambda item: item.observation_timestamp,
         )
-        market_sources = tuple(dict.fromkeys(record.source for record in market_records))
-        source_refs = tuple(dict.fromkeys((*market_sources, self.options_provider.name)))
+        market_sources = tuple(
+            dict.fromkeys(record.source for record in market_records)
+        )
+        source_refs = tuple(
+            dict.fromkeys((*market_sources, self.options_provider.name))
+        )
         analysis = OptionsAnalysisEngine().analyze_quotes(
             contracts=contracts,
             quotes=quotes,
@@ -91,6 +106,7 @@ class LiveProviderService:
                 "live_provider_snapshot": True,
                 "market_history_start": start.isoformat(),
                 "market_history_end": end.isoformat(),
+                "market_provider_precedence": "COTAHIST>OPLAB>BRAPI",
             },
         )
 
