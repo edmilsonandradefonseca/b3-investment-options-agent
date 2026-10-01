@@ -32,6 +32,29 @@ class FakeMarketProvider:
         ]
 
 
+class FakeCurrentMarketProvider:
+    name = "oplab"
+
+    def get_current_quote(self, ticker):
+        now = datetime(2026, 9, 27, 15, 59, tzinfo=timezone.utc)
+        return StockMarketData(
+            instrument_id=ticker,
+            ticker=ticker,
+            observation_timestamp=now,
+            available_timestamp=now,
+            source=self.name,
+            ingested_at=now,
+            source_record_id=f"{ticker}:current",
+            quality_flags=("current_quote",),
+            open=30.0,
+            high=31.0,
+            low=29.5,
+            close=30.5,
+            volume=2_000_000,
+            currency="BRL",
+        )
+
+
 class FakeOptionsProvider:
     name = "oplab"
 
@@ -97,6 +120,7 @@ def test_live_provider_service_builds_deterministic_options_analysis():
     service = LiveProviderService(
         market_provider=FakeMarketProvider(),
         options_provider=FakeOptionsProvider(),
+        current_market_provider=FakeCurrentMarketProvider(),
     )
 
     result = service.load("petr4", as_of=as_of)
@@ -104,11 +128,13 @@ def test_live_provider_service_builds_deterministic_options_analysis():
     assert result.ticker == "PETR4"
     assert result.source_refs == ("brapi", "oplab")
     assert len(result.market_records) == 1
+    assert result.current_stock_quote is not None
+    assert result.current_stock_quote.close == 30.5
     assert len(result.option_contracts) == 2
     assert len(result.option_quotes) == 2
     assert len(result.options_analysis.puts) == 1
     assert len(result.options_analysis.calls) == 1
-    assert result.options_analysis.calls[0].current_price == 29.0
+    assert result.options_analysis.calls[0].current_price == 30.5
     assert result.options_analysis.assumptions["live_provider_snapshot"] is True
 
 
