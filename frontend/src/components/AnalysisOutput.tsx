@@ -111,12 +111,14 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
           const market = asObject(evidence.market);
           const currentQuote = asObject(market?.current_quote);
           const historyLatest = asObject(market?.history_latest) ?? asObject(market?.latest);
+          const previousCompleted = asObject(market?.previous_completed_close);
           const quant = asObject(evidence.quant);
           const fundamentals = asObject(evidence.fundamentals);
           const portfolio = asObject(evidence.portfolio);
           const currentPrice = numberValue(currentQuote?.close);
           const currentVolume = numberValue(currentQuote?.volume);
           const historyClose = numberValue(historyLatest?.close);
+          const previousClose = numberValue(previousCompleted?.close);
           const vol20 = numberValue(quant?.volatility_20d);
           const vol60 = numberValue(quant?.volatility_60d);
           const drawdown = numberValue(quant?.max_drawdown);
@@ -130,7 +132,8 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
               <div><dt>Preço atual</dt><dd>{brl(currentPrice) ?? 'Indisponível'}</dd></div>
               <div><dt>Cotação atual</dt><dd>{currentQuote ? `${String(currentQuote.source ?? 'fonte desconhecida')} · ${when(currentQuote.observation_timestamp)}` : 'Indisponível'}</dd></div>
               <div><dt>Volume atual</dt><dd>{currentVolume == null ? 'Indisponível' : new Intl.NumberFormat('pt-BR').format(currentVolume)}</dd></div>
-              <div><dt>Último fechamento histórico</dt><dd>{brl(historyClose) ?? 'Indisponível'}</dd></div>
+              <div><dt>Fechamento anterior concluído</dt><dd>{brl(previousClose) ?? 'Indisponível'}</dd></div>
+              <div><dt>Candle histórico mais recente</dt><dd>{brl(historyClose) ?? 'Indisponível'}</dd></div>
               <div><dt>Volatilidade 20d</dt><dd>{pct(vol20) ?? 'Indisponível'}</dd></div>
               <div><dt>Volatilidade 60d</dt><dd>{pct(vol60) ?? 'Indisponível'}</dd></div>
               <div><dt>Drawdown histórico</dt><dd>{pct(drawdown) ?? 'Indisponível'}</dd></div>
@@ -153,6 +156,7 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
           const contract = asObject(evidence.contract);
           const quote = asObject(evidence.current_quote);
           const put = asObject(evidence.put_analysis);
+          const marketability = asObject(evidence.marketability);
           const bid = numberValue(quote?.bid);
           const ask = numberValue(quote?.ask);
           const last = numberValue(quote?.last);
@@ -161,6 +165,8 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
           const strike = numberValue(contract?.strike);
           const effectivePrice = numberValue(put?.effective_price);
           const annualized = numberValue(put?.annualized_return);
+          const spreadAbs = numberValue(marketability?.spread_abs);
+          const spreadPct = numberValue(marketability?.spread_pct_of_mid);
           return <article className="evidence-card" key={optionId}>
             <h5>{optionId}</h5>
             <dl>
@@ -172,6 +178,10 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
               <div><dt>Último negócio</dt><dd>{brl(last) ?? 'Indisponível'}</dd></div>
               <div><dt>Mid</dt><dd>{brl(mid) ?? 'Indisponível'}</dd></div>
               <div><dt>Volume</dt><dd>{volume == null ? 'Indisponível' : new Intl.NumberFormat('pt-BR').format(volume)}</dd></div>
+              <div><dt>Executável para venda</dt><dd>{marketability?.executable_for_sell === true ? 'Sim' : 'Não'}</dd></div>
+              <div><dt>Mercado bilateral</dt><dd>{marketability?.two_sided_market === true ? 'Sim' : 'Não'}</dd></div>
+              <div><dt>Spread bid/ask</dt><dd>{spreadAbs == null ? 'Indisponível' : `${brl(spreadAbs)}${spreadPct == null ? '' : ` · ${pct(spreadPct)} do mid`}`}</dd></div>
+              <div><dt>Liquidez</dt><dd>{asText(marketability?.liquidity_assessment) === 'not_scored_without_versioned_policy' ? 'Não pontuada (política ainda não versionada)' : 'Indisponível'}</dd></div>
               <div><dt>Preço efetivo se exercida</dt><dd>{brl(effectivePrice) ?? 'Indisponível'}</dd></div>
               <div><dt>Retorno anualizado do prêmio</dt><dd>{pct(annualized) ?? 'Indisponível'}</dd></div>
               <div><dt>Cotação</dt><dd>{quote ? `${String(quote.source ?? 'fonte desconhecida')} · ${when(quote.observation_timestamp)}` : 'Indisponível'}</dd></div>
