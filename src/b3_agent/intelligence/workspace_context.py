@@ -13,6 +13,7 @@ from b3_agent.providers.oplab.adapter import OplabAdapter
 from b3_agent.providers.searxng_news import SearxngNewsAdapter
 from b3_agent.repositories.macro import MacroDataRepository
 from b3_agent.research_events import ResearchEventService
+from b3_agent.strategy_live import StrategyEvidenceService
 
 
 JOAO_SCHEMA: dict[str, Any] = {
@@ -155,6 +156,7 @@ class WorkspaceIntelligenceContextService:
         current_quote_provider: OplabAdapter | None = None,
         news_provider: SearxngNewsAdapter | None = None,
         macro_repository: MacroDataRepository | None = None,
+        asset_evidence_service: StrategyEvidenceService | None = None,
         joao_service: JoaoResolvePerspectiveService | None = None,
     ) -> None:
         self.current_quote_provider = current_quote_provider or OplabAdapter()
@@ -163,6 +165,9 @@ class WorkspaceIntelligenceContextService:
         )
         self.macro_repository = macro_repository or MacroDataRepository(
             settings.data_dir / "normalized" / "macro"
+        )
+        self.asset_evidence_service = (
+            asset_evidence_service or StrategyEvidenceService()
         )
         self.joao_service = joao_service
 
@@ -192,19 +197,56 @@ class WorkspaceIntelligenceContextService:
         limitations: list[str] = []
         source_refs: list[str] = []
 
+        supplied_asset_evidence = {}
+        if isinstance(deterministic_result, dict):
+            candidate = deterministic_result.get("asset_evidence")
+            if isinstance(candidate, dict):
+                supplied_asset_evidence = candidate
+
         market_by_ticker: dict[str, Any] = {}
         local_by_ticker: dict[str, Any] = {}
         for ticker in normalized_tickers:
             market_entry: dict[str, Any] = {}
-            try:
-                quote = self.current_quote_provider.get_current_quote(ticker)
-                market_entry["current_quote"] = asdict(quote)
-                source_refs.append(quote.source)
-            except (OSError, RuntimeError, ValueError) as exc:
-                market_entry["current_quote"] = None
-                limitations.append(
-                    f"Current OPLAB quote unavailable for {ticker}: {exc}"
-                )
+            supplied_pack = supplied_asset_evidence.get(ticker)
+            if isinstance(supplied_pack, dict):
+                market_entry["asset_evidence"] = supplied_pack
+                supplied_market = supplied_pack.get("market")
+                if isinstance(supplied_market, dict):
+                    market_entry["current_quote"] = supplied_market.get(
+                        "current_quote"
+                    )
+                for source in supplied_pack.get("source_refs") or ():
+                    if str(source).strip():
+                        source_refs.append(str(source))
+            else:
+                try:
+                    pack = self.asset_evidence_service.build(
+                        ticker,
+                        as_of=as_of,
+                    )
+                    packed = asdict(pack)
+                    market_entry["asset_evidence"] = packed
+                    market_entry["current_quote"] = packed.get(
+                        "market", {}
+                    ).get("current_quote")
+                    source_refs.extend(pack.source_refs)
+                except (OSError, RuntimeError, ValueError) as exc:
+                    market_entry["asset_evidence"] = None
+                    limitations.append(
+                        f"Deterministic B3 asset evidence unavailable for "
+                        f"{ticker}: {exc}"
+                    )
+
+            if market_entry.get("current_quote") is None:
+                try:
+                    quote = self.current_quote_provider.get_current_quote(ticker)
+                    market_entry["current_quote"] = asdict(quote)
+                    source_refs.append(quote.source)
+                except (OSError, RuntimeError, ValueError) as exc:
+                    market_entry["current_quote"] = None
+                    limitations.append(
+                        f"Current OPLAB quote unavailable for {ticker}: {exc}"
+                    )
 
             try:
                 records = self.news_provider.search(
