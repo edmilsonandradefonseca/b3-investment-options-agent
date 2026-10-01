@@ -190,9 +190,10 @@ def _workspace_intelligence_response(
         include_joao=True,
     )
 
+    context_payload = context.as_context()
     senior_context = {
         **request.context,
-        **context.as_context(),
+        **context_payload,
     }
     _configure_runtime()
     senior = b3_orchestrator(
@@ -213,8 +214,14 @@ def _workspace_intelligence_response(
             "workspace": context.workspace,
             "as_of": context.as_of.isoformat(),
             "tickers": list(context.tickers),
-            "market_context": context.deterministic_context.get(
-                "market_analysis", {}
+            "market_context": (
+                context_payload.get("deterministic_context", {}).get(
+                    "market_analysis", {}
+                )
+                if isinstance(
+                    context_payload.get("deterministic_context"), dict
+                )
+                else {}
             ),
             "derived_intelligence": context.derived_intelligence,
             "limitations": list(context.limitations),
