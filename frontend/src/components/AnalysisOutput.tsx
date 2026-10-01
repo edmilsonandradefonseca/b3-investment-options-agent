@@ -55,6 +55,7 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
   const workspaceMarket = asObject(workspaceIntelligence?.market_context);
   const workspaceDerived = asObject(workspaceIntelligence?.derived_intelligence);
   const joaoPerspective = asObject(workspaceDerived?.joao_resolve);
+  const joaoMemory = asObject(workspaceDerived?.joao_memory_context);
   const localIntelligence = asObject(workspaceDerived?.b3_local_evidence_analyst);
   const workspaceMacro = asObject(workspaceMarket?.macro);
   const broadMarketResearch = asArray(workspaceMarket?.market_overview_research);
@@ -133,6 +134,11 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
           <h5>João Resolve · Pesquisa</h5>
           <p>{asText(joaoPerspective.summary) ?? (asText(joaoPerspective.status) === 'UNAVAILABLE' ? 'Indisponível nesta execução.' : 'Sem síntese disponível.')}</p>
           <small>Autoridade: inteligência derivada, não canônica.</small>
+          {joaoMemory && <p className="muted">
+            Memória João: {asText(joaoMemory.status) === 'UNAVAILABLE'
+              ? 'serviço indisponível nesta execução'
+              : `${asArray(joaoMemory.memories).length} memória(s) · ${asArray(joaoMemory.relations).length} relação(ões)`}
+          </p>}
         </article>}
       </div>
 
