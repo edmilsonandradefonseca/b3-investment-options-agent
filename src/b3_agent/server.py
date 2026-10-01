@@ -507,6 +507,7 @@ def health() -> dict[str, Any]:
             "neo4j_uri": os.getenv("B3_NEO4J_URI", "bolt://127.0.0.1:7687"),
             "qdrant_collection": "b3_evidence_768_hybrid",
             "oplab_token_configured": bool(os.getenv("OPLAB_API_TOKEN")),
+            "brapi_token_configured": bool(os.getenv("BRAPI_TOKEN")),
         },
     }
 
