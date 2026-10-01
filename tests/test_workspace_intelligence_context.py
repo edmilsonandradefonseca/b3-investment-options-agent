@@ -144,6 +144,42 @@ class FailingJoao:
         raise RuntimeError("joao unavailable")
 
 
+class FakeOpportunityResult:
+    class Set:
+        source_refs = ("oplab",)
+
+    opportunity_set = Set()
+    limitations = ("Stock valuation unavailable.",)
+
+
+class FakeOpportunityService:
+    def build(self, ticker, *, as_of, limit):
+        assert ticker == "WEGE3"
+        return FakeOpportunityResult()
+
+    def as_payload(self, result):
+        return {
+            "ticker": "WEGE3",
+            "as_of": NOW,
+            "opportunity_set": {
+                "ranked_opportunities": [
+                    {
+                        "opportunity_id": "SELL_PUT:WEGEV500",
+                        "ticker": "WEGE3",
+                        "action": "SELL_PUT",
+                    }
+                ],
+                "ranking_policy_version": "1.0+B3_OPTION_MARKETABILITY_V1",
+                "source_refs": ["oplab"],
+                "quality_status": "WARNING",
+            },
+            "option_marketability": {
+                "WEGEV500": {"eligible": True, "bid": 1.2}
+            },
+            "limitations": ["Stock valuation unavailable."],
+        }
+
+
 def _ready_local(ticker: str):
     return {
         "ticker": ticker,
@@ -226,6 +262,7 @@ def test_workspace_context_omits_degraded_local_and_fails_soft_on_joao(monkeypat
         asset_evidence_service=FakeAssetEvidenceService(),
         joao_memory_client=FakeJoaoMemory(),
         joao_service=FailingJoao(),
+        opportunity_service=FakeOpportunityService(),
     )
 
     result = service.build(
@@ -238,6 +275,9 @@ def test_workspace_context_omits_degraded_local_and_fails_soft_on_joao(monkeypat
     assert local["status"] == "OMITTED"
     assert local["quality_flags"] == ["INVALID_JSON"]
     assert "analysis" not in local
+
+    opportunity_set = result.deterministic_context["workspace_result"]["opportunity_set"]
+    assert opportunity_set["ranked_opportunities"][0]["opportunity_id"] == "SELL_PUT:WEGEV500"
 
     joao = result.derived_intelligence["joao_resolve"]
     assert joao["status"] == "UNAVAILABLE"
