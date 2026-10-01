@@ -302,6 +302,7 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
           const contract = asObject(evidence.contract);
           const quote = asObject(evidence.current_quote);
           const put = asObject(evidence.put_analysis);
+          const call = asObject(evidence.call_analysis);
           const marketability = asObject(evidence.marketability);
           const bid = numberValue(quote?.bid);
           const ask = numberValue(quote?.ask);
@@ -310,7 +311,14 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
           const volume = numberValue(quote?.volume);
           const strike = numberValue(contract?.strike);
           const effectivePrice = numberValue(put?.effective_price);
-          const annualized = numberValue(put?.annualized_return);
+          const premiumReturn = numberValue(call?.premium_return);
+          const annualized =
+            numberValue(put?.annualized_return) ??
+            numberValue(call?.annualized_premium_return);
+          const gainToStrike = numberValue(call?.gain_to_strike);
+          const totalReturnIfAssigned = numberValue(call?.total_return_if_assigned);
+          const coveredRequired = numberValue(evidence.covered_shares_required);
+          const stockAvailable = numberValue(evidence.stock_shares_available);
           const spreadAbs = numberValue(marketability?.spread_abs);
           const spreadPct = numberValue(marketability?.spread_pct_of_mid);
           return <article className="evidence-card" key={optionId}>
@@ -328,7 +336,11 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
               <div><dt>Mercado bilateral</dt><dd>{marketability?.two_sided_market === true ? 'Sim' : 'Não'}</dd></div>
               <div><dt>Spread bid/ask</dt><dd>{spreadAbs == null ? 'Indisponível' : `${brl(spreadAbs)}${spreadPct == null ? '' : ` · ${pct(spreadPct)} do mid`}`}</dd></div>
               <div><dt>Liquidez</dt><dd>{asText(marketability?.liquidity_assessment) === 'not_scored_without_versioned_policy' ? 'Não pontuada (política ainda não versionada)' : 'Indisponível'}</dd></div>
-              <div><dt>Preço efetivo se exercida</dt><dd>{brl(effectivePrice) ?? 'Indisponível'}</dd></div>
+              {put && <div><dt>Preço efetivo se exercida</dt><dd>{brl(effectivePrice) ?? 'Indisponível'}</dd></div>}
+              {call && <div><dt>Retorno do prêmio</dt><dd>{pct(premiumReturn) ?? 'Indisponível'}</dd></div>}
+              {call && <div><dt>Ganho até o strike</dt><dd>{brl(gainToStrike) ?? 'Indisponível'}</dd></div>}
+              {call && <div><dt>Retorno se exercida</dt><dd>{pct(totalReturnIfAssigned) ?? 'Indisponível'}</dd></div>}
+              {call && <div><dt>Cobertura</dt><dd>{coveredRequired == null || stockAvailable == null ? 'Indisponível' : `${coveredRequired} ações requeridas · ${stockAvailable} disponíveis`}</dd></div>}
               <div><dt>Retorno anualizado do prêmio</dt><dd>{pct(annualized) ?? 'Indisponível'}</dd></div>
               <div><dt>Cotação</dt><dd>{quote ? `${String(quote.source ?? 'fonte desconhecida')} · ${when(quote.observation_timestamp)}` : 'Indisponível'}</dd></div>
             </dl>
