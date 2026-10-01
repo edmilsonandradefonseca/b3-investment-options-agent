@@ -410,3 +410,64 @@ def test_live_workspace_research_uses_post_fetch_cutoff():
     market = result.deterministic_context["market_analysis"]
     assert len(market["market_overview_research"]) >= 1
     assert market["market_overview_research"][0]["source_name"] == "fresh-test"
+
+
+def test_market_intelligence_filters_undated_generic_pages_from_recent_events():
+    class MixedNewsProvider:
+        last_diagnostics = None
+
+        def search(self, ticker: str, *, query=None, limit=20):
+            return (
+                NewsEvidence(
+                    instrument_id=ticker,
+                    ticker=ticker,
+                    observation_timestamp=NOW,
+                    available_timestamp=NOW,
+                    source="searxng",
+                    ingested_at=NOW,
+                    source_record_id=f"{ticker}:generic",
+                    headline="Cotações de ações ao vivo",
+                    source_name="generic",
+                    url="https://example.test/cotacoes",
+                    published_date=None,
+                    published_at=None,
+                    event_type="NEWS",
+                    summary="Página genérica de cotações.",
+                ),
+                NewsEvidence(
+                    instrument_id=ticker,
+                    ticker=ticker,
+                    observation_timestamp=NOW,
+                    available_timestamp=NOW,
+                    source="searxng",
+                    ingested_at=NOW,
+                    source_record_id=f"{ticker}:dated",
+                    headline="Ibovespa reage a juros e fluxo estrangeiro",
+                    source_name="dated-news",
+                    url="https://example.test/noticia",
+                    published_date=NOW.date(),
+                    published_at=NOW,
+                    event_type="NEWS",
+                    summary="Notícia datada sobre o mercado.",
+                ),
+            )
+
+    service = WorkspaceIntelligenceContextService(
+        news_provider=MixedNewsProvider(),
+        fallback_news_provider=MixedNewsProvider(),
+        macro_repository=FakeMacroRepository(),
+        joao_memory_client=FakeJoaoMemory(),
+        joao_service=FailingJoao(),
+    )
+    result = service.build(
+        workspace="Market Intelligence",
+        tickers=(),
+        deterministic_result={},
+        include_joao=False,
+    )
+    events = result.deterministic_context["market_analysis"][
+        "market_overview_research"
+    ]
+    assert events
+    assert all(item["source_name"] != "generic" for item in events)
+    assert events[0]["source_name"] == "dated-news"
