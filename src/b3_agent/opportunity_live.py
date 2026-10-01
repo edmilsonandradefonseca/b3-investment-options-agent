@@ -181,11 +181,22 @@ class LiveOpportunityService:
                 "No SELL_PUT candidate satisfied the current marketability policy."
             )
 
+        selected_option_ids = {
+            item.options_analysis_ref
+            for item in ranked
+            if item.options_analysis_ref
+        }
+        bounded_marketability = {
+            option_id: details
+            for option_id, details in marketability.items()
+            if option_id in selected_option_ids
+        }
+
         return LiveOpportunityResult(
             ticker=snapshot.ticker,
             as_of=effective_as_of,
             opportunity_set=bounded,
-            option_marketability=marketability,
+            option_marketability=bounded_marketability,
             limitations=tuple(limitations),
         )
 
