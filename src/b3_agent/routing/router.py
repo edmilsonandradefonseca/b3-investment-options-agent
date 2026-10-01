@@ -46,12 +46,14 @@ class FastRouter:
         comparison_assets = meta.get("comparison_assets")
         strategy_a = str(meta.get("strategy_a") or "").strip()
         strategy_b = str(meta.get("strategy_b") or "").strip()
+        option_a = str(meta.get("option_a") or "").strip() or None
+        option_b = str(meta.get("option_b") or "").strip() or None
         if (
             workspace == "strategy lab"
             and isinstance(comparison_assets, (list, tuple))
             and len(comparison_assets) == 2
-            and self._strategy_supported(strategy_a)
-            and self._strategy_supported(strategy_b)
+            and self._strategy_supported(strategy_a, option_a)
+            and self._strategy_supported(strategy_b, option_b)
         ):
             return self._decision(
                 "strategy_comparison", "UC-04", "sync", "deterministic",
@@ -155,16 +157,20 @@ class FastRouter:
         )
 
     @staticmethod
-    def _strategy_supported(value: str) -> bool:
+    def _strategy_supported(value: str, option_id: str | None = None) -> bool:
         normalized = " ".join(value.casefold().split())
-        return normalized in {
+        if normalized in {
             "comprar ação",
             "comprar acao",
             "buy stock",
             "buy_stock",
             "manter",
             "hold",
-        }
+        }:
+            return True
+        if normalized in {"vender put", "sell put", "sell_put"}:
+            return bool(str(option_id or "").strip())
+        return False
 
     @staticmethod
     def _contains_any(text: str, values: tuple[str, ...]) -> bool:
