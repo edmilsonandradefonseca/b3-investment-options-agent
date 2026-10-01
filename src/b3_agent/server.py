@@ -46,6 +46,9 @@ from b3_agent.intelligence.observability import (
     local_intelligence_status,
     local_ticker_intelligence,
 )
+from b3_agent.intelligence.workspace_context import (
+    WorkspaceIntelligenceContextService,
+)
 
 
 class OrchestrateRequest(BaseModel):
@@ -132,6 +135,128 @@ def _dispatch_fast_route(request: OrchestratorRequest) -> OrchestratorResponse |
         task=request.task,
         ticker=request.ticker,
         context=request.context,
+    )
+
+
+def _workspace_name(request: OrchestratorRequest) -> str:
+    return str(
+        request.context.get("workspace")
+        or request.context.get("dashboard_page")
+        or ""
+    ).strip()
+
+
+def _workspace_tickers(request: OrchestratorRequest) -> tuple[str, ...]:
+    values: list[str] = []
+    for raw in (
+        request.ticker,
+        request.context.get("selected_ticker"),
+    ):
+        if isinstance(raw, str) and raw.strip():
+            values.append(raw.upper().strip())
+
+    comparison = request.context.get("comparison_assets")
+    if isinstance(comparison, (list, tuple)):
+        values.extend(
+            str(item).upper().strip()
+            for item in comparison
+            if str(item).strip()
+        )
+    return tuple(dict.fromkeys(values))
+
+
+def _uses_workspace_intelligence(request: OrchestratorRequest) -> bool:
+    return " ".join(_workspace_name(request).casefold().split()) in {
+        "opportunities",
+        "market intelligence",
+        "strategy lab",
+    }
+
+
+def _workspace_intelligence_response(
+    request: OrchestratorRequest,
+    *,
+    deterministic_response: OrchestratorResponse | None,
+) -> OrchestratorResponse:
+    workspace = _workspace_name(request)
+    context = WorkspaceIntelligenceContextService().build(
+        workspace=workspace,
+        tickers=_workspace_tickers(request),
+        deterministic_result=(
+            deterministic_response.result
+            if deterministic_response is not None
+            else None
+        ),
+        include_joao=True,
+    )
+
+    senior_context = {
+        **request.context,
+        **context.as_context(),
+    }
+    _configure_runtime()
+    senior = b3_orchestrator(
+        task=request.task,
+        ticker=request.ticker,
+        context=senior_context,
+    )
+
+    deterministic_result = (
+        deterministic_response.result
+        if deterministic_response is not None
+        else {}
+    )
+    merged_result = {
+        **deterministic_result,
+        **senior.result,
+        "workspace_intelligence": {
+            "workspace": context.workspace,
+            "as_of": context.as_of.isoformat(),
+            "tickers": list(context.tickers),
+            "derived_intelligence": context.derived_intelligence,
+            "limitations": list(context.limitations),
+            "source_refs": list(context.source_refs),
+        },
+    }
+    sources = tuple(
+        dict.fromkeys(
+            (
+                *(
+                    deterministic_response.sources
+                    if deterministic_response is not None
+                    else ()
+                ),
+                *context.source_refs,
+                *senior.sources,
+            )
+        )
+    )
+    audit = tuple(
+        [
+            *(
+                deterministic_response.audit
+                if deterministic_response is not None
+                else ()
+            ),
+            {
+                "event": "workspace_intelligence_composed",
+                "workspace": workspace,
+                "tickers": list(context.tickers),
+                "joao_status": (
+                    context.derived_intelligence.get(
+                        "joao_resolve", {}
+                    ).get("status")
+                ),
+            },
+            *senior.audit,
+        ]
+    )
+    return OrchestratorResponse(
+        status=senior.status,
+        result=merged_result,
+        sources=sources,
+        audit=audit,
+        error=senior.error,
     )
 
 
@@ -733,6 +858,13 @@ def orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
             context=request.context,
         )
         fast_response = _dispatch_fast_route(normalized)
+        if _uses_workspace_intelligence(normalized):
+            response = _workspace_intelligence_response(
+                normalized,
+                deterministic_response=fast_response,
+            )
+            return _response_to_model(response)
+
         if fast_response is not None:
             return _response_to_model(fast_response)
 
