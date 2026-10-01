@@ -215,6 +215,11 @@ def _workspace_intelligence_response(
         if isinstance(deterministic_context_payload, dict)
         else {}
     )
+    workspace_result = (
+        deterministic_context_payload.get("workspace_result", {})
+        if isinstance(deterministic_context_payload, dict)
+        else {}
+    )
     workspace_asset_evidence: dict[str, Any] = {}
     ticker_context = (
         market_context.get("tickers", {})
@@ -230,6 +235,7 @@ def _workspace_intelligence_response(
                 workspace_asset_evidence[str(ticker)] = pack
 
     merged_result = {
+        **workspace_result,
         **deterministic_result,
         **senior.result,
         **(
