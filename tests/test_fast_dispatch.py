@@ -6,6 +6,7 @@ import pytest
 
 import b3_agent.orchestration.fast_dispatch as fast_dispatch
 from b3_agent.orchestration.fast_dispatch import FastRouteDispatcher
+from b3_agent.schemas.market import StockMarketData
 from b3_agent.schemas.position import PortfolioContext, Position
 
 
@@ -212,3 +213,61 @@ def test_structured_sell_put_dispatches_explicit_contract_without_llm(monkeypatc
     assert response.status == "COMPLETED"
     assert response.result["fast_route"]["target"] == "strategy_engine"
     assert response.result["option_evidence"]["WEGEV500"]["current_quote"]["bid"] == 1.2
+
+
+def test_market_price_lookup_uses_current_oplab_quote(monkeypatch):
+    current = StockMarketData(
+        instrument_id="WEGE3",
+        ticker="WEGE3",
+        observation_timestamp=fast_dispatch.datetime(2026, 10, 1, 16, 50, tzinfo=fast_dispatch.timezone.utc),
+        available_timestamp=fast_dispatch.datetime(2026, 10, 1, 16, 50, tzinfo=fast_dispatch.timezone.utc),
+        source="oplab",
+        ingested_at=fast_dispatch.datetime(2026, 10, 1, 16, 50, tzinfo=fast_dispatch.timezone.utc),
+        source_record_id="WEGE3:current",
+        quality_flags=("current_quote",),
+        open=49.2,
+        high=49.6,
+        low=49.1,
+        close=49.4,
+        volume=2_000_000,
+        currency="BRL",
+    )
+    historical = StockMarketData(
+        instrument_id="WEGE3",
+        ticker="WEGE3",
+        observation_timestamp=fast_dispatch.datetime(2026, 10, 1, 3, 0, tzinfo=fast_dispatch.timezone.utc),
+        available_timestamp=fast_dispatch.datetime(2026, 10, 1, 4, 0, tzinfo=fast_dispatch.timezone.utc),
+        source="b3_cotahist",
+        ingested_at=fast_dispatch.datetime(2026, 10, 1, 4, 0, tzinfo=fast_dispatch.timezone.utc),
+        source_record_id="WEGE3:2026-10-01:test",
+        open=49.0,
+        high=49.5,
+        low=48.8,
+        close=49.39,
+        volume=1_000_000,
+        currency="BRL",
+    )
+
+    class Current:
+        def get_current_quote(self, ticker):
+            assert ticker == "WEGE3"
+            return current
+
+    class History:
+        def get_market_data(self, ticker, start, end):
+            assert ticker == "WEGE3"
+            return [historical]
+
+    class FakeLiveProviderService:
+        def __init__(self):
+            self.current_market_provider = Current()
+            self.market_provider = History()
+
+    monkeypatch.setattr(fast_dispatch, "LiveProviderService", FakeLiveProviderService)
+
+    response = FastRouteDispatcher().dispatch(task="qual o preço de WEGE3?")
+
+    assert response is not None
+    assert response.result["current_market_quote"]["close"] == 49.4
+    assert response.result["latest_daily_market_record"]["close"] == 49.39
+    assert response.result["as_of"] == current.observation_timestamp
