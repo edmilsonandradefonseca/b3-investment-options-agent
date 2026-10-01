@@ -174,3 +174,157 @@ def test_orchestrate_fast_route_skips_llm_runtime(monkeypatch) -> None:
     assert body["status"] == "COMPLETED"
     assert body["result"]["fast_route"]["target"] == "portfolio_engine"
     assert body["audit"][0]["event"] == "fast_router_dispatch"
+
+
+
+def test_strategy_lab_preserves_fast_facts_and_adds_senior_workspace_intelligence(monkeypatch) -> None:
+    calls: dict[str, object] = {}
+
+    class FakeContext:
+        workspace = "Strategy Lab"
+        as_of = __import__("datetime").datetime(2026, 10, 1, 17, 0, tzinfo=__import__("datetime").timezone.utc)
+        tickers = ("VALE3", "WEGE3")
+        derived_intelligence = {
+            "b3_local_evidence_analyst": {},
+            "joao_resolve": {
+                "status": "READY",
+                "authority": "derived_non_authoritative",
+                "summary": "João perspective",
+            },
+        }
+        source_refs = ("oplab", "bcb_sgs")
+        limitations = ()
+
+        def as_context(self):
+            return {
+                "workspace_intelligence": True,
+                "deterministic_context": {
+                    "workspace": "Strategy Lab",
+                    "workspace_result": {
+                        "fast_route": {"target": "strategy_engine"},
+                        "asset_evidence": {"VALE3": {}, "WEGE3": {}},
+                    },
+                },
+                "derived_intelligence": self.derived_intelligence,
+                "workspace_intelligence_meta": {
+                    "workspace": self.workspace,
+                    "tickers": list(self.tickers),
+                },
+            }
+
+    class FakeService:
+        def build(self, **kwargs):
+            calls["build"] = kwargs
+            return FakeContext()
+
+    monkeypatch.setattr(server, "WorkspaceIntelligenceContextService", FakeService)
+    monkeypatch.setattr(
+        server,
+        "_dispatch_fast_route",
+        lambda request: OrchestratorResponse(
+            status="COMPLETED",
+            result={
+                "fast_route": {"target": "strategy_engine", "use_case": "UC-04"},
+                "asset_evidence": {"VALE3": {"fact": 1}, "WEGE3": {"fact": 2}},
+            },
+            sources=("oplab",),
+            audit=({"event": "fast_router_dispatch"},),
+        ),
+    )
+    monkeypatch.setattr(server, "_configure_runtime", lambda: calls.setdefault("configured", True))
+
+    def fake_orchestrator(*, task, ticker, context):
+        calls["senior_context"] = context
+        return OrchestratorResponse(
+            status="PASS",
+            result={
+                "market_agent_analysis": {"summary": "market"},
+                "synthesis": {"summary": "senior synthesis"},
+                "proposal": {"action": "WAIT"},
+            },
+            sources=("qdrant:evidence",),
+            audit=({"event": "senior_reasoning"},),
+        )
+
+    monkeypatch.setattr(server, "b3_orchestrator", fake_orchestrator)
+
+    response = client.post(
+        "/orchestrate",
+        json={
+            "task": "Compare as alternativas com inteligência de mercado",
+            "context": {
+                "workspace": "Strategy Lab",
+                "comparison_assets": ["VALE3", "WEGE3"],
+                "strategy_a": "Comprar ação",
+                "strategy_b": "Comprar ação",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"]["fast_route"]["target"] == "strategy_engine"
+    assert body["result"]["asset_evidence"]["VALE3"]["fact"] == 1
+    assert body["result"]["synthesis"]["summary"] == "senior synthesis"
+    assert body["result"]["workspace_intelligence"]["derived_intelligence"]["joao_resolve"]["status"] == "READY"
+    senior_context = calls["senior_context"]
+    assert senior_context["deterministic_context"]["workspace_result"]["fast_route"]["target"] == "strategy_engine"
+    assert senior_context["derived_intelligence"]["joao_resolve"]["authority"] == "derived_non_authoritative"
+    assert any(item["event"] == "workspace_intelligence_composed" for item in body["audit"])
+
+
+def test_opportunities_workspace_runs_intelligence_even_without_fast_route(monkeypatch) -> None:
+    calls: dict[str, object] = {}
+
+    class FakeContext:
+        workspace = "Opportunities"
+        as_of = __import__("datetime").datetime(2026, 10, 1, 17, 0, tzinfo=__import__("datetime").timezone.utc)
+        tickers = ("WEGE3",)
+        derived_intelligence = {"joao_resolve": {"status": "READY"}}
+        source_refs = ("oplab",)
+        limitations = ("No canonical stock valuation supplied.",)
+
+        def as_context(self):
+            return {
+                "workspace_intelligence": True,
+                "deterministic_context": {
+                    "workspace": "Opportunities",
+                    "workspace_result": {},
+                },
+                "derived_intelligence": self.derived_intelligence,
+            }
+
+    class FakeService:
+        def build(self, **kwargs):
+            calls["build"] = kwargs
+            return FakeContext()
+
+    monkeypatch.setattr(server, "WorkspaceIntelligenceContextService", FakeService)
+    monkeypatch.setattr(server, "_dispatch_fast_route", lambda request: None)
+    monkeypatch.setattr(server, "_configure_runtime", lambda: None)
+    monkeypatch.setattr(
+        server,
+        "b3_orchestrator",
+        lambda **kwargs: OrchestratorResponse(
+            status="PASS",
+            result={"synthesis": {"summary": "Opportunity intelligence"}},
+            sources=("qdrant:evidence",),
+        ),
+    )
+
+    response = client.post(
+        "/orchestrate",
+        json={
+            "task": "UC-03 analise WEGE3",
+            "ticker": "WEGE3",
+            "context": {"workspace": "Opportunities", "selected_ticker": "WEGE3"},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["result"]["synthesis"]["summary"] == "Opportunity intelligence"
+    assert body["result"]["workspace_intelligence"]["workspace"] == "Opportunities"
+    assert body["result"]["workspace_intelligence"]["limitations"] == [
+        "No canonical stock valuation supplied."
+    ]
