@@ -6,6 +6,8 @@ Reviewed integration HEAD `99d860a524cdc6b6cf4135695bfb5973f4c6e91a`, PR #66 ope
 
 The review environment is **not the Ubuntu runtime**: `/opt/b3-investment-options-agent` is absent. No actual SQLite rows have been inspected. All production counts, date coverage, source completeness and historical feature availability remain **UNKNOWN**, not zero or absent. No financial implementation or persistence change is justified by fixture data alone.
 
+The statement above records the initial review boundary. The user subsequently supplied real diagnostic output; the updated evidence is recorded below.
+
 ## Pre-implementation matrix
 
 Classification is per capability, not a claim of full UC acceptance.
@@ -67,3 +69,31 @@ Runtime results are a prerequisite for Block B, explicitly required by the user.
 Compare one-week versus one-month PUTs using the same observed chain/as-of and explicit portfolio/capital objective. Resolve actual listed expiries rather than inventing a date. Candidate generation and feasible strike selection remain deterministic. Include bid-based premium, spread/volume/OI, effective acquisition price, assignment capital, DTE, downside/stress, events within each horizon, IV/Greeks where available, personal comparable outcomes and confidence/coverage. Annualized premium alone cannot select the winner; missing liquidity/risk inputs keep ranking deferred.
 
 Keep three distinct quantities: observed personal assignment frequency; model-estimated expiry ITM probability (with model, assumptions, timestamp and calibration limitations); early exercise/assignment risk. Delta is a sensitivity, not an authoritative assignment probability. A European risk-neutral expiry estimate is not a calibrated real-world probability or a full American early-exercise model. Missing validated probability inputs remain UNKNOWN. A best strike is conditional on an explicit objective and constraints; show trade-offs/Pareto alternatives where no defensible single winner exists. Reuse the same comparison contract for covered CALL and stock alternatives, retaining human decision authority.
+
+## Real diagnostic received — 2026-10-01
+
+The user ran the diagnostic from commit `80c3fd9` under sudo and supplied its output. This is actual runtime evidence, not fixtures:
+
+| Inspected source | Observed result |
+|---|---|
+| `/opt/b3-runtime/data/options.sqlite3` | 1 dated/priced option execution, dated 2026-05-04, positive quantity; no PETR-prefixed symbols |
+| `/opt/b3-investment-options-agent/data/options.sqlite3` | Same execution identity and fields as the runtime ledger; not a second independent operation |
+| `/opt/b3-runtime/data/b3_agent.db/transactions` | 0 rows |
+| `/opt/b3-runtime/data/source_manifest.sqlite3` | File absent |
+| Direct `imports/brokerage_notes/*.pdf` in examined directories | 0 files |
+
+These observations do not establish lost data, failed ingestion, full-host absence of notes, or complete history. The first diagnostic inspected only direct database files in selected directories; sudo changed the home candidate to `/root`. It did not verify the data directory in the running API process. Existing note-batch code archives PDFs and upserts a manifest, so the observed state differs from what a successful current batch at that path would normally produce; root cause remains UNKNOWN.
+
+Matrix update: actual schemas/sign convention and the one row are now verified for these paths. Full personal history, PIT features and source coverage remain **missing real data in the inspected stores**, with storage-location/process mismatch still unexcluded. UC-07/08/09 wiring gaps remain independently confirmed in code. Do not compute assignment rates, covered-call outcomes or train learnings from this single unmatched execution. It may itself be a closing trade; it is not proof of an opening position.
+
+The next coherent diagnostic block extends the existing script with `--discover --compact`:
+
+- inspect the known runtime/service process tree and admit only a B3 uvicorn process;
+- extract only B3 path variables, never credentials or unrestricted command/environment output;
+- prefer the observed API data directory over configuration guesses;
+- find the invoking user's project home under sudo;
+- search bounded project/runtime/backup subdirectories for existing databases and PDF/ZIP/XLSX candidates, without parsing/importing/moving them;
+- report truncation/read errors and preserve UNKNOWN coverage;
+- replace misleading `CANONICAL_LEDGER_READY` with `CANONICAL_LEDGER_HAS_EXECUTIONS`, with explicit `history_coverage=UNKNOWN` and `lifecycle_acceptance=NOT_VALIDATED`.
+
+No new canonical storage, model calls or financial inference is introduced. Source files and alternative databases must be located/reconciled before ingestion recovery or meaningful personal-outcome learning; no automatic copying from an alternative ledger is authorized by discovery alone.

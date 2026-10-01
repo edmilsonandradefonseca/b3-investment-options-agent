@@ -91,6 +91,51 @@ class HistoricalLedgerDiagnosticTests(unittest.TestCase):
         self.assertIsNone(result["canonical_uc07_usable_rows"])
         self.assertFalse(canonical.exists())
 
+    def test_process_inventory_reads_only_b3_paths_not_secrets(self):
+        process = self.root / "42"
+        process.mkdir()
+        process.joinpath("cmdline").write_bytes(b"python\0-m\0uvicorn\0b3_agent.server:app\0")
+        process.joinpath("environ").write_bytes(b"B3_AGENT_DATA_DIR=/opt/actual/data\0API_KEY=DO_NOT_PRINT\0")
+        result = diagnostic._process_paths(42, self.root)
+        self.assertEqual(result["paths"], {"B3_AGENT_DATA_DIR": "/opt/actual/data"})
+        self.assertNotIn("DO_NOT_PRINT", str(result))
+        process.joinpath("cmdline").write_bytes(b"python\0another_application\0")
+        self.assertIsNone(diagnostic._process_paths(42, self.root))
+
+    def test_discovery_finds_nested_sources_and_skips_dependencies_and_links(self):
+        project = self.root / "project"
+        archive = project / "backups" / "older"
+        archive.mkdir(parents=True)
+        (archive / "history.sqlite3").touch()
+        (archive / "notes.zip").touch()
+        dependencies = project / ".venv"
+        dependencies.mkdir()
+        (dependencies / "fixture.db").touch()
+        outside = self.root / "outside"
+        outside.mkdir()
+        (outside / "not_in_scope.db").touch()
+        (project / "linked").symlink_to(outside, target_is_directory=True)
+        result = diagnostic.discover_files((project,))
+        self.assertEqual(result["databases"], [str(archive / "history.sqlite3")])
+        self.assertEqual(result["source_file_candidates"], [str(archive / "notes.zip")])
+        self.assertFalse(result["truncated"])
+
+    def test_sudo_search_uses_invoking_user_home(self):
+        from types import SimpleNamespace
+        with patch.dict(os.environ, {"SUDO_USER": "edmilson"}), patch.object(diagnostic.pwd, "getpwnam", return_value=SimpleNamespace(pw_dir="/home/edmilson")):
+            self.assertEqual(diagnostic._invoking_home(), Path("/home/edmilson"))
+
+    def test_one_execution_does_not_mean_historical_coverage_is_ready(self):
+        with sqlite3.connect(self.root / "options.sqlite3") as conn:
+            conn.execute("CREATE TABLE option_transactions (quantity REAL, average_cost REAL, as_of TEXT)")
+            conn.execute("INSERT INTO option_transactions VALUES (2500, 0.68, '2026-05-04')")
+        with patch.object(diagnostic, "_candidate_data_dirs", return_value=(self.root,)):
+            report = diagnostic.build_report(self.root)
+        self.assertEqual(report["diagnosis"], "CANONICAL_LEDGER_HAS_EXECUTIONS")
+        self.assertEqual(report["history_coverage"], "UNKNOWN")
+        self.assertEqual(report["lifecycle_acceptance"], "NOT_VALIDATED")
+        self.assertEqual(report["canonical_uc07_usable_rows"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
