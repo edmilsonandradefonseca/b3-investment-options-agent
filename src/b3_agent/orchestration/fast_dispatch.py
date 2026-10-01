@@ -188,27 +188,40 @@ class FastRouteDispatcher:
             raise ValueError("market lookup requires an explicit B3 ticker")
 
         service = LiveProviderService()
+        current = service.current_market_provider.get_current_quote(ticker)
         end = datetime.now(timezone.utc).date()
         start = end - timedelta(days=14)
         records = tuple(service.market_provider.get_market_data(ticker, start, end))
-        if not records:
-            raise RuntimeError(f"No market data available for {ticker}")
-
-        latest = max(records, key=lambda item: item.observation_timestamp)
+        history_latest = (
+            max(records, key=lambda item: item.observation_timestamp)
+            if records
+            else None
+        )
+        sources = tuple(
+            dict.fromkeys(
+                (
+                    current.source,
+                    *(item.source for item in records),
+                )
+            )
+        )
         return self._response(
             decision,
             status="COMPLETED",
             result={
                 "ticker": ticker,
-                "as_of": latest.observation_timestamp,
-                "quality_status": "VALIDATED",
-                "latest_daily_market_record": asdict(latest),
+                "as_of": current.observation_timestamp,
+                "quality_status": current.quality_status,
+                "current_market_quote": asdict(current),
+                "latest_daily_market_record": (
+                    asdict(history_latest)
+                    if history_latest is not None
+                    else None
+                ),
                 "history_count": len(records),
-                "limitations": [
-                    "This deterministic route returns the latest available daily record; it does not infer an intraday quote."
-                ],
+                "limitations": [],
             },
-            sources=tuple(dict.fromkeys(item.source for item in records)),
+            sources=sources,
         )
 
     def _strategy_comparison(
