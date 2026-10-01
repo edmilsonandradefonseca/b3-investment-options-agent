@@ -1,3 +1,4 @@
+import pytest
 from datetime import datetime
 from unittest.mock import patch
 
@@ -101,6 +102,6 @@ def test_oplab_current_option_quote_uses_provider_time_and_ignores_zero_prices(m
     assert quote.bid == 1.20
     assert quote.ask == 1.40
     assert quote.last == 1.30
-    assert quote.mid == 1.30
+    assert quote.mid == pytest.approx(1.30)
     assert quote.source == "oplab"
     assert quote.observation_timestamp.timestamp() == 1790823600
