@@ -40,6 +40,29 @@ def main() -> None:
     if not runtime.get("brapi_token_configured"):
         raise SystemExit("FAIL BRAPI_TOKEN is not configured in runtime")
 
+    current_wege = _json_request("/market/current/WEGE3")
+    current_quote = current_wege.get("quote") or {}
+    if current_wege.get("source") != "oplab":
+        raise SystemExit(
+            f"FAIL WEGE3 current stock quote source={current_wege.get('source')}"
+        )
+    if not isinstance(current_quote.get("close"), (int, float)):
+        raise SystemExit("FAIL WEGE3 current stock price is unavailable")
+
+    current_puts = _json_request(
+        "/options/current/VALE3?option_type=PUT&limit=5"
+    )
+    option_rows = current_puts.get("options") or []
+    if current_puts.get("source") != "oplab" or not option_rows:
+        raise SystemExit("FAIL current OPLAB PUT quotes are unavailable")
+    first_option_quote = option_rows[0].get("quote") or {}
+    if not any(
+        isinstance(first_option_quote.get(field), (int, float))
+        and first_option_quote.get(field) > 0
+        for field in ("bid", "ask", "last", "mid")
+    ):
+        raise SystemExit("FAIL current option quote has no usable market price")
+
     response = _json_request(
         "/orchestrate",
         payload={
@@ -91,7 +114,8 @@ def main() -> None:
     for ticker in ("VALE3", "WEGE3"):
         pack = evidence[ticker]
         market = pack.get("market") or {}
-        latest = market.get("latest") or {}
+        current = market.get("current_quote") or {}
+        history_latest = market.get("history_latest") or market.get("latest") or {}
         fundamentals = pack.get("fundamentals") or {}
         metric_count = int(fundamentals.get("metric_count") or 0)
         if metric_count < 1:
@@ -99,8 +123,9 @@ def main() -> None:
                 f"FAIL {ticker} returned zero fundamental metrics"
             )
         summary[ticker] = {
-            "market_source": latest.get("source"),
-            "latest_close": latest.get("close"),
+            "current_price_source": current.get("source"),
+            "current_price": current.get("close"),
+            "historical_close": history_latest.get("close"),
             "history_count": market.get("history_count"),
             "fundamental_metric_count": metric_count,
             "quality_status": pack.get("quality_status"),
@@ -116,6 +141,22 @@ def main() -> None:
     print(json.dumps({
         "route": fast_route.get("target"),
         "quality_status": result.get("quality_status"),
+        "current_stock_quote": {
+            "ticker": "WEGE3",
+            "source": current_wege.get("source"),
+            "price": current_quote.get("close"),
+            "as_of": current_wege.get("as_of"),
+        },
+        "current_option_quote": {
+            "underlying": "VALE3",
+            "option_id": (option_rows[0].get("contract") or {}).get("option_id"),
+            "bid": first_option_quote.get("bid"),
+            "ask": first_option_quote.get("ask"),
+            "last": first_option_quote.get("last"),
+            "mid": first_option_quote.get("mid"),
+            "as_of": first_option_quote.get("observation_timestamp"),
+            "source": first_option_quote.get("source"),
+        },
         "providers": summary,
         "limitations": limitations,
     }, indent=2, ensure_ascii=False))
