@@ -176,7 +176,8 @@ def test_live_provider_does_not_substitute_history_when_current_quote_fails():
     assert result.options_analysis.assumptions["current_stock_price_source"] == "unavailable"
     assert "current_stock_quote_error" in result.options_analysis.assumptions
     assert result.options_analysis.calls == ()
+    assert result.options_analysis.assumptions is not None
     assert any(
         item == "missing_current_price:PETRJ320"
-        for item in result.options_analysis.rejected_quotes
+        for item in result.options_analysis.assumptions["rejected_quotes"]
     )
