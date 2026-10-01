@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from b3_agent.schemas.fundamental import StockFundamental
 from b3_agent.schemas.market import StockMarketData
+from b3_agent.schemas.option import OptionContract, OptionQuote
 from b3_agent.schemas.position import PortfolioContext, Position
 from b3_agent.strategy_live import LiveStrategyComparisonService, StrategyEvidenceService
 
@@ -57,6 +58,39 @@ class FakeCurrentQuoteProvider:
             close=price,
             volume=2_000_000,
         )
+
+
+class FakeOptionsProvider:
+    name = "oplab"
+
+    def get_snapshot(self, ticker, as_of):
+        contract = OptionContract(
+            option_id="WEGEV500",
+            underlying_id="WEGE3",
+            underlying_ticker="WEGE3",
+            option_ticker="WEGEV500",
+            option_type="PUT",
+            strike=50.0,
+            expiration_date=date(2026, 11, 20),
+            contract_multiplier=100.0,
+        )
+        quote = OptionQuote(
+            instrument_id="WEGEV500",
+            ticker="WEGE3",
+            observation_timestamp=as_of,
+            available_timestamp=as_of,
+            source=self.name,
+            ingested_at=as_of,
+            source_record_id="WEGE3:WEGEV500:current",
+            option_id="WEGEV500",
+            bid=1.20,
+            ask=1.40,
+            last=1.30,
+            mid=1.30,
+            volume=1500,
+            open_interest=3000,
+        )
+        return [contract], [quote]
 
 
 class FakeFundamentalsProvider:
@@ -134,12 +168,16 @@ def test_live_strategy_comparison_builds_two_asset_evidence_packs_without_rankin
     assert "PETR4" not in str(result["asset_evidence"])
 
 
-def test_strategy_service_rejects_unsupported_sell_put_until_builder_exists():
+def test_sell_put_requires_explicit_contract():
     evidence = StrategyEvidenceService(
         market_provider=FakeMarketProvider(),
         fundamentals_provider=FakeFundamentalsProvider(),
+        current_quote_provider=FakeCurrentQuoteProvider(),
     )
-    service = LiveStrategyComparisonService(evidence_service=evidence)
+    service = LiveStrategyComparisonService(
+        evidence_service=evidence,
+        options_provider=FakeOptionsProvider(),
+    )
 
     try:
         service.compare(
@@ -149,6 +187,37 @@ def test_strategy_service_rejects_unsupported_sell_put_until_builder_exists():
             as_of=datetime(2026, 10, 1, tzinfo=timezone.utc),
         )
     except ValueError as exc:
-        assert "supports BUY_STOCK and HOLD" in str(exc)
+        assert "explicit current OPLAB option identifier" in str(exc)
     else:
-        raise AssertionError("unsupported strategy must not be silently inferred")
+        raise AssertionError("SELL_PUT must require an explicit contract")
+
+
+def test_sell_put_uses_current_oplab_bid_and_one_cash_secured_contract():
+    evidence = StrategyEvidenceService(
+        market_provider=FakeMarketProvider(),
+        fundamentals_provider=FakeFundamentalsProvider(),
+        current_quote_provider=FakeCurrentQuoteProvider(),
+    )
+    service = LiveStrategyComparisonService(
+        evidence_service=evidence,
+        options_provider=FakeOptionsProvider(),
+    )
+    as_of = datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc)
+
+    result = service.compare(
+        assets=("VALE3", "WEGE3"),
+        strategies=("Comprar ação", "Vender PUT"),
+        option_ids=(None, "WEGEV500"),
+        amount=50_000.0,
+        portfolio=_portfolio(),
+        as_of=as_of,
+    )
+
+    alternative = result["strategy_comparison"]["alternatives"][1]
+    assert alternative["action_type"] == "SELL_PUT"
+    assert alternative["subject_id"] == "WEGEV500"
+    assert alternative["capital_required"] == 5000.0
+    assert alternative["max_loss"] == 4880.0
+    assert alternative["assumptions"]["premium_basis"] == "current_bid"
+    assert alternative["assumptions"]["current_option_quote"]["bid"] == 1.20
+    assert result["option_evidence"]["WEGEV500"]["current_quote"]["last"] == 1.30
