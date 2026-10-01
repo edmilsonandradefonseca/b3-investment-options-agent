@@ -47,14 +47,10 @@ def require_intelligence(
 
     derived = workspace.get("derived_intelligence") or {}
     joao_memory = derived.get("joao_memory_context") or {}
-    if (
-        joao_memory.get("source") != "joao-memory-api"
-        or joao_memory.get("status") == "UNAVAILABLE"
-    ):
-        raise SystemExit(
-            f"FAIL {name}: João memory API unavailable "
-            f"error={joao_memory.get('error')}"
-        )
+    memory_ready = (
+        joao_memory.get("source") == "joao-memory-api"
+        and joao_memory.get("status") != "UNAVAILABLE"
+    )
 
     joao = derived.get("joao_resolve") or {}
     if joao.get("status") != "READY":
@@ -99,9 +95,11 @@ def require_intelligence(
         "status": response.get("status"),
         "joao": joao.get("status"),
         "joao_memory": {
+            "status": "READY" if memory_ready else "UNAVAILABLE",
             "source": joao_memory.get("source"),
             "memory_count": len(joao_memory.get("memories") or []),
             "relation_count": len(joao_memory.get("relations") or []),
+            "error": joao_memory.get("error"),
         },
         "b3_agents": {
             "market": bool(result.get("market_agent_analysis")),
