@@ -277,6 +277,16 @@ class LiveStrategyComparisonService:
         "covered call": "SELL_CALL",
         "sell call": "SELL_CALL",
         "sell_call": "SELL_CALL",
+        "vender ação": "SELL_STOCK",
+        "vender acao": "SELL_STOCK",
+        "vender/reduzir ação": "SELL_STOCK",
+        "vender/reduzir acao": "SELL_STOCK",
+        "reduzir ação": "SELL_STOCK",
+        "reduzir acao": "SELL_STOCK",
+        "sell stock": "SELL_STOCK",
+        "sell_stock": "SELL_STOCK",
+        "reduce stock": "SELL_STOCK",
+        "reduce_stock": "SELL_STOCK",
     }
 
     def __init__(
@@ -333,7 +343,7 @@ class LiveStrategyComparisonService:
         )
         if any(value is None for value in normalized_strategies):
             raise ValueError(
-                "live deterministic comparison supports BUY_STOCK, HOLD, SELL_PUT and covered SELL_CALL"
+                "live deterministic comparison supports BUY_STOCK, HOLD, SELL_STOCK, SELL_PUT and covered SELL_CALL"
             )
         if not self.supports(strategies, option_ids=option_ids):
             raise ValueError(
@@ -385,6 +395,52 @@ class LiveStrategyComparisonService:
             subject_id = pack.ticker
             label = f"{original} · {pack.ticker}"
             alternative_sources = list(pack.source_refs)
+
+            if normalized_strategy == "SELL_STOCK":
+                if amount is None or amount <= 0:
+                    raise ValueError(
+                        "SELL_STOCK requires an explicit positive comparison amount"
+                    )
+                current_quote = pack.market.get("current_quote")
+                current_price = (
+                    float(current_quote.get("close"))
+                    if isinstance(current_quote, dict)
+                    and isinstance(current_quote.get("close"), (int, float))
+                    else None
+                )
+                if current_price is None or current_price <= 0:
+                    raise ValueError(
+                        f"{pack.ticker} current OPLAB price is required for SELL_STOCK"
+                    )
+                stock_quantity = float(pack.portfolio.get("stock_quantity") or 0.0)
+                if stock_quantity <= 0:
+                    raise ValueError(
+                        f"SELL_STOCK requires an existing long {pack.ticker} position"
+                    )
+                position_value = current_price * stock_quantity
+                if amount > position_value + 1e-9:
+                    raise ValueError(
+                        f"SELL_STOCK amount {amount:.2f} exceeds current long "
+                        f"position value {position_value:.2f} for {pack.ticker}"
+                    )
+                theoretical_shares_reduced = amount / current_price
+                capital_required = 0.0
+                assumptions.update({
+                    "capital_released": amount,
+                    "notional_reduction": amount,
+                    "current_price_basis": "current_oplab_quote",
+                    "stock_quantity_before": stock_quantity,
+                    "theoretical_shares_reduced": theoretical_shares_reduced,
+                    "stock_quantity_after_theoretical": (
+                        stock_quantity - theoretical_shares_reduced
+                    ),
+                    "position_value_before": position_value,
+                    "position_value_after_theoretical": (
+                        position_value - amount
+                    ),
+                    "execution_quantity": "not_inferred",
+                    "taxes_and_fees": "not_inferred",
+                })
 
             if normalized_strategy in {"SELL_PUT", "SELL_CALL"}:
                 normalized_option = str(option_id or "").upper().strip()
@@ -590,6 +646,11 @@ class LiveStrategyComparisonService:
             for pack in packs
             for item in pack.limitations
         ]
+        if any(strategy == "SELL_STOCK" for strategy in normalized_strategies):
+            limitations.append(
+                "SELL_STOCK is a notional what-if using the current OPLAB price; "
+                "execution quantity, taxes, fees and slippage are not inferred."
+            )
         if any(
             strategy in {"SELL_PUT", "SELL_CALL"}
             for strategy in normalized_strategies
