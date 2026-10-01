@@ -77,3 +77,31 @@ def test_complex_intent_wins_over_dashboard_metadata():
 def test_estado_atual_da_carteira_routes_without_dashboard_metadata():
     d = FastRouter().route("Resuma o estado atual da carteira")
     assert d.target == RouteTarget.PORTFOLIO_ENGINE
+
+
+def test_structured_strategy_lab_stock_comparison_routes_deterministically():
+    d = FastRouter().route(
+        "UC-04: compare Comprar ação em VALE3 e Comprar ação em WEGE3",
+        metadata={
+            "workspace": "Strategy Lab",
+            "comparison_assets": ["VALE3", "WEGE3"],
+            "strategy_a": "Comprar ação",
+            "strategy_b": "Comprar ação",
+        },
+    )
+    assert d.target == RouteTarget.STRATEGY_ENGINE
+    assert d.use_case == "UC-04"
+    assert d.match == MatchClass.MATCH_EXACT
+
+
+def test_structured_strategy_lab_sell_put_still_escalates_until_deterministic_builder_exists():
+    d = FastRouter().route(
+        "UC-04: compare Comprar ação em VALE3 e Vender PUT em WEGE3",
+        metadata={
+            "workspace": "Strategy Lab",
+            "comparison_assets": ["VALE3", "WEGE3"],
+            "strategy_a": "Comprar ação",
+            "strategy_b": "Vender PUT",
+        },
+    )
+    assert d.target == RouteTarget.OPENCLAW
