@@ -383,7 +383,15 @@ class WorkspaceIntelligenceContextService:
                     query=ticker_query,
                     limit=news_limit,
                 )
-                research = ResearchEventService().build(records, as_of=as_of)
+                # Interactive collection happens after the workspace request starts.
+                # Use a post-fetch cutoff so evidence ingested milliseconds after the
+                # initial workspace timestamp is not incorrectly classified as future.
+                # Historical/PIT replay paths still pass their explicit historical
+                # as_of directly to ResearchEventService.
+                research = ResearchEventService().build(
+                    records,
+                    as_of=datetime.now(timezone.utc),
+                )
                 ticker_events = [asdict(item) for item in research.events]
                 source_refs.extend(research.source_refs)
             except (OSError, RuntimeError, ValueError) as exc:
@@ -398,7 +406,7 @@ class WorkspaceIntelligenceContextService:
                     )
                     fallback_research = ResearchEventService().build(
                         fallback_records,
-                        as_of=as_of,
+                        as_of=datetime.now(timezone.utc),
                     )
                     ticker_events = [
                         asdict(item) for item in fallback_research.events
@@ -484,7 +492,7 @@ class WorkspaceIntelligenceContextService:
                         })
                     overview = ResearchEventService().build(
                         overview_records,
-                        as_of=as_of,
+                        as_of=datetime.now(timezone.utc),
                     )
                     for item in overview.events:
                         if item.source_ref in seen_refs:
@@ -513,7 +521,7 @@ class WorkspaceIntelligenceContextService:
                     )
                     fallback_snapshot = ResearchEventService().build(
                         fallback_records,
-                        as_of=as_of,
+                        as_of=datetime.now(timezone.utc),
                     )
                     market_overview_research = [
                         asdict(item)
