@@ -114,6 +114,20 @@ class StrategyEvidenceService:
             limitations.append(
                 f"Current quote unavailable for {normalized}: {exc}"
             )
+        previous_completed = None
+        if current_quote is not None:
+            current_session_date = current_quote.observation_timestamp.date()
+            completed_rows = [
+                row
+                for row in market_records
+                if row.observation_timestamp.date() < current_session_date
+            ]
+            if completed_rows:
+                previous_completed = max(
+                    completed_rows,
+                    key=lambda item: item.observation_timestamp,
+                )
+
         fundamental_rows = ()
         try:
             fundamental_rows = tuple(
@@ -200,6 +214,11 @@ class StrategyEvidenceService:
                 ),
                 "history_count": len(market_records),
                 "history_latest": asdict(latest),
+                "previous_completed_close": (
+                    asdict(previous_completed)
+                    if previous_completed is not None
+                    else None
+                ),
                 # Backward-compatible alias; new consumers must use
                 # current_quote for the actual current stock price.
                 "latest": asdict(latest),
@@ -431,6 +450,39 @@ class LiveStrategyComparisonService:
                     "current_option_quote": asdict(quote),
                     "put_analysis": asdict(put),
                 })
+                spread_abs = (
+                    quote.ask - quote.bid
+                    if quote.bid is not None
+                    and quote.ask is not None
+                    and quote.ask >= quote.bid
+                    else None
+                )
+                spread_pct_of_mid = (
+                    spread_abs / quote.mid
+                    if spread_abs is not None
+                    and quote.mid is not None
+                    and quote.mid > 0
+                    else None
+                )
+                marketability = {
+                    "executable_for_sell": quote.bid is not None and quote.bid > 0,
+                    "two_sided_market": (
+                        quote.bid is not None
+                        and quote.bid > 0
+                        and quote.ask is not None
+                        and quote.ask > 0
+                    ),
+                    "volume_reported": quote.volume is not None and quote.volume > 0,
+                    "open_interest_reported": (
+                        quote.open_interest is not None
+                        and quote.open_interest > 0
+                    ),
+                    "spread_abs": spread_abs,
+                    "spread_pct_of_mid": spread_pct_of_mid,
+                    "liquidity_score": None,
+                    "liquidity_assessment": "not_scored_without_versioned_policy",
+                }
+                assumptions["option_marketability"] = marketability
                 option_evidence[contract.option_id] = {
                     "underlying_ticker": pack.ticker,
                     "contract": asdict(contract),
@@ -438,6 +490,7 @@ class LiveStrategyComparisonService:
                     "put_analysis": asdict(put),
                     "premium_basis": "current_bid",
                     "contract_count": 1,
+                    "marketability": marketability,
                 }
                 alternative_sources.append(quote.source)
                 all_sources.append(quote.source)
@@ -481,6 +534,10 @@ class LiveStrategyComparisonService:
             limitations.append(
                 "SELL_PUT uses one cash-secured contract and the current OPLAB bid; "
                 "no option contract or execution price is inferred."
+            )
+            limitations.append(
+                "Option marketability facts are reported directly from OPLAB; "
+                "liquidity is not scored until a versioned liquidity policy is defined."
             )
         limitations.extend([
             "Expected return is not inferred from historical returns.",
