@@ -47,8 +47,22 @@ def post_orchestrate(payload: dict) -> tuple[dict, float]:
         method="POST",
     )
     started = time.monotonic()
-    with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
-        body = json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")
+        try:
+            detail = json.loads(raw)
+        except json.JSONDecodeError:
+            detail = raw
+        raise SystemExit(
+            f"FAIL orchestrate HTTP {exc.code}: {detail}"
+        ) from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise SystemExit(
+            f"FAIL orchestrate transport: {type(exc).__name__}: {exc}"
+        ) from exc
     elapsed = time.monotonic() - started
     if not isinstance(body, dict):
         raise RuntimeError("orchestrate returned a non-object response")
