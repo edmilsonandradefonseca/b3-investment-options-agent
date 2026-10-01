@@ -166,6 +166,16 @@ class FastRouter:
             "buy_stock",
             "manter",
             "hold",
+            "vender ação",
+            "vender acao",
+            "vender/reduzir ação",
+            "vender/reduzir acao",
+            "reduzir ação",
+            "reduzir acao",
+            "sell stock",
+            "sell_stock",
+            "reduce stock",
+            "reduce_stock",
         }:
             return True
         if normalized in {
