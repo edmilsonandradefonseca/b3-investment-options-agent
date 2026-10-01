@@ -50,18 +50,29 @@ def main() -> None:
         raise SystemExit("FAIL WEGE3 current stock price is unavailable")
 
     current_puts = _json_request(
-        "/options/current/VALE3?option_type=PUT&limit=5"
+        "/options/current/WEGE3?option_type=PUT&limit=500"
     )
     option_rows = current_puts.get("options") or []
     if current_puts.get("source") != "oplab" or not option_rows:
         raise SystemExit("FAIL current OPLAB PUT quotes are unavailable")
-    first_option_quote = option_rows[0].get("quote") or {}
-    if not any(
-        isinstance(first_option_quote.get(field), (int, float))
-        and first_option_quote.get(field) > 0
-        for field in ("bid", "ask", "last", "mid")
-    ):
-        raise SystemExit("FAIL current option quote has no usable market price")
+    executable_row = next(
+        (
+            row
+            for row in option_rows
+            if isinstance((row.get("quote") or {}).get("bid"), (int, float))
+            and (row.get("quote") or {}).get("bid") > 0
+        ),
+        None,
+    )
+    if executable_row is None:
+        raise SystemExit(
+            "FAIL no current WEGE3 PUT has executable bid > 0"
+        )
+    executable_contract = executable_row.get("contract") or {}
+    executable_quote = executable_row.get("quote") or {}
+    option_id = str(executable_contract.get("option_id") or "").upper().strip()
+    if not option_id:
+        raise SystemExit("FAIL executable PUT is missing option_id")
 
     response = _json_request(
         "/orchestrate",
@@ -137,6 +148,51 @@ def main() -> None:
             "FAIL unrelated PETR4 evidence leaked into VALE3/WEGE3 comparison"
         )
 
+    sell_put_response = _json_request(
+        "/orchestrate",
+        payload={
+            "task": (
+                f"UC-04: compare Comprar ação em VALE3 e Vender PUT "
+                f"{option_id} em WEGE3. Use cotações atuais OPLAB."
+            ),
+            "ticker": None,
+            "context": {
+                "workspace": "Strategy Lab",
+                "selected_ticker": None,
+                "comparison_assets": ["VALE3", "WEGE3"],
+                "strategy_a": "Comprar ação",
+                "strategy_b": "Vender PUT",
+                "option_a": None,
+                "option_b": option_id,
+                "comparison_amount": 50000,
+            },
+        },
+    )
+    if sell_put_response.get("status") != "COMPLETED":
+        raise SystemExit(
+            f"FAIL SELL_PUT orchestrate status={sell_put_response.get('status')} "
+            f"error={sell_put_response.get('error')}"
+        )
+    sell_put_result = sell_put_response.get("result") or {}
+    sell_put_route = sell_put_result.get("fast_route") or {}
+    if sell_put_route.get("target") != "strategy_engine":
+        raise SystemExit(
+            f"FAIL SELL_PUT expected strategy_engine, "
+            f"got {sell_put_route.get('target')}"
+        )
+    option_evidence = sell_put_result.get("option_evidence") or {}
+    selected = option_evidence.get(option_id) or {}
+    selected_quote = selected.get("current_quote") or {}
+    if not (
+        selected.get("premium_basis") == "current_bid"
+        and isinstance(selected_quote.get("bid"), (int, float))
+        and selected_quote.get("bid") > 0
+        and selected_quote.get("source") == "oplab"
+    ):
+        raise SystemExit(
+            "FAIL SELL_PUT did not use the current executable OPLAB bid"
+        )
+
     print("PASS UC-04 REAL PROVIDERS")
     print(json.dumps({
         "route": fast_route.get("target"),
@@ -148,14 +204,21 @@ def main() -> None:
             "as_of": current_wege.get("as_of"),
         },
         "current_option_quote": {
-            "underlying": "VALE3",
-            "option_id": (option_rows[0].get("contract") or {}).get("option_id"),
-            "bid": first_option_quote.get("bid"),
-            "ask": first_option_quote.get("ask"),
-            "last": first_option_quote.get("last"),
-            "mid": first_option_quote.get("mid"),
-            "as_of": first_option_quote.get("observation_timestamp"),
-            "source": first_option_quote.get("source"),
+            "underlying": "WEGE3",
+            "option_id": option_id,
+            "bid": executable_quote.get("bid"),
+            "ask": executable_quote.get("ask"),
+            "last": executable_quote.get("last"),
+            "mid": executable_quote.get("mid"),
+            "as_of": executable_quote.get("observation_timestamp"),
+            "source": executable_quote.get("source"),
+        },
+        "sell_put_e2e": {
+            "route": sell_put_route.get("target"),
+            "option_id": option_id,
+            "premium_basis": selected.get("premium_basis"),
+            "bid_used": selected_quote.get("bid"),
+            "status": sell_put_response.get("status"),
         },
         "providers": summary,
         "limitations": limitations,
