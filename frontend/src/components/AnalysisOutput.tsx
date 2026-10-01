@@ -24,6 +24,11 @@ const brl = (value: number | null) =>
 const pct = (value: number | null) =>
   value == null ? null : new Intl.NumberFormat('pt-BR', { style: 'percent', maximumFractionDigits: 2 }).format(value);
 
+const when = (value: unknown) =>
+  typeof value === 'string' && value
+    ? new Date(value).toLocaleString('pt-BR')
+    : 'Indisponível';
+
 function BulletSection({ title, values }: { title: string; values: string[] }) {
   if (!values.length) return null;
   return <section className="analysis-section"><h4>{title}</h4><ul>{values.map((item, index) => <li key={index}>{item}</li>)}</ul></section>;
@@ -98,12 +103,14 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
       <div className="evidence-grid">
         {evidenceEntries.map(([ticker, evidence]) => {
           const market = asObject(evidence.market);
-          const latest = asObject(market?.latest);
+          const currentQuote = asObject(market?.current_quote);
+          const historyLatest = asObject(market?.history_latest) ?? asObject(market?.latest);
           const quant = asObject(evidence.quant);
           const fundamentals = asObject(evidence.fundamentals);
           const portfolio = asObject(evidence.portfolio);
-          const close = numberValue(latest?.close);
-          const volume = numberValue(latest?.volume);
+          const currentPrice = numberValue(currentQuote?.close);
+          const currentVolume = numberValue(currentQuote?.volume);
+          const historyClose = numberValue(historyLatest?.close);
           const vol20 = numberValue(quant?.volatility_20d);
           const vol60 = numberValue(quant?.volatility_60d);
           const drawdown = numberValue(quant?.max_drawdown);
@@ -114,8 +121,10 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
           return <article className="evidence-card" key={ticker}>
             <h5>{ticker}</h5>
             <dl>
-              <div><dt>Último preço</dt><dd>{brl(close) ?? 'Indisponível'}</dd></div>
-              <div><dt>Volume</dt><dd>{volume == null ? 'Indisponível' : new Intl.NumberFormat('pt-BR').format(volume)}</dd></div>
+              <div><dt>Preço atual</dt><dd>{brl(currentPrice) ?? 'Indisponível'}</dd></div>
+              <div><dt>Cotação atual</dt><dd>{currentQuote ? `${String(currentQuote.source ?? 'fonte desconhecida')} · ${when(currentQuote.observation_timestamp)}` : 'Indisponível'}</dd></div>
+              <div><dt>Volume atual</dt><dd>{currentVolume == null ? 'Indisponível' : new Intl.NumberFormat('pt-BR').format(currentVolume)}</dd></div>
+              <div><dt>Último fechamento histórico</dt><dd>{brl(historyClose) ?? 'Indisponível'}</dd></div>
               <div><dt>Volatilidade 20d</dt><dd>{pct(vol20) ?? 'Indisponível'}</dd></div>
               <div><dt>Volatilidade 60d</dt><dd>{pct(vol60) ?? 'Indisponível'}</dd></div>
               <div><dt>Drawdown histórico</dt><dd>{pct(drawdown) ?? 'Indisponível'}</dd></div>
