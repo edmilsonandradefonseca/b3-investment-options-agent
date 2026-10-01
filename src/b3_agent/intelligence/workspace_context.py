@@ -96,7 +96,7 @@ class JoaoResolvePerspectiveService:
         )
 
     def analyze(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return self.client.complete_json(
+        result = self.client.complete_json(
             instructions=(
                 "Act as the João Resolve research perspective for the B3 "
                 "investment copilot. Analyze only the supplied B3 deterministic "
@@ -115,6 +115,23 @@ class JoaoResolvePerspectiveService:
             schema_name="joao_resolve_b3_perspective",
             schema=JOAO_SCHEMA,
         )
+        supplied_refs = {
+            str(item)
+            for item in payload.get("source_refs") or ()
+            if str(item).strip()
+        }
+        returned_refs = {
+            str(item)
+            for item in result.get("source_refs") or ()
+            if str(item).strip()
+        }
+        unknown_refs = returned_refs - supplied_refs
+        if unknown_refs:
+            raise RuntimeError(
+                "João Resolve referenced sources outside the supplied evidence: "
+                + ", ".join(sorted(unknown_refs))
+            )
+        return result
 
 
 class WorkspaceIntelligenceContextService:
