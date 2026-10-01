@@ -215,6 +215,11 @@ class LiveOpportunityService:
                     "total_return_if_assigned": (
                         call_analysis.total_return_if_assigned
                     ),
+                    "covered_position_value": (
+                        float(current_price)
+                        * float(contract.contract_multiplier)
+                    ),
+                    "incremental_capital_required": 0.0,
                 })
                 calls.append(call_analysis)
 
