@@ -216,6 +216,12 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
           const premiumYield = numberValue(marketability?.premium_yield);
           const spreadPct = numberValue(marketability?.spread_pct_of_mid);
           const effectivePrice = numberValue(marketability?.effective_price);
+          const optionType = asText(marketability?.option_type);
+          const gainToStrike = numberValue(marketability?.gain_to_strike);
+          const totalReturnIfAssigned = numberValue(marketability?.total_return_if_assigned);
+          const coveredCall = marketability?.covered_call === true;
+          const coveredRequired = numberValue(marketability?.covered_shares_required);
+          const stockAvailable = numberValue(marketability?.stock_shares_available);
           return <article className="evidence-card" key={asText(item.opportunity_id) ?? String(index)}>
             <h5>{asText(item.ticker) ?? 'Ativo'} · {asText(item.action) ?? 'Ação'}</h5>
             <dl>
@@ -223,7 +229,10 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
               <div><dt>Retorno anualizado</dt><dd>{pct(expectedReturn) ?? 'Indisponível'}{opportunityRankingStatus === 'DEFERRED_INCOMPLETE_CONTEXT' ? ' · evidência, não ranking' : ''}</dd></div>
               <div><dt>Retorno do prêmio</dt><dd>{pct(premiumYield) ?? 'Indisponível'}</dd></div>
               <div><dt>DTE</dt><dd>{dte == null ? 'Indisponível' : dte.toFixed(0)}</dd></div>
-              <div><dt>Preço efetivo</dt><dd>{brl(effectivePrice) ?? 'Indisponível'}</dd></div>
+              {effectivePrice != null && <div><dt>Preço efetivo</dt><dd>{brl(effectivePrice)}</dd></div>}
+              {optionType === 'CALL' && <div><dt>Ganho até strike</dt><dd>{brl(gainToStrike) ?? 'Indisponível'}</dd></div>}
+              {optionType === 'CALL' && <div><dt>Retorno se exercida</dt><dd>{pct(totalReturnIfAssigned) ?? 'Indisponível'}</dd></div>}
+              {optionType === 'CALL' && <div><dt>Cobertura</dt><dd>{coveredCall && coveredRequired != null && stockAvailable != null ? `${coveredRequired} ações requeridas · ${stockAvailable} disponíveis` : 'Não confirmada'}</dd></div>}
               <div><dt>Capital requerido</dt><dd>{brl(capital) ?? 'Indisponível'}</dd></div>
               <div><dt>Atratividade</dt><dd>{asText(item.attractiveness) ?? 'UNKNOWN'}</dd></div>
               <div><dt>Fit carteira</dt><dd>{asText(item.portfolio_fit) ?? 'UNKNOWN'}</dd></div>
