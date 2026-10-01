@@ -77,3 +77,33 @@ def test_oplab_rejects_invalid_date_range():
         assert str(exc) == "start date must be on or before end date"
     else:
         raise AssertionError("Expected ValueError")
+
+
+def test_oplab_current_quote_is_explicit_and_preserves_provider_time():
+    payload = {
+        "symbol": "WEGE3",
+        "type": "STOCK",
+        "open": 49.92,
+        "high": 50.06,
+        "low": 49.18,
+        "close": 49.74,
+        "volume": 3694500,
+        "time": 1790823600000,
+    }
+    adapter = OplabAdapter()
+
+    with patch.dict("os.environ", {"OPLAB_API_TOKEN": "test-token"}), patch(
+        "b3_agent.providers.oplab.adapter.urllib.request.urlopen"
+    ) as mock_urlopen:
+        response = mock_urlopen.return_value.__enter__.return_value
+        response.read.return_value = __import__("json").dumps(payload).encode()
+        quote = adapter.get_current_quote("wege3")
+
+    assert quote.ticker == "WEGE3"
+    assert quote.close == 49.74
+    assert quote.source == "oplab"
+    assert quote.quality_flags == ("current_quote",)
+    assert quote.observation_timestamp == datetime.fromtimestamp(
+        1790823600000 / 1000,
+        tz=timezone.utc,
+    )
