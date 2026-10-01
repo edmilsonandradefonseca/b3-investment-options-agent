@@ -120,3 +120,31 @@ def test_structured_strategy_lab_sell_put_with_contract_routes_deterministically
     )
     assert d.target == RouteTarget.STRATEGY_ENGINE
     assert d.use_case == "UC-04"
+
+
+def test_structured_strategy_lab_covered_call_with_contract_routes_deterministically():
+    d = FastRouter().route(
+        "UC-04: compare Manter WEGE3 e Vender CALL coberta WEGEJ550 em WEGE3",
+        metadata={
+            "workspace": "Strategy Lab",
+            "comparison_assets": ["WEGE3", "WEGE3"],
+            "strategy_a": "Manter",
+            "strategy_b": "Vender CALL coberta",
+            "option_b": "WEGEJ550",
+        },
+    )
+    assert d.target == RouteTarget.STRATEGY_ENGINE
+    assert d.use_case == "UC-04"
+
+
+def test_structured_strategy_lab_covered_call_without_contract_escalates():
+    d = FastRouter().route(
+        "UC-04: compare Manter WEGE3 e Vender CALL coberta em WEGE3",
+        metadata={
+            "workspace": "Strategy Lab",
+            "comparison_assets": ["WEGE3", "WEGE3"],
+            "strategy_a": "Manter",
+            "strategy_b": "Vender CALL coberta",
+        },
+    )
+    assert d.target == RouteTarget.OPENCLAW
