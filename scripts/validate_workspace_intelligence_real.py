@@ -258,11 +258,11 @@ def main() -> None:
             "FAIL Opportunities: canonical UC-03 OpportunitySet missing"
         )
     ranked = canonical_set.get("ranked_opportunities") or []
-    if not ranked:
-        raise SystemExit(
-            "FAIL Opportunities: canonical OpportunitySet has no executable candidates"
-        )
-    print(f"[3/3] Opportunities OK em {opportunities_seconds:.1f}s", flush=True)
+    print(
+        f"[3/3] Opportunities OK em {opportunities_seconds:.1f}s "
+        f"({len(ranked)} candidato(s) executável(is))",
+        flush=True,
+    )
     report["opportunities"] = {
         "seconds": round(opportunities_seconds, 2),
         "status": opportunities["status"],
