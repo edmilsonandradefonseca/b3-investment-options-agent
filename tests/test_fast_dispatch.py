@@ -271,3 +271,50 @@ def test_market_price_lookup_uses_current_oplab_quote(monkeypatch):
     assert response.result["current_market_quote"]["close"] == 49.4
     assert response.result["latest_daily_market_record"]["close"] == 49.39
     assert response.result["as_of"] == current.observation_timestamp
+
+
+def test_structured_covered_call_dispatches_explicit_contract_without_llm(monkeypatch):
+    _install_portfolio(monkeypatch)
+
+    class FakeStrategyService:
+        def compare(self, **kwargs):
+            assert kwargs["assets"] == ("PETR4", "PETR4")
+            assert kwargs["strategies"] == ("Manter", "Vender CALL coberta")
+            assert kwargs["option_ids"] == (None, "PETRJ450")
+            assert kwargs["portfolio"].positions[0].ticker == "PETR4"
+            return {
+                "as_of": "2026-10-01T15:00:00+00:00",
+                "quality_status": "WARNING",
+                "summary": "covered call comparison ready",
+                "strategy_comparison": {"assumptions": {"ranking": "not_applied"}},
+                "asset_evidence": {"PETR4": {}},
+                "option_evidence": {
+                    "PETRJ450": {
+                        "current_quote": {"bid": 0.8},
+                        "call_analysis": {"premium": 0.8},
+                    }
+                },
+                "limitations": [],
+                "source_refs": ["oplab", "BTG:Renda Variavel:Acoes"],
+            }
+
+    monkeypatch.setattr(
+        fast_dispatch,
+        "LiveStrategyComparisonService",
+        FakeStrategyService,
+    )
+    response = FastRouteDispatcher().dispatch(
+        task="UC-04: compare Manter PETR4 e Vender CALL coberta PETRJ450 em PETR4",
+        context={
+            "workspace": "Strategy Lab",
+            "comparison_assets": ["PETR4", "PETR4"],
+            "strategy_a": "Manter",
+            "strategy_b": "Vender CALL coberta",
+            "option_b": "PETRJ450",
+        },
+    )
+
+    assert response is not None
+    assert response.status == "COMPLETED"
+    assert response.result["fast_route"]["target"] == "strategy_engine"
+    assert response.result["option_evidence"]["PETRJ450"]["current_quote"]["bid"] == 0.8
