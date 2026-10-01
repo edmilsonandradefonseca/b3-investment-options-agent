@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from b3_agent.intelligence import workspace_context
 from b3_agent.intelligence.workspace_context import JoaoResolvePerspectiveService, WorkspaceIntelligenceContextService
+from b3_agent.strategy_live import AssetEvidencePack
 from b3_agent.schemas.macro import MacroObservation
 from b3_agent.schemas.market import StockMarketData
 from b3_agent.schemas.news import NewsEvidence
@@ -31,6 +32,37 @@ class FakeCurrentQuoteProvider:
             close=49.4,
             volume=2_000_000,
             currency="BRL",
+        )
+
+
+class FakeAssetEvidenceService:
+    def build(self, ticker: str, *, as_of, portfolio=None):
+        current = FakeCurrentQuoteProvider().get_current_quote(ticker)
+        return AssetEvidencePack(
+            ticker=ticker,
+            as_of=as_of,
+            market={
+                "current_quote": current.to_dict(),
+                "history_count": 80,
+                "history_latest": {
+                    "ticker": ticker,
+                    "close": 49.1,
+                    "source": "oplab",
+                    "observation_timestamp": NOW.isoformat(),
+                },
+                "previous_completed_close": {
+                    "ticker": ticker,
+                    "close": 48.9,
+                    "source": "oplab",
+                    "observation_timestamp": NOW.isoformat(),
+                },
+            },
+            quant={"volatility_20d": 0.22, "rsi_14": 52.0},
+            fundamentals={"metric_count": 3, "metrics": {}, "provider": "brapi"},
+            portfolio={"held": False, "stock_quantity": 0},
+            source_refs=("oplab", "brapi"),
+            quality_status="WARNING",
+            limitations=(),
         )
 
 
@@ -121,6 +153,7 @@ def test_workspace_context_combines_market_macro_local_and_joao(monkeypatch):
         current_quote_provider=FakeCurrentQuoteProvider(),
         news_provider=FakeNewsProvider(),
         macro_repository=FakeMacroRepository(),
+        asset_evidence_service=FakeAssetEvidenceService(),
         joao_service=FakeJoao(),
     )
 
@@ -166,6 +199,7 @@ def test_workspace_context_omits_degraded_local_and_fails_soft_on_joao(monkeypat
         current_quote_provider=FakeCurrentQuoteProvider(),
         news_provider=FakeNewsProvider(),
         macro_repository=FakeMacroRepository(),
+        asset_evidence_service=FakeAssetEvidenceService(),
         joao_service=FailingJoao(),
     )
 
