@@ -48,6 +48,16 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
   const capitalRisk = asObject(portfolioIntelligence?.capital_risk);
   const fastRoute = asObject(result.fast_route);
   const strategyComparison = asObject(result.strategy_comparison);
+  const workspaceIntelligence = asObject(result.workspace_intelligence);
+  const marketAgent = asObject(result.market_agent_analysis);
+  const portfolioAgent = asObject(result.portfolio_agent_analysis);
+  const optionsAgent = asObject(result.options_agent_analysis);
+  const workspaceMarket = asObject(workspaceIntelligence?.market_context);
+  const workspaceDerived = asObject(workspaceIntelligence?.derived_intelligence);
+  const joaoPerspective = asObject(workspaceDerived?.joao_resolve);
+  const localIntelligence = asObject(workspaceDerived?.b3_local_evidence_analyst);
+  const workspaceMacro = asObject(workspaceMarket?.macro);
+  const broadMarketResearch = asArray(workspaceMarket?.market_overview_research);
   const assetEvidence = asObject(result.asset_evidence);
   const optionEvidence = asObject(result.option_evidence);
   const optionEvidenceEntries = optionEvidence
@@ -61,13 +71,19 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
         .filter((entry): entry is readonly [string, Obj] => entry[1] !== null)
     : [];
 
-  const summary =
-    asText(result.summary) ??
+  const deterministicSummary = asText(result.summary);
+  const seniorSummary =
     asText(synthesis?.summary) ??
     asText(proposal?.thesis) ??
+    asText(marketAgent?.summary) ??
+    asText(portfolioAgent?.summary) ??
+    asText(optionsAgent?.summary) ??
     asText(asObject(result['market agent analysis'])?.summary) ??
     asText(asObject(result['portfolio agent analysis'])?.summary) ??
     asText(asObject(result['options agent analysis'])?.summary);
+  const summary = workspaceIntelligence
+    ? seniorSummary ?? deterministicSummary
+    : deterministicSummary ?? seniorSummary;
 
   const rationale = asText(proposal?.rationale);
   const agreements = asStrings(synthesis?.agreements);
@@ -94,6 +110,63 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
     {summary && <section className="analysis-summary"><h3>Resumo</h3><p>{summary}</p></section>}
 
     {rationale && <section className="analysis-section"><h4>Racional</h4><p>{rationale}</p></section>}
+
+    {workspaceIntelligence && <section className="analysis-section">
+      <h4>Inteligência integrada</h4>
+      <p className="muted">
+        Fatos numéricos permanecem sob autoridade dos serviços B3. DeepSeek, João Resolve e os agentes senior interpretam as evidências sem substituir esses fatos.
+      </p>
+      <div className="evidence-grid">
+        {marketAgent && <article className="evidence-card">
+          <h5>Agente B3 · Mercado</h5>
+          <p>{asText(marketAgent.summary) ?? 'Sem síntese disponível.'}</p>
+        </article>}
+        {portfolioAgent && <article className="evidence-card">
+          <h5>Agente B3 · Portfólio</h5>
+          <p>{asText(portfolioAgent.summary) ?? 'Sem síntese disponível.'}</p>
+        </article>}
+        {optionsAgent && <article className="evidence-card">
+          <h5>Agente B3 · Opções</h5>
+          <p>{asText(optionsAgent.summary) ?? 'Sem síntese disponível.'}</p>
+        </article>}
+        {joaoPerspective && <article className="evidence-card">
+          <h5>João Resolve · Pesquisa</h5>
+          <p>{asText(joaoPerspective.summary) ?? (asText(joaoPerspective.status) === 'UNAVAILABLE' ? 'Indisponível nesta execução.' : 'Sem síntese disponível.')}</p>
+          <small>Autoridade: inteligência derivada, não canônica.</small>
+        </article>}
+      </div>
+
+      {(workspaceMacro || broadMarketResearch.length > 0) && <div className="analysis-section">
+        <h5>Contexto de mercado</h5>
+        {workspaceMacro && <p>
+          {['SELIC','CDI','IPCA'].map(key => {
+            const row = asObject(workspaceMacro[key]);
+            const value = numberValue(row?.value);
+            return row ? `${key}: ${value == null ? 'indisponível' : value.toLocaleString('pt-BR')} ${String(row.unit ?? '')}` : null;
+          }).filter(Boolean).join(' · ')}
+        </p>}
+        {broadMarketResearch.length > 0 && <p className="muted">
+          {broadMarketResearch.length} evidências recentes de mercado amplo disponíveis para a síntese.
+        </p>}
+      </div>}
+
+      {localIntelligence && <details>
+        <summary>DeepSeek local · inteligência B3 por ativo</summary>
+        {Object.entries(localIntelligence).map(([ticker, value]) => {
+          const item = asObject(value);
+          const analysis = asObject(item?.analysis);
+          return <div key={ticker}>
+            <strong>{ticker}</strong> · {asText(item?.status) ?? 'UNKNOWN'}
+            {asText(analysis?.summary) && <p>{asText(analysis?.summary)}</p>}
+          </div>;
+        })}
+      </details>}
+
+      {deterministicSummary && seniorSummary && deterministicSummary !== seniorSummary && <details>
+        <summary>Resumo determinístico do motor</summary>
+        <p>{deterministicSummary}</p>
+      </details>}
+    </section>}
 
     {!summary && positions.length > 0 && <section className="analysis-section">
       <h4>Carteira canônica</h4>
