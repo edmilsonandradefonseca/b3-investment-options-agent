@@ -325,3 +325,67 @@ def test_sell_call_rejects_uncovered_position():
         assert "not covered" in str(exc)
     else:
         raise AssertionError("SELL_CALL must reject insufficient underlying shares")
+
+
+def test_sell_stock_reduces_existing_long_position_as_notional_what_if():
+    evidence = StrategyEvidenceService(
+        market_provider=FakeMarketProvider(),
+        fundamentals_provider=FakeFundamentalsProvider(),
+        current_quote_provider=FakeCurrentQuoteProvider(),
+    )
+    service = LiveStrategyComparisonService(evidence_service=evidence)
+    as_of = datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc)
+
+    result = service.compare(
+        assets=("WEGE3", "WEGE3"),
+        strategies=("Manter", "Vender/reduzir ação"),
+        amount=2000.0,
+        portfolio=_covered_portfolio(),
+        as_of=as_of,
+    )
+
+    alternative = result["strategy_comparison"]["alternatives"][1]
+    assert alternative["action_type"] == "SELL_STOCK"
+    assert alternative["capital_required"] == 0.0
+    assumptions = alternative["assumptions"]
+    assert assumptions["capital_released"] == 2000.0
+    assert assumptions["stock_quantity_before"] == 100.0
+    assert assumptions["theoretical_shares_reduced"] == 2000.0 / 49.74
+    assert assumptions["stock_quantity_after_theoretical"] == (
+        100.0 - 2000.0 / 49.74
+    )
+    assert assumptions["execution_quantity"] == "not_inferred"
+
+
+def test_sell_stock_requires_existing_long_and_explicit_amount():
+    evidence = StrategyEvidenceService(
+        market_provider=FakeMarketProvider(),
+        fundamentals_provider=FakeFundamentalsProvider(),
+        current_quote_provider=FakeCurrentQuoteProvider(),
+    )
+    service = LiveStrategyComparisonService(evidence_service=evidence)
+
+    try:
+        service.compare(
+            assets=("WEGE3", "WEGE3"),
+            strategies=("Manter", "Vender/reduzir ação"),
+            portfolio=_covered_portfolio(),
+            as_of=datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc),
+        )
+    except ValueError as exc:
+        assert "explicit positive comparison amount" in str(exc)
+    else:
+        raise AssertionError("SELL_STOCK must require explicit amount")
+
+    try:
+        service.compare(
+            assets=("WEGE3", "WEGE3"),
+            strategies=("Manter", "Vender/reduzir ação"),
+            amount=6000.0,
+            portfolio=_covered_portfolio(),
+            as_of=datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc),
+        )
+    except ValueError as exc:
+        assert "exceeds current long position value" in str(exc)
+    else:
+        raise AssertionError("SELL_STOCK must reject reduction above held value")
