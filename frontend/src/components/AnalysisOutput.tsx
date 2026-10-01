@@ -59,6 +59,12 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
   const localIntelligence = asObject(workspaceDerived?.b3_local_evidence_analyst);
   const workspaceMacro = asObject(workspaceMarket?.macro);
   const broadMarketResearch = asArray(workspaceMarket?.market_overview_research);
+  const broadMarketDiagnostics = asArray(workspaceMarket?.market_overview_diagnostics);
+  const opportunitySet = asObject(result.opportunity_set);
+  const rankedOpportunities = asArray(opportunitySet?.ranked_opportunities)
+    .map(asObject)
+    .filter((item): item is Obj => item !== null);
+  const optionMarketability = asObject(result.option_marketability);
   const assetEvidence = asObject(result.asset_evidence);
   const optionEvidence = asObject(result.option_evidence);
   const optionEvidenceEntries = optionEvidence
@@ -182,6 +188,53 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
         {uncoveredCallShares != null ? ` Ações descobertas em calls: ${uncoveredCallShares}.` : ''}
       </p>}
     </section>}
+
+    {rankedOpportunities.length > 0 && <section className="analysis-section">
+      <h4>Oportunidades canônicas</h4>
+      <p className="muted">
+        Ranking determinístico · política {asText(opportunitySet?.ranking_policy_version) ?? 'não informada'}.
+        A inteligência dos agentes interpreta estes fatos, mas não altera a ordem canônica.
+      </p>
+      <div className="evidence-grid">
+        {rankedOpportunities.slice(0, 10).map((item, index) => {
+          const optionId = asText(item.options_analysis_ref);
+          const marketability = optionId && optionMarketability
+            ? asObject(optionMarketability[optionId])
+            : null;
+          const expectedReturn = numberValue(item.expected_return);
+          const capital = numberValue(item.capital_requirement);
+          const bid = numberValue(marketability?.bid);
+          const ask = numberValue(marketability?.ask);
+          const volume = numberValue(marketability?.volume);
+          return <article className="evidence-card" key={asText(item.opportunity_id) ?? String(index)}>
+            <h5>{asText(item.ticker) ?? 'Ativo'} · {asText(item.action) ?? 'Ação'}</h5>
+            <dl>
+              {optionId && <div><dt>Contrato</dt><dd>{optionId}</dd></div>}
+              <div><dt>Retorno anualizado</dt><dd>{pct(expectedReturn) ?? 'Indisponível'}</dd></div>
+              <div><dt>Capital requerido</dt><dd>{brl(capital) ?? 'Indisponível'}</dd></div>
+              <div><dt>Atratividade</dt><dd>{asText(item.attractiveness) ?? 'UNKNOWN'}</dd></div>
+              <div><dt>Fit carteira</dt><dd>{asText(item.portfolio_fit) ?? 'UNKNOWN'}</dd></div>
+              {marketability && <>
+                <div><dt>Bid atual</dt><dd>{brl(bid) ?? 'Indisponível'}</dd></div>
+                <div><dt>Ask atual</dt><dd>{brl(ask) ?? 'Indisponível'}</dd></div>
+                <div><dt>Volume</dt><dd>{volume == null ? 'Indisponível' : new Intl.NumberFormat('pt-BR').format(volume)}</dd></div>
+              </>}
+            </dl>
+          </article>;
+        })}
+      </div>
+    </section>}
+
+    {broadMarketDiagnostics.length > 0 && broadMarketResearch.length === 0 && <details>
+      <summary>Diagnóstico da pesquisa de mercado</summary>
+      {broadMarketDiagnostics.map((value, index) => {
+        const row = asObject(value);
+        return <p key={index} className="muted">
+          {asText(row?.query) ?? 'consulta'} · resultados normalizados: {numberValue(row?.normalized_result_count) ?? 0}
+          {asText(row?.error) ? ` · erro: ${asText(row?.error)}` : ''}
+        </p>;
+      })}
+    </details>}
 
     {evidenceEntries.length > 0 && <section className="analysis-section">
       <h4>Fatos determinísticos por ativo</h4>
