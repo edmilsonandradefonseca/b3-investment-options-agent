@@ -142,6 +142,7 @@ def test_structured_strategy_comparison_dispatches_without_llm(monkeypatch):
         def compare(self, **kwargs):
             assert kwargs["assets"] == ("VALE3", "WEGE3")
             assert kwargs["strategies"] == ("Comprar ação", "Comprar ação")
+            assert kwargs["option_ids"] == (None, None)
             assert kwargs["amount"] == 50000.0
             return {
                 "as_of": "2026-10-01T15:00:00+00:00",
@@ -170,3 +171,44 @@ def test_structured_strategy_comparison_dispatches_without_llm(monkeypatch):
     assert response.result["fast_route"]["target"] == "strategy_engine"
     assert set(response.result["asset_evidence"]) == {"VALE3", "WEGE3"}
     assert response.sources == ("brapi",)
+
+
+def test_structured_sell_put_dispatches_explicit_contract_without_llm(monkeypatch):
+    _install_portfolio(monkeypatch)
+
+    class FakeStrategyService:
+        def compare(self, **kwargs):
+            assert kwargs["assets"] == ("VALE3", "WEGE3")
+            assert kwargs["strategies"] == ("Comprar ação", "Vender PUT")
+            assert kwargs["option_ids"] == (None, "WEGEV500")
+            return {
+                "as_of": "2026-10-01T15:00:00+00:00",
+                "quality_status": "WARNING",
+                "summary": "comparison ready",
+                "strategy_comparison": {"assumptions": {"ranking": "not_applied"}},
+                "asset_evidence": {"VALE3": {}, "WEGE3": {}},
+                "option_evidence": {"WEGEV500": {"current_quote": {"bid": 1.2}}},
+                "limitations": [],
+                "source_refs": ["oplab"],
+            }
+
+    monkeypatch.setattr(
+        fast_dispatch,
+        "LiveStrategyComparisonService",
+        FakeStrategyService,
+    )
+    response = FastRouteDispatcher().dispatch(
+        task="UC-04: compare Comprar ação em VALE3 e Vender PUT WEGEV500 em WEGE3",
+        context={
+            "workspace": "Strategy Lab",
+            "comparison_assets": ["VALE3", "WEGE3"],
+            "strategy_a": "Comprar ação",
+            "strategy_b": "Vender PUT",
+            "option_b": "WEGEV500",
+        },
+    )
+
+    assert response is not None
+    assert response.status == "COMPLETED"
+    assert response.result["fast_route"]["target"] == "strategy_engine"
+    assert response.result["option_evidence"]["WEGEV500"]["current_quote"]["bid"] == 1.2
