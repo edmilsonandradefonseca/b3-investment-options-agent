@@ -11,6 +11,7 @@ from b3_agent.config import settings
 from b3_agent.intelligence.observability import local_ticker_intelligence
 from b3_agent.llm.client import OpenClawStructuredClient
 from b3_agent.opportunity_live import LiveOpportunityService
+from b3_agent.providers.google_news_rss import GoogleNewsRssAdapter
 from b3_agent.providers.oplab.adapter import OplabAdapter
 from b3_agent.providers.searxng_news import SearxngNewsAdapter
 from b3_agent.repositories.macro import MacroDataRepository
@@ -268,6 +269,7 @@ class WorkspaceIntelligenceContextService:
         *,
         current_quote_provider: OplabAdapter | None = None,
         news_provider: SearxngNewsAdapter | None = None,
+        fallback_news_provider: GoogleNewsRssAdapter | None = None,
         macro_repository: MacroDataRepository | None = None,
         asset_evidence_service: StrategyEvidenceService | None = None,
         joao_memory_client: JoaoMemoryContextClient | None = None,
@@ -277,6 +279,9 @@ class WorkspaceIntelligenceContextService:
         self.current_quote_provider = current_quote_provider or OplabAdapter()
         self.news_provider = news_provider or SearxngNewsAdapter(
             base_url=os.getenv("B3_SEARXNG_URL", "http://127.0.0.1:8080")
+        )
+        self.fallback_news_provider = (
+            fallback_news_provider or GoogleNewsRssAdapter()
         )
         self.macro_repository = macro_repository or MacroDataRepository(
             settings.data_dir / "normalized" / "macro"
@@ -367,23 +372,48 @@ class WorkspaceIntelligenceContextService:
                         f"Current OPLAB quote unavailable for {ticker}: {exc}"
                     )
 
+            ticker_query = (
+                f"{ticker} B3 resultados fato relevante dividendos mercado setor"
+            )
+            ticker_events: list[dict[str, Any]] = []
+            ticker_research_errors: list[str] = []
             try:
                 records = self.news_provider.search(
                     ticker,
-                    query=(
-                        f"{ticker} B3 resultados fato relevante dividendos "
-                        "mercado setor"
-                    ),
+                    query=ticker_query,
                     limit=news_limit,
                 )
                 research = ResearchEventService().build(records, as_of=as_of)
-                events = [asdict(item) for item in research.events]
-                market_entry["research_events"] = events
+                ticker_events = [asdict(item) for item in research.events]
                 source_refs.extend(research.source_refs)
             except (OSError, RuntimeError, ValueError) as exc:
-                market_entry["research_events"] = []
+                ticker_research_errors.append(f"searxng={exc}")
+
+            if not ticker_events:
+                try:
+                    fallback_records = self.fallback_news_provider.search(
+                        ticker,
+                        query=f"{ticker_query} when:2d",
+                        limit=news_limit,
+                    )
+                    fallback_research = ResearchEventService().build(
+                        fallback_records,
+                        as_of=as_of,
+                    )
+                    ticker_events = [
+                        asdict(item) for item in fallback_research.events
+                    ]
+                    source_refs.extend(fallback_research.source_refs)
+                except (OSError, RuntimeError, ValueError) as exc:
+                    ticker_research_errors.append(
+                        f"google_news_rss={exc}"
+                    )
+
+            market_entry["research_events"] = ticker_events
+            if not ticker_events and ticker_research_errors:
                 limitations.append(
-                    f"Current research/news unavailable for {ticker}: {exc}"
+                    f"Current research/news unavailable for {ticker}: "
+                    + "; ".join(ticker_research_errors)
                 )
 
             market_by_ticker[ticker] = market_entry
@@ -471,9 +501,46 @@ class WorkspaceIntelligenceContextService:
                     })
             market_overview_research = market_overview_research[:news_limit]
             if not market_overview_research:
+                fallback_query = (
+                    "Ibovespa B3 Brasil mercado juros Selic dólar inflação "
+                    "commodities fluxo estrangeiro when:1d"
+                )
+                try:
+                    fallback_records = self.fallback_news_provider.search(
+                        "IBOV",
+                        query=fallback_query,
+                        limit=news_limit,
+                    )
+                    fallback_snapshot = ResearchEventService().build(
+                        fallback_records,
+                        as_of=as_of,
+                    )
+                    market_overview_research = [
+                        asdict(item)
+                        for item in fallback_snapshot.events[:news_limit]
+                    ]
+                    source_refs.extend(fallback_snapshot.source_refs)
+                    market_overview_diagnostics.append({
+                        "query": fallback_query,
+                        "source": self.fallback_news_provider.name,
+                        "normalized_result_count": len(
+                            market_overview_research
+                        ),
+                        "fallback_used": True,
+                        "fallback_strategy": "google_news_rss",
+                    })
+                except (OSError, RuntimeError, ValueError) as exc:
+                    market_overview_diagnostics.append({
+                        "query": fallback_query,
+                        "source": "google_news_rss",
+                        "error": str(exc),
+                    })
+
+            if not market_overview_research:
                 limitations.append(
-                    "Broad-market research returned zero normalized events; "
-                    "macro and asset-specific evidence remain available."
+                    "Broad-market research returned zero normalized events from "
+                    "SearXNG and Google News RSS; macro and asset-specific evidence "
+                    "remain available."
                 )
 
         macro: dict[str, Any] = {}
