@@ -46,6 +46,16 @@ def require_intelligence(
         raise SystemExit(f"FAIL {name}: workspace_intelligence missing")
 
     derived = workspace.get("derived_intelligence") or {}
+    joao_memory = derived.get("joao_memory_context") or {}
+    if (
+        joao_memory.get("source") != "joao-memory-api"
+        or joao_memory.get("status") == "UNAVAILABLE"
+    ):
+        raise SystemExit(
+            f"FAIL {name}: João memory API unavailable "
+            f"error={joao_memory.get('error')}"
+        )
+
     joao = derived.get("joao_resolve") or {}
     if joao.get("status") != "READY":
         raise SystemExit(
@@ -88,6 +98,11 @@ def require_intelligence(
     return {
         "status": response.get("status"),
         "joao": joao.get("status"),
+        "joao_memory": {
+            "source": joao_memory.get("source"),
+            "memory_count": len(joao_memory.get("memories") or []),
+            "relation_count": len(joao_memory.get("relations") or []),
+        },
         "b3_agents": {
             "market": bool(result.get("market_agent_analysis")),
             "portfolio": bool(result.get("portfolio_agent_analysis")),
@@ -133,6 +148,7 @@ def main() -> None:
         "seconds": round(strategy_seconds, 2),
         "status": strategy["status"],
         "joao": strategy["joao"],
+        "joao_memory": strategy["joao_memory"],
         "b3_agents": strategy["b3_agents"],
         "sources": strategy["sources"],
         "limitations": strategy["limitations"],
@@ -161,6 +177,7 @@ def main() -> None:
         "seconds": round(market_seconds, 2),
         "status": market["status"],
         "joao": market["joao"],
+        "joao_memory": market["joao_memory"],
         "b3_agents": market["b3_agents"],
         "sources": market["sources"],
         "macro_indicators": sorted(macro),
@@ -198,6 +215,7 @@ def main() -> None:
         "seconds": round(opportunities_seconds, 2),
         "status": opportunities["status"],
         "joao": opportunities["joao"],
+        "joao_memory": opportunities["joao_memory"],
         "b3_agents": opportunities["b3_agents"],
         "sources": opportunities["sources"],
         "canonical_opportunity_set_present": canonical_present,
