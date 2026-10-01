@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
+import re
 from typing import Any
 
 from b3_agent.schemas.experience import ExperienceAssessment, ExperienceRetrievalResult
@@ -95,7 +96,12 @@ class KnowledgeContextBuilder:
         if as_of is not None and as_of.tzinfo is None:
             raise ValueError("as_of must be timezone-aware")
 
-        rag = self.retriever.retrieve(query, top_k=rag_top_k) if self.retriever is not None else ()
+        query_tickers = self._extract_tickers(query)
+        rag, discarded_rag_count = self._retrieve_rag(
+            query,
+            query_tickers=query_tickers,
+            top_k=rag_top_k,
+        )
         seeds = self._seed_entities(query, rag, graph_top_k, as_of=as_of)
         entities, relations = self._expand(seeds, graph_top_k, neighbor_depth, as_of=as_of)
         events = tuple(item for item in entities if item.entity_type == EntityType.MARKET_EVENT)
@@ -124,6 +130,8 @@ class KnowledgeContextBuilder:
             experience_assessment=experience_assessment,
             metadata={
                 "rag_count": len(rag),
+                "discarded_rag_count": discarded_rag_count,
+                "query_tickers": list(query_tickers),
                 "entity_count": len(entities),
                 "relation_count": len(relations),
                 "event_count": len(events),
@@ -138,6 +146,69 @@ class KnowledgeContextBuilder:
                 "experience_assessment": experience_assessment is not None,
             },
         )
+
+    @staticmethod
+    def _extract_tickers(query: str) -> tuple[str, ...]:
+        """Return explicit B3-style tickers mentioned by the user query."""
+        matches = re.findall(r"(?<![A-Z0-9])([A-Z]{4}\d{1,2})(?![A-Z0-9])", query.upper())
+        return tuple(dict.fromkeys(matches))
+
+    @staticmethod
+    def _evidence_mentions_ticker(item: RetrievedEvidence, tickers: tuple[str, ...]) -> bool:
+        if not tickers:
+            return True
+        corpus = " ".join(
+            (
+                item.source_ref or "",
+                item.relative_path or "",
+                item.snippet or "",
+            )
+        ).upper()
+        return any(
+            re.search(rf"(?<![A-Z0-9]){re.escape(ticker)}(?![A-Z0-9])", corpus)
+            for ticker in tickers
+        )
+
+    def _retrieve_rag(
+        self,
+        query: str,
+        *,
+        query_tickers: tuple[str, ...],
+        top_k: int,
+    ) -> tuple[tuple[RetrievedEvidence, ...], int]:
+        """Retrieve bounded evidence without cross-ticker semantic contamination.
+
+        For explicit ticker questions, semantic similarity alone is insufficient:
+        evidence must mention at least one requested ticker. We query both the
+        full request and each ticker to improve recall, then deduplicate and
+        preserve only ticker-relevant records.
+        """
+        if self.retriever is None:
+            return (), 0
+
+        if not query_tickers:
+            records = tuple(self.retriever.retrieve(query, top_k=top_k))
+            return records, 0
+
+        requested = max(top_k, top_k * len(query_tickers))
+        candidates: list[RetrievedEvidence] = []
+        seen: set[tuple[str, str, str]] = set()
+        for retrieval_query in (query, *query_tickers):
+            for item in self.retriever.retrieve(retrieval_query, top_k=requested):
+                key = (item.source_ref, item.relative_path, item.snippet)
+                if key in seen:
+                    continue
+                seen.add(key)
+                candidates.append(item)
+
+        relevant = [
+            item
+            for item in candidates
+            if self._evidence_mentions_ticker(item, query_tickers)
+        ]
+        discarded = len(candidates) - len(relevant)
+        relevant.sort(key=lambda item: item.score, reverse=True)
+        return tuple(relevant[:top_k]), discarded
 
     @staticmethod
     def _valid_at(item: GraphEntity | GraphRelation, as_of: datetime | None) -> bool:
