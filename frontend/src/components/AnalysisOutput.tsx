@@ -49,6 +49,12 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
   const fastRoute = asObject(result.fast_route);
   const strategyComparison = asObject(result.strategy_comparison);
   const assetEvidence = asObject(result.asset_evidence);
+  const optionEvidence = asObject(result.option_evidence);
+  const optionEvidenceEntries = optionEvidence
+    ? Object.entries(optionEvidence)
+        .map(([key, value]) => [key, asObject(value)] as const)
+        .filter((entry): entry is readonly [string, Obj] => entry[1] !== null)
+    : [];
   const evidenceEntries = assetEvidence
     ? Object.entries(assetEvidence)
         .map(([key, value]) => [key, asObject(value)] as const)
@@ -138,6 +144,41 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
       {strategyComparison && <p className="muted">
         Comparação canônica disponível. Ranking: {asText(asObject(strategyComparison.assumptions)?.ranking) ?? 'não aplicado'}.
       </p>}
+    </section>}
+
+    {optionEvidenceEntries.length > 0 && <section className="analysis-section">
+      <h4>Cotações atuais de opções · OPLAB</h4>
+      <div className="evidence-grid">
+        {optionEvidenceEntries.map(([optionId, evidence]) => {
+          const contract = asObject(evidence.contract);
+          const quote = asObject(evidence.current_quote);
+          const put = asObject(evidence.put_analysis);
+          const bid = numberValue(quote?.bid);
+          const ask = numberValue(quote?.ask);
+          const last = numberValue(quote?.last);
+          const mid = numberValue(quote?.mid);
+          const volume = numberValue(quote?.volume);
+          const strike = numberValue(contract?.strike);
+          const effectivePrice = numberValue(put?.effective_price);
+          const annualized = numberValue(put?.annualized_return);
+          return <article className="evidence-card" key={optionId}>
+            <h5>{optionId}</h5>
+            <dl>
+              <div><dt>Ativo</dt><dd>{asText(evidence.underlying_ticker) ?? '—'}</dd></div>
+              <div><dt>Strike</dt><dd>{brl(strike) ?? 'Indisponível'}</dd></div>
+              <div><dt>Vencimento</dt><dd>{asText(contract?.expiration_date) ?? 'Indisponível'}</dd></div>
+              <div><dt>Bid atual</dt><dd>{brl(bid) ?? 'Indisponível'}</dd></div>
+              <div><dt>Ask atual</dt><dd>{brl(ask) ?? 'Indisponível'}</dd></div>
+              <div><dt>Último negócio</dt><dd>{brl(last) ?? 'Indisponível'}</dd></div>
+              <div><dt>Mid</dt><dd>{brl(mid) ?? 'Indisponível'}</dd></div>
+              <div><dt>Volume</dt><dd>{volume == null ? 'Indisponível' : new Intl.NumberFormat('pt-BR').format(volume)}</dd></div>
+              <div><dt>Preço efetivo se exercida</dt><dd>{brl(effectivePrice) ?? 'Indisponível'}</dd></div>
+              <div><dt>Retorno anualizado do prêmio</dt><dd>{pct(annualized) ?? 'Indisponível'}</dd></div>
+              <div><dt>Cotação</dt><dd>{quote ? `${String(quote.source ?? 'fonte desconhecida')} · ${when(quote.observation_timestamp)}` : 'Indisponível'}</dd></div>
+            </dl>
+          </article>;
+        })}
+      </div>
     </section>}
 
     <BulletSection title="Pontos confirmados" values={agreements} />
