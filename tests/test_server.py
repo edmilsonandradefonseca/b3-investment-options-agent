@@ -289,7 +289,21 @@ def test_opportunities_workspace_runs_intelligence_even_without_fast_route(monke
                 "workspace_intelligence": True,
                 "deterministic_context": {
                     "workspace": "Opportunities",
-                    "workspace_result": {},
+                    "workspace_result": {
+                        "opportunity_set": {
+                            "ranked_opportunities": [
+                                {
+                                    "opportunity_id": "SELL_PUT:WEGEV500",
+                                    "ticker": "WEGE3",
+                                    "action": "SELL_PUT",
+                                }
+                            ],
+                            "ranking_policy_version": "1.0+B3_OPTION_MARKETABILITY_V1",
+                        },
+                        "option_marketability": {
+                            "WEGEV500": {"eligible": True, "bid": 1.2}
+                        },
+                    },
                     "market_analysis": {
                         "tickers": {
                             "WEGE3": {
@@ -340,6 +354,8 @@ def test_opportunities_workspace_runs_intelligence_even_without_fast_route(monke
     body = response.json()
     assert body["result"]["synthesis"]["summary"] == "Opportunity intelligence"
     assert body["result"]["workspace_intelligence"]["workspace"] == "Opportunities"
+    assert body["result"]["opportunity_set"]["ranked_opportunities"][0]["opportunity_id"] == "SELL_PUT:WEGEV500"
+    assert body["result"]["option_marketability"]["WEGEV500"]["bid"] == 1.2
     assert body["result"]["workspace_intelligence"]["limitations"] == [
         "No canonical stock valuation supplied."
     ]
