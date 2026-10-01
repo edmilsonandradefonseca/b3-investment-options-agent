@@ -80,6 +80,7 @@ class PortfolioAnalysisAgent(SpecialistAgent):
         "portfolio_context",
         "risk_analysis",
         "action_candidates",
+        "market_analysis",
         "workspace_result",
     )
 
@@ -91,5 +92,6 @@ class OptionsAnalysisAgent(SpecialistAgent):
         "options_transactions",
         "opportunities",
         "action_candidates",
+        "market_analysis",
         "workspace_result",
     )
