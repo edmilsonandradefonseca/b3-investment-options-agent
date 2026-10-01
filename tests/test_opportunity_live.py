@@ -181,6 +181,8 @@ def test_live_opportunity_service_includes_only_covered_calls():
     assert call_market["covered_shares_required"] == 100.0
     assert call_market["premium_yield"] > 0
     assert call_market["annualized_return"] > 0
+    assert call_market["covered_position_value"] == 4960.0
+    assert call_market["incremental_capital_required"] == 0.0
 
 
 def test_live_opportunity_service_excludes_uncovered_calls():
