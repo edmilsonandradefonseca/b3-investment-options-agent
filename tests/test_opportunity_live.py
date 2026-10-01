@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 
 from b3_agent.opportunity_live import (
+    CANDIDATE_ORDER_POLICY,
     LiveOpportunityService,
     MARKETABILITY_POLICY,
 )
@@ -108,9 +109,12 @@ def test_live_opportunity_service_builds_only_executable_sell_puts():
     assert ranked[0].action == "SELL_PUT"
     assert ranked[0].capital_requirement == 5000.0
     assert ranked[0].expected_return is not None
+    assert MARKETABILITY_POLICY in result.opportunity_set.ranking_policy_version
     assert result.opportunity_set.ranking_policy_version.endswith(
-        MARKETABILITY_POLICY
+        CANDIDATE_ORDER_POLICY
     )
+    assert result.ranking_status == "DEFERRED_INCOMPLETE_CONTEXT"
+    assert "Annualized return remains evidence only" in result.ranking_reason
     assert result.option_marketability["WEGEV500"]["eligible"] is True
     assert "WEGEV520" not in result.option_marketability
     assert any(
@@ -128,3 +132,4 @@ def test_live_opportunity_payload_is_frontend_safe():
         "opportunity_id"
     ] == "SELL_PUT:WEGEV500"
     assert payload["option_marketability"]["WEGEV500"]["source"] == "oplab"
+    assert payload["opportunity_ranking_status"] == "DEFERRED_INCOMPLETE_CONTEXT"
