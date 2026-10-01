@@ -168,7 +168,16 @@ class FastRouter:
             "hold",
         }:
             return True
-        if normalized in {"vender put", "sell put", "sell_put"}:
+        if normalized in {
+            "vender put",
+            "sell put",
+            "sell_put",
+            "vender call",
+            "vender call coberta",
+            "covered call",
+            "sell call",
+            "sell_call",
+        }:
             return bool(str(option_id or "").strip())
         return False
 
