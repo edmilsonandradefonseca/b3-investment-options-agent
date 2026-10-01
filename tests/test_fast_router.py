@@ -94,7 +94,7 @@ def test_structured_strategy_lab_stock_comparison_routes_deterministically():
     assert d.match == MatchClass.MATCH_EXACT
 
 
-def test_structured_strategy_lab_sell_put_still_escalates_until_deterministic_builder_exists():
+def test_structured_strategy_lab_sell_put_without_contract_still_escalates():
     d = FastRouter().route(
         "UC-04: compare Comprar ação em VALE3 e Vender PUT em WEGE3",
         metadata={
@@ -105,3 +105,18 @@ def test_structured_strategy_lab_sell_put_still_escalates_until_deterministic_bu
         },
     )
     assert d.target == RouteTarget.OPENCLAW
+
+
+def test_structured_strategy_lab_sell_put_with_contract_routes_deterministically():
+    d = FastRouter().route(
+        "UC-04: compare Comprar ação em VALE3 e Vender PUT WEGEV500 em WEGE3",
+        metadata={
+            "workspace": "Strategy Lab",
+            "comparison_assets": ["VALE3", "WEGE3"],
+            "strategy_a": "Comprar ação",
+            "strategy_b": "Vender PUT",
+            "option_b": "WEGEV500",
+        },
+    )
+    assert d.target == RouteTarget.STRATEGY_ENGINE
+    assert d.use_case == "UC-04"
