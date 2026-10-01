@@ -133,3 +133,40 @@ def test_complex_question_escalates_instead_of_using_dashboard_metadata(monkeypa
     )
 
     assert response is None
+
+
+def test_structured_strategy_comparison_dispatches_without_llm(monkeypatch):
+    _install_portfolio(monkeypatch)
+
+    class FakeStrategyService:
+        def compare(self, **kwargs):
+            assert kwargs["assets"] == ("VALE3", "WEGE3")
+            assert kwargs["strategies"] == ("Comprar ação", "Comprar ação")
+            assert kwargs["amount"] == 50000.0
+            return {
+                "as_of": "2026-10-01T15:00:00+00:00",
+                "quality_status": "VALIDATED",
+                "summary": "comparison ready",
+                "strategy_comparison": {"assumptions": {"ranking": "not_applied"}},
+                "asset_evidence": {"VALE3": {}, "WEGE3": {}},
+                "limitations": [],
+                "source_refs": ["brapi"],
+            }
+
+    monkeypatch.setattr(fast_dispatch, "LiveStrategyComparisonService", FakeStrategyService)
+    response = FastRouteDispatcher().dispatch(
+        task="UC-04: compare Comprar ação em VALE3 e Comprar ação em WEGE3",
+        context={
+            "workspace": "Strategy Lab",
+            "comparison_assets": ["VALE3", "WEGE3"],
+            "strategy_a": "Comprar ação",
+            "strategy_b": "Comprar ação",
+            "comparison_amount": 50000,
+        },
+    )
+
+    assert response is not None
+    assert response.status == "COMPLETED"
+    assert response.result["fast_route"]["target"] == "strategy_engine"
+    assert set(response.result["asset_evidence"]) == {"VALE3", "WEGE3"}
+    assert response.sources == ("brapi",)
