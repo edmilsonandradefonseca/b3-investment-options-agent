@@ -231,10 +231,16 @@ class FastRouteDispatcher:
         if raw_amount not in (None, ""):
             amount = float(raw_amount)
 
+        option_ids = (
+            str(context.get("option_a") or "").upper().strip() or None,
+            str(context.get("option_b") or "").upper().strip() or None,
+        )
+
         portfolio = self._portfolio()
         result = LiveStrategyComparisonService().compare(
             assets=(assets[0], assets[1]),
             strategies=strategies,
+            option_ids=option_ids,
             amount=amount,
             portfolio=portfolio,
         )
