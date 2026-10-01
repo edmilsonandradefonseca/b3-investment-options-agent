@@ -130,3 +130,35 @@ def test_langgraph_has_unified_knowledge_context_node(tmp_path: Path):
     assert "knowledge_context" in workflow.nodes
     assert "retrieve" in workflow.nodes
     assert "deterministic_context" in workflow.nodes
+
+
+def test_explicit_multi_ticker_query_filters_unrelated_semantic_evidence(tmp_path: Path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "petr4.md").write_text(
+        "# PETR4\nPetrobras valuation, liquidity and market risk.\n",
+        encoding="utf-8",
+    )
+    (vault / "vale3.md").write_text(
+        "# VALE3\nVale valuation, liquidity and market risk.\n",
+        encoding="utf-8",
+    )
+    (vault / "wege3.md").write_text(
+        "# WEGE3\nWEG valuation, liquidity and market risk.\n",
+        encoding="utf-8",
+    )
+    graph = InMemoryKnowledgeGraphStore()
+    context = KnowledgeContextBuilder(
+        ObsidianRetriever(ObsidianKnowledgeStore(vault)),
+        graph,
+    ).build(
+        "compare Comprar ação em VALE3 e Comprar ação em WEGE3",
+        rag_top_k=5,
+        graph_top_k=10,
+    )
+
+    refs = {item.relative_path for item in context.rag}
+    assert "petr4.md" not in refs
+    assert refs <= {"vale3.md", "wege3.md"}
+    assert context.metadata["query_tickers"] == ["VALE3", "WEGE3"]
+    assert context.metadata["discarded_rag_count"] >= 1
