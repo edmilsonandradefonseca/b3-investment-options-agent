@@ -100,7 +100,7 @@ def _covered_call_candidate(portfolio: PortfolioContext) -> dict:
 def main() -> None:
     report: dict[str, object] = {}
 
-    print("[1/3] Market Intelligence research PIT...", flush=True)
+    print("[1/4] Market Intelligence research PIT...", flush=True)
     context = WorkspaceIntelligenceContextService().build(
         workspace="Market Intelligence",
         tickers=(),
@@ -129,8 +129,12 @@ def main() -> None:
             "FAIL research coverage: no broad-market event available from "
             "SearXNG or Google News RSS"
         )
+    if any(not item.get("published_at") for item in events):
+        raise SystemExit(
+            "FAIL research quality: recent market event lacks real published_at"
+        )
     print(
-        f"[1/3] Market research OK · eventos={len(events)} "
+        f"[1/4] Market research OK · eventos={len(events)} "
         f"· normalized_seen={normalized_seen}",
         flush=True,
     )
@@ -141,14 +145,14 @@ def main() -> None:
         "diagnostics": diagnostics,
     }
 
-    print("[2/3] Procurando covered CALL real na carteira...", flush=True)
+    print("[2/4] Procurando covered CALL real na carteira...", flush=True)
     portfolio = _active_portfolio()
     candidate = _covered_call_candidate(portfolio)
     ticker = candidate["ticker"]
     contract = candidate["contract"]
     quote = candidate["quote"]
     print(
-        f"[2/3] Candidato: {ticker} {contract.option_id} "
+        f"[2/4] Candidato: {ticker} {contract.option_id} "
         f"strike={contract.strike} bid={quote.bid} "
         f"ações={candidate['stock_quantity']}",
         flush=True,
@@ -177,7 +181,7 @@ def main() -> None:
     ):
         raise SystemExit("FAIL Strategy Lab accepted an uncovered CALL")
 
-    print("[2/3] Strategy Lab covered CALL OK", flush=True)
+    print("[2/4] Strategy Lab covered CALL OK", flush=True)
     report["strategy_lab_covered_call"] = {
         "ticker": ticker,
         "option_id": contract.option_id,
@@ -201,7 +205,7 @@ def main() -> None:
         ),
     }
 
-    print("[3/3] UC-03 covered CALL candidate...", flush=True)
+    print("[3/4] UC-03 covered CALL candidate...", flush=True)
     opportunities = LiveOpportunityService().build(
         ticker,
         as_of=datetime.now(timezone.utc),
@@ -229,7 +233,7 @@ def main() -> None:
         raise SystemExit("FAIL UC-03 CALL candidate lacks covered-call evidence")
 
     print(
-        f"[3/3] Opportunities covered CALL OK · "
+        f"[3/4] Opportunities covered CALL OK · "
         f"total={len(ids)} · calls={sum(k.startswith('SELL_CALL:') for k in ids)}",
         flush=True,
     )
@@ -245,11 +249,64 @@ def main() -> None:
             "capital_requirement": opportunity.capital_requirement,
         },
         "marketability": marketability,
+        "capital_semantics": {
+            "covered_position_value": marketability.get(
+                "covered_position_value"
+            ),
+            "incremental_capital_required": marketability.get(
+                "incremental_capital_required"
+            ),
+        },
         "ranking_status": opportunities.ranking_status,
         "ranking_reason": opportunities.ranking_reason,
     }
 
-    print("PASS MARKET + COVERED CALL REAL")
+    print("[4/4] Strategy Lab stock reduction...", flush=True)
+    held_value = float(candidate["stock_quantity"]) * float(
+        comparison["asset_evidence"][ticker]["market"]["current_quote"]["close"]
+    )
+    reduction_amount = min(10000.0, held_value * 0.25)
+    if reduction_amount <= 0:
+        raise SystemExit("FAIL stock reduction: invalid held value")
+    stock_comparison = LiveStrategyComparisonService().compare(
+        assets=(ticker, ticker),
+        strategies=("Manter", "Vender/reduzir ação"),
+        amount=reduction_amount,
+        portfolio=portfolio,
+        as_of=datetime.now(timezone.utc),
+    )
+    stock_alt = stock_comparison["strategy_comparison"]["alternatives"][1]
+    stock_assumptions = stock_alt.get("assumptions") or {}
+    if stock_alt.get("action_type") != "SELL_STOCK":
+        raise SystemExit("FAIL stock reduction action_type")
+    if stock_assumptions.get("capital_released") != reduction_amount:
+        raise SystemExit("FAIL stock reduction capital_released")
+    if stock_assumptions.get("stock_quantity_after_theoretical") is None:
+        raise SystemExit("FAIL stock reduction portfolio impact missing")
+    print(
+        f"[4/4] Stock reduction OK · valor={reduction_amount:.2f} "
+        f"· ações antes={stock_assumptions.get('stock_quantity_before'):.2f} "
+        f"· após={stock_assumptions.get('stock_quantity_after_theoretical'):.2f}",
+        flush=True,
+    )
+    report["strategy_lab_stock_reduction"] = {
+        "ticker": ticker,
+        "notional_reduction": reduction_amount,
+        "current_price_basis": stock_assumptions.get("current_price_basis"),
+        "capital_released": stock_assumptions.get("capital_released"),
+        "stock_quantity_before": stock_assumptions.get(
+            "stock_quantity_before"
+        ),
+        "theoretical_shares_reduced": stock_assumptions.get(
+            "theoretical_shares_reduced"
+        ),
+        "stock_quantity_after_theoretical": stock_assumptions.get(
+            "stock_quantity_after_theoretical"
+        ),
+        "execution_quantity": stock_assumptions.get("execution_quantity"),
+    }
+
+    print("PASS MARKET + OPTIONS + STOCK DECISIONS REAL")
     print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
 
 
