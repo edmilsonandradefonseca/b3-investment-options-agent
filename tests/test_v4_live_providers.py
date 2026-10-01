@@ -148,7 +148,9 @@ def test_live_provider_fetches_oplab_chain_once(monkeypatch):
     adapter = OplabOptionsAdapter()
     monkeypatch.setattr(adapter, "_get_payload", lambda ticker: calls.append(ticker) or payload)
     result = LiveProviderService(
-        market_provider=FakeMarketProvider(), options_provider=adapter
+        market_provider=FakeMarketProvider(),
+        options_provider=adapter,
+        current_market_provider=FakeCurrentMarketProvider(),
     ).load("PETR4", as_of=as_of)
     assert calls == ["PETR4"]
     assert result.option_contracts[0].option_id == result.option_quotes[0].option_id
