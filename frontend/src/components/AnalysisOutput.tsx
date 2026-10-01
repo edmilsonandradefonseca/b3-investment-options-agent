@@ -69,6 +69,9 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
   const optionMarketability = asObject(result.option_marketability);
   const assetEvidence = asObject(result.asset_evidence);
   const optionEvidence = asObject(result.option_evidence);
+  const strategyAlternatives = asArray(strategyComparison?.alternatives)
+    .map(asObject)
+    .filter((item): item is Obj => item !== null);
   const optionEvidenceEntries = optionEvidence
     ? Object.entries(optionEvidence)
         .map(([key, value]) => [key, asObject(value)] as const)
@@ -222,6 +225,8 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
           const coveredCall = marketability?.covered_call === true;
           const coveredRequired = numberValue(marketability?.covered_shares_required);
           const stockAvailable = numberValue(marketability?.stock_shares_available);
+          const coveredPositionValue = numberValue(marketability?.covered_position_value);
+          const incrementalCapital = numberValue(marketability?.incremental_capital_required);
           return <article className="evidence-card" key={asText(item.opportunity_id) ?? String(index)}>
             <h5>{asText(item.ticker) ?? 'Ativo'} · {asText(item.action) ?? 'Ação'}</h5>
             <dl>
@@ -233,7 +238,12 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
               {optionType === 'CALL' && <div><dt>Ganho até strike</dt><dd>{brl(gainToStrike) ?? 'Indisponível'}</dd></div>}
               {optionType === 'CALL' && <div><dt>Retorno se exercida</dt><dd>{pct(totalReturnIfAssigned) ?? 'Indisponível'}</dd></div>}
               {optionType === 'CALL' && <div><dt>Cobertura</dt><dd>{coveredCall && coveredRequired != null && stockAvailable != null ? `${coveredRequired} ações requeridas · ${stockAvailable} disponíveis` : 'Não confirmada'}</dd></div>}
-              <div><dt>Capital requerido</dt><dd>{brl(capital) ?? 'Indisponível'}</dd></div>
+              {optionType === 'CALL'
+                ? <>
+                    <div><dt>Capital já coberto pelas ações</dt><dd>{brl(coveredPositionValue ?? capital) ?? 'Indisponível'}</dd></div>
+                    <div><dt>Capital incremental</dt><dd>{brl(incrementalCapital ?? 0)}</dd></div>
+                  </>
+                : <div><dt>Capital requerido</dt><dd>{brl(capital) ?? 'Indisponível'}</dd></div>}
               <div><dt>Atratividade</dt><dd>{asText(item.attractiveness) ?? 'UNKNOWN'}</dd></div>
               <div><dt>Fit carteira</dt><dd>{asText(item.portfolio_fit) ?? 'UNKNOWN'}</dd></div>
               {marketability && <>
@@ -302,6 +312,33 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
       {strategyComparison && <p className="muted">
         Comparação canônica disponível. Ranking: {asText(asObject(strategyComparison.assumptions)?.ranking) ?? 'não aplicado'}.
       </p>}
+    </section>}
+
+    {strategyAlternatives.length > 0 && <section className="analysis-section">
+      <h4>Alternativas comparadas</h4>
+      <div className="evidence-grid">
+        {strategyAlternatives.map((item, index) => {
+          const assumptions = asObject(item.assumptions);
+          const actionType = asText(item.action_type);
+          const capitalRequired = numberValue(item.capital_required);
+          const capitalReleased = numberValue(assumptions?.capital_released);
+          const quantityBefore = numberValue(assumptions?.stock_quantity_before);
+          const quantityAfter = numberValue(assumptions?.stock_quantity_after_theoretical);
+          const sharesReduced = numberValue(assumptions?.theoretical_shares_reduced);
+          return <article className="evidence-card" key={asText(item.alternative_id) ?? String(index)}>
+            <h5>{asText(item.label) ?? actionType ?? 'Alternativa'}</h5>
+            <dl>
+              <div><dt>Ação</dt><dd>{actionType ?? 'Indisponível'}</dd></div>
+              <div><dt>Capital requerido</dt><dd>{brl(capitalRequired) ?? 'Indisponível'}</dd></div>
+              {capitalReleased != null && <div><dt>Capital liberado no what-if</dt><dd>{brl(capitalReleased)}</dd></div>}
+              {quantityBefore != null && <div><dt>Ações antes</dt><dd>{quantityBefore.toLocaleString('pt-BR')}</dd></div>}
+              {sharesReduced != null && <div><dt>Redução teórica</dt><dd>{sharesReduced.toLocaleString('pt-BR',{maximumFractionDigits:2})} ações</dd></div>}
+              {quantityAfter != null && <div><dt>Ações após what-if</dt><dd>{quantityAfter.toLocaleString('pt-BR',{maximumFractionDigits:2})}</dd></div>}
+            </dl>
+            {asText(assumptions?.execution_quantity) === 'not_inferred' && <p className="muted">Quantidade executável não inferida; comparação por nocional.</p>}
+          </article>;
+        })}
+      </div>
     </section>}
 
     {optionEvidenceEntries.length > 0 && <section className="analysis-section">
