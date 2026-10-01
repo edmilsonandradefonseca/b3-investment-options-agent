@@ -178,6 +178,8 @@ export type LiveAnalysisResponse = {
   source_refs: string[];
   market: {
     history_count: number;
+    current_quote: StockMarketData | null;
+    history_latest: StockMarketData;
     latest: StockMarketData;
   };
   options: {
