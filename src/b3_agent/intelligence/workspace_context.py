@@ -132,18 +132,58 @@ class JoaoMemoryContextClient:
             result = json.loads(response.read().decode("utf-8"))
         if not isinstance(result, dict):
             raise ValueError("João memory context returned a non-object")
-        memories = result.get("memories")
-        relations = result.get("relations")
+        raw_memories = result.get("memories")
+        raw_relations = result.get("relations")
+        memories: list[dict[str, Any]] = []
+        source_refs: list[str] = []
+        if isinstance(raw_memories, list):
+            for item in raw_memories[:10]:
+                if not isinstance(item, dict):
+                    continue
+                memory_id = str(item.get("id") or "").strip()
+                source_ref = (
+                    f"joao-memory:{memory_id}"
+                    if memory_id
+                    else "joao-memory-api"
+                )
+                source_refs.append(source_ref)
+                memories.append(
+                    {
+                        "source_ref": source_ref,
+                        "content": str(item.get("content") or ""),
+                        "memory_type": item.get("memory_type"),
+                        "source": item.get("source"),
+                        "importance": item.get("importance"),
+                        "score": item.get("score"),
+                        "created_at": item.get("created_at"),
+                    }
+                )
+
+        relations: list[dict[str, Any]] = []
+        if isinstance(raw_relations, list):
+            for item in raw_relations[:20]:
+                if not isinstance(item, dict):
+                    continue
+                relations.append(
+                    {
+                        key: item.get(key)
+                        for key in (
+                            "source_entity",
+                            "relation",
+                            "id",
+                            "name",
+                        )
+                        if item.get(key) is not None
+                    }
+                )
+
         return {
             "query": str(result.get("query") or normalized),
-            "memories": (
-                memories[:10] if isinstance(memories, list) else []
-            ),
-            "relations": (
-                relations[:20] if isinstance(relations, list) else []
-            ),
+            "memories": memories,
+            "relations": relations,
             "authority": "derived_non_authoritative",
             "source": "joao-memory-api",
+            "source_refs": list(dict.fromkeys(source_refs)),
         }
 
 
@@ -458,6 +498,11 @@ class WorkspaceIntelligenceContextService:
                     joao_memory_context
                 )
                 source_refs.append("joao-memory-api")
+                source_refs.extend(
+                    str(item)
+                    for item in joao_memory_context.get("source_refs") or ()
+                    if str(item).strip()
+                )
             except (OSError, RuntimeError, ValueError) as exc:
                 derived_intelligence["joao_memory_context"] = {
                     "status": "UNAVAILABLE",
