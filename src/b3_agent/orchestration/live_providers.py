@@ -116,10 +116,10 @@ class LiveProviderService:
                 (*market_sources, *quote_sources, self.options_provider.name)
             )
         )
-        current_price = (
-            current_stock_quote.close
+        current_prices = (
+            {normalized: current_stock_quote.close}
             if current_stock_quote is not None
-            else latest.close
+            else {}
         )
         assumptions = {
             "live_provider_snapshot": True,
@@ -129,7 +129,7 @@ class LiveProviderService:
             "current_stock_price_source": (
                 current_stock_quote.source
                 if current_stock_quote is not None
-                else "historical_close_fallback"
+                else "unavailable"
             ),
         }
         if current_quote_error is not None:
@@ -138,7 +138,7 @@ class LiveProviderService:
             contracts=contracts,
             quotes=quotes,
             as_of=end,
-            current_prices={normalized: current_price},
+            current_prices=current_prices,
             source_refs=source_refs,
             assumptions=assumptions,
         )
