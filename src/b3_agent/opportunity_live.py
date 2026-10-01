@@ -32,8 +32,9 @@ class LiveOpportunityService:
 
     SELL_PUT candidates are deterministic and use the current OPLAB *bid* as the
     executable premium basis. The marketability policy is intentionally simple
-    and auditable: bid > 0, ask > 0, reported volume > 0 and non-expired PUT.
-    No spread threshold, liquidity score or LLM judgment is introduced.
+    and auditable: a non-expired PUT must have a current two-sided market
+    (bid > 0 and ask > 0). Volume, open interest and spread remain reported facts;
+    no liquidity threshold, liquidity score or LLM judgment is introduced.
     """
 
     def __init__(
@@ -81,8 +82,6 @@ class LiveOpportunityService:
                 and bid > 0
                 and ask is not None
                 and ask > 0
-                and volume is not None
-                and volume > 0
             )
             spread_abs = (
                 ask - bid
@@ -173,8 +172,9 @@ class LiveOpportunityService:
             "Stock BUY/ACCUMULATE opportunities are not ranked without a "
             "versioned deterministic stock valuation.",
             "SELL_PUT candidates use current OPLAB bid as executable premium.",
-            "Marketability requires positive bid, ask and reported volume; "
-            "no liquidity score or spread threshold is inferred.",
+            "Marketability requires a positive two-sided bid/ask market; "
+            "volume, open interest and spread are reported but not used as "
+            "unversioned liquidity thresholds.",
         ]
         if not ranked:
             limitations.append(
