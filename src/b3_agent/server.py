@@ -35,6 +35,8 @@ from b3_agent.storage.sqlite import SQLiteStore
 from b3_agent.orchestration import OrchestratorRequest, OrchestratorResponse, b3_orchestrator, configure_default_workflow
 from b3_agent.orchestration.fast_dispatch import FastRouteDispatcher
 from b3_agent.orchestration.live_providers import LiveProviderService
+from b3_agent.providers.oplab.adapter import OplabAdapter
+from b3_agent.providers.oplab.options import OplabOptionsAdapter
 from b3_agent.providers.searxng_news import SearxngNewsAdapter
 from b3_agent.research_events import ResearchEventService
 from b3_agent.runtime import RuntimeManager
@@ -516,6 +518,78 @@ def health() -> dict[str, Any]:
 def runtime_status() -> dict[str, Any]:
     """Expose the operational runtime state through the Orchestrator."""
     return RuntimeManager().status(health_override="ok")
+
+
+@app.get("/market/current/{ticker}")
+def current_market_quote(ticker: str) -> dict[str, Any]:
+    """Return the current OPLAB stock quote, separate from history."""
+    try:
+        quote = OplabAdapter().get_current_quote(ticker)
+        return {
+            "ticker": quote.ticker,
+            "as_of": quote.observation_timestamp.isoformat(),
+            "source": quote.source,
+            "quote": asdict(quote),
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (RuntimeError, OSError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/options/current/{ticker}")
+def current_option_quotes(
+    ticker: str,
+    option_type: str | None = None,
+    limit: int = 100,
+) -> dict[str, Any]:
+    """Return compact current OPLAB option quotes for explicit selection."""
+    if not 1 <= limit <= 500:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 500")
+    normalized_type = option_type.upper().strip() if option_type else None
+    if normalized_type not in {None, "PUT", "CALL"}:
+        raise HTTPException(status_code=400, detail="option_type must be PUT or CALL")
+    try:
+        as_of = datetime.now(timezone.utc)
+        contracts, quotes = OplabOptionsAdapter().get_snapshot(ticker, as_of)
+        quote_by_id = {item.option_id: item for item in quotes}
+        rows = []
+        for contract in contracts:
+            if normalized_type and contract.option_type != normalized_type:
+                continue
+            if contract.expiration_date <= as_of.date():
+                continue
+            quote = quote_by_id.get(contract.option_id)
+            if quote is None:
+                continue
+            if not any(
+                value is not None
+                for value in (quote.bid, quote.ask, quote.last, quote.mid)
+            ):
+                continue
+            rows.append({
+                "contract": asdict(contract),
+                "quote": asdict(quote),
+            })
+        rows.sort(
+            key=lambda row: (
+                row["contract"]["expiration_date"],
+                row["contract"]["strike"],
+                row["contract"]["option_id"],
+            )
+        )
+        return {
+            "ticker": ticker.upper().strip(),
+            "as_of": as_of.isoformat(),
+            "source": "oplab",
+            "option_type": normalized_type,
+            "count": min(len(rows), limit),
+            "options": rows[:limit],
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (RuntimeError, OSError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.get("/analysis/live/{ticker}")
