@@ -64,7 +64,7 @@ class FakeOptionsProvider:
     name = "oplab"
 
     def get_snapshot(self, ticker, as_of):
-        contract = OptionContract(
+        put_contract = OptionContract(
             option_id="WEGEV500",
             underlying_id="WEGE3",
             underlying_ticker="WEGE3",
@@ -74,7 +74,17 @@ class FakeOptionsProvider:
             expiration_date=date(2026, 11, 20),
             contract_multiplier=100.0,
         )
-        quote = OptionQuote(
+        call_contract = OptionContract(
+            option_id="WEGEJ550",
+            underlying_id="WEGE3",
+            underlying_ticker="WEGE3",
+            option_ticker="WEGEJ550",
+            option_type="CALL",
+            strike=55.0,
+            expiration_date=date(2026, 11, 20),
+            contract_multiplier=100.0,
+        )
+        put_quote = OptionQuote(
             instrument_id="WEGEV500",
             ticker="WEGE3",
             observation_timestamp=as_of,
@@ -90,7 +100,23 @@ class FakeOptionsProvider:
             volume=1500,
             open_interest=3000,
         )
-        return [contract], [quote]
+        call_quote = OptionQuote(
+            instrument_id="WEGEJ550",
+            ticker="WEGE3",
+            observation_timestamp=as_of,
+            available_timestamp=as_of,
+            source=self.name,
+            ingested_at=as_of,
+            source_record_id="WEGE3:WEGEJ550:current",
+            option_id="WEGEJ550",
+            bid=0.80,
+            ask=0.90,
+            last=0.85,
+            mid=0.85,
+            volume=900,
+            open_interest=1500,
+        )
+        return [put_contract, call_contract], [put_quote, call_quote]
 
 
 class FakeFundamentalsProvider:
@@ -221,3 +247,81 @@ def test_sell_put_uses_current_oplab_bid_and_one_cash_secured_contract():
     assert alternative["assumptions"]["premium_basis"] == "current_bid"
     assert alternative["assumptions"]["current_option_quote"]["bid"] == 1.20
     assert result["option_evidence"]["WEGEV500"]["current_quote"]["last"] == 1.30
+
+
+def _covered_portfolio(shares: float = 100.0):
+    return PortfolioContext(
+        as_of=date(2026, 9, 27),
+        cash=0.0,
+        cash_is_known=False,
+        positions=(
+            Position(
+                position_id="WEGE3-STOCK",
+                ticker="WEGE3",
+                instrument_type="STOCK",
+                quantity=shares,
+                market_price=49.74,
+                market_value=49.74 * shares,
+            ),
+        ),
+        source_refs=("BTG",),
+    )
+
+
+def test_sell_call_uses_current_bid_and_requires_covered_shares():
+    evidence = StrategyEvidenceService(
+        market_provider=FakeMarketProvider(),
+        fundamentals_provider=FakeFundamentalsProvider(),
+        current_quote_provider=FakeCurrentQuoteProvider(),
+    )
+    service = LiveStrategyComparisonService(
+        evidence_service=evidence,
+        options_provider=FakeOptionsProvider(),
+    )
+    as_of = datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc)
+
+    result = service.compare(
+        assets=("VALE3", "WEGE3"),
+        strategies=("Comprar ação", "Vender CALL coberta"),
+        option_ids=(None, "WEGEJ550"),
+        amount=50_000.0,
+        portfolio=_covered_portfolio(),
+        as_of=as_of,
+    )
+
+    alternative = result["strategy_comparison"]["alternatives"][1]
+    assert alternative["action_type"] == "SELL_CALL"
+    assert alternative["subject_id"] == "WEGEJ550"
+    assert alternative["capital_required"] == 0.0
+    assert alternative["assumptions"]["covered_call"] is True
+    assert alternative["assumptions"]["premium_basis"] == "current_bid"
+    assert alternative["assumptions"]["covered_shares_required"] == 100.0
+    assert alternative["assumptions"]["stock_shares_available"] == 100.0
+    evidence_row = result["option_evidence"]["WEGEJ550"]
+    assert evidence_row["current_quote"]["bid"] == 0.80
+    assert evidence_row["call_analysis"]["premium"] == 0.80
+
+
+def test_sell_call_rejects_uncovered_position():
+    evidence = StrategyEvidenceService(
+        market_provider=FakeMarketProvider(),
+        fundamentals_provider=FakeFundamentalsProvider(),
+        current_quote_provider=FakeCurrentQuoteProvider(),
+    )
+    service = LiveStrategyComparisonService(
+        evidence_service=evidence,
+        options_provider=FakeOptionsProvider(),
+    )
+
+    try:
+        service.compare(
+            assets=("VALE3", "WEGE3"),
+            strategies=("Comprar ação", "Vender CALL coberta"),
+            option_ids=(None, "WEGEJ550"),
+            portfolio=_covered_portfolio(50.0),
+            as_of=datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc),
+        )
+    except ValueError as exc:
+        assert "not covered" in str(exc)
+    else:
+        raise AssertionError("SELL_CALL must reject insufficient underlying shares")
