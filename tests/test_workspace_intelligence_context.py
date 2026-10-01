@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from b3_agent.intelligence import workspace_context
-from b3_agent.intelligence.workspace_context import JoaoResolvePerspectiveService, WorkspaceIntelligenceContextService
+from b3_agent.intelligence.workspace_context import JoaoMemoryContextClient, JoaoResolvePerspectiveService, WorkspaceIntelligenceContextService
 from b3_agent.strategy_live import AssetEvidencePack
 from b3_agent.schemas.macro import MacroObservation
 from b3_agent.schemas.market import StockMarketData
@@ -105,6 +105,26 @@ class FakeMacroRepository:
         )
 
 
+class FakeJoaoMemory:
+    def context(self, query: str, **kwargs):
+        return {
+            "query": query,
+            "memories": [
+                {
+                    "source_ref": "joao-memory:m1",
+                    "content": "Pesquisa anterior sobre WEGE3.",
+                    "memory_type": "research",
+                    "source": "joao-resolve",
+                    "score": 0.91,
+                }
+            ],
+            "relations": [],
+            "authority": "derived_non_authoritative",
+            "source": "joao-memory-api",
+            "source_refs": ["joao-memory:m1"],
+        }
+
+
 class FakeJoao:
     def analyze(self, payload):
         assert payload["workspace"] == "Strategy Lab"
@@ -154,6 +174,7 @@ def test_workspace_context_combines_market_macro_local_and_joao(monkeypatch):
         news_provider=FakeNewsProvider(),
         macro_repository=FakeMacroRepository(),
         asset_evidence_service=FakeAssetEvidenceService(),
+        joao_memory_client=FakeJoaoMemory(),
         joao_service=FakeJoao(),
     )
 
@@ -172,6 +193,9 @@ def test_workspace_context_combines_market_macro_local_and_joao(monkeypatch):
     local = result.derived_intelligence["b3_local_evidence_analyst"]
     assert local["VALE3"]["status"] == "READY"
     assert local["VALE3"]["analysis"]["summary"] == "Dossier local VALE3"
+
+    memory = result.derived_intelligence["joao_memory_context"]
+    assert memory["memories"][0]["source_ref"] == "joao-memory:m1"
 
     joao = result.derived_intelligence["joao_resolve"]
     assert joao["status"] == "READY"
@@ -200,6 +224,7 @@ def test_workspace_context_omits_degraded_local_and_fails_soft_on_joao(monkeypat
         news_provider=FakeNewsProvider(),
         macro_repository=FakeMacroRepository(),
         asset_evidence_service=FakeAssetEvidenceService(),
+        joao_memory_client=FakeJoaoMemory(),
         joao_service=FailingJoao(),
     )
 
@@ -244,3 +269,54 @@ def test_joao_perspective_rejects_unknown_source_refs():
         assert "outside the supplied evidence" in str(exc)
     else:
         raise AssertionError("unknown João source refs must be rejected")
+
+
+
+def test_joao_memory_client_bounds_fields_and_emits_provenance(monkeypatch):
+    payload = {
+        "query": "WEGE3",
+        "memories": [
+            {
+                "id": "abc",
+                "content": "Relevant prior research",
+                "memory_type": "research",
+                "source": "joao-resolve",
+                "importance": 0.8,
+                "score": 0.9,
+                "created_at": "2026-09-30T10:00:00Z",
+                "metadata_json": "{\"private\": \"not forwarded\"}",
+            }
+        ],
+        "relations": [
+            {
+                "source_entity": "WEGE3",
+                "relation": "RELATED_TO",
+                "id": "sector-industrials",
+                "name": "Industrials",
+                "private_field": "not forwarded",
+            }
+        ],
+    }
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def read(self):
+            return __import__("json").dumps(payload).encode("utf-8")
+
+    monkeypatch.setattr(
+        "b3_agent.intelligence.workspace_context.urllib.request.urlopen",
+        lambda request, timeout: Response(),
+    )
+    result = JoaoMemoryContextClient(
+        base_url="http://127.0.0.1:8091",
+    ).context("WEGE3 research")
+
+    assert result["source_refs"] == ["joao-memory:abc"]
+    assert result["memories"][0]["content"] == "Relevant prior research"
+    assert "metadata_json" not in result["memories"][0]
+    assert "private_field" not in result["relations"][0]
