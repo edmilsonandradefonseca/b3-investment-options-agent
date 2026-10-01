@@ -1,5 +1,9 @@
 import type {
   ApiErrorPayload,
+  CapitalProfile,
+  BrokerageLedger,
+  PilotAnalysis,
+  PortfolioSnapshot,
   BrokerageBatchImportResponse,
   BrokerageNoteImportResponse,
   HealthResponse,
@@ -65,17 +69,28 @@ async function readError(response: Response): Promise<ApiErrorPayload | null> {
   }
 }
 
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(apiUrl(path), init);
-  if (!response.ok) {
-    const payload = await readError(response);
-    throw new ApiError(
-      payload?.detail ?? payload?.error ?? `HTTP ${response.status}`,
-      response.status,
-      payload,
-    );
+async function requestJson<T>(path: string, init?: RequestInit, timeoutMs = 30_000): Promise<T> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(apiUrl(path), { ...init, signal: controller.signal });
+    if (!response.ok) {
+      const payload = await readError(response);
+      throw new ApiError(
+        payload?.detail ?? payload?.error ?? `HTTP ${response.status}`,
+        response.status,
+        payload,
+      );
+    }
+    return (await response.json()) as T;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error(`Tempo limite excedido ao aguardar o backend (${Math.round(timeoutMs / 1000)}s).`);
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
   }
-  return (await response.json()) as T;
 }
 
 async function upload<T>(path: string, file: File): Promise<T> {
@@ -86,13 +101,21 @@ async function upload<T>(path: string, file: File): Promise<T> {
 
 export const b3Api = {
   health: () => requestJson<HealthResponse>("/health"),
+  portfolio: () => requestJson<PortfolioSnapshot>("/portfolio/current"),
+  optionLedger: () => requestJson<BrokerageLedger>("/options/ledger"),
+  pilotAnalysis: (ticker: string) => requestJson<PilotAnalysis>(`/intelligence/pilot/${encodeURIComponent(ticker.trim().toUpperCase())}`),
+  capital: () => requestJson<CapitalProfile>("/capital-profile"),
+  saveCapital: (available_capital: number, minimum_reserve: number) => requestJson<CapitalProfile>("/capital-profile", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ available_capital, minimum_reserve }),
+  }),
   version: () => requestJson<VersionResponse>("/version"),
   orchestrate: (request: OrchestrateRequest) =>
     requestJson<OrchestrateResponse>("/orchestrate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
-    }),
+    }, 195_000),
   listTransactions: (limit = 100) =>
     requestJson<TransactionResponse[]>(`/transactions?limit=${encodeURIComponent(limit)}`),
   addTransaction: (request: TransactionRequest) =>
