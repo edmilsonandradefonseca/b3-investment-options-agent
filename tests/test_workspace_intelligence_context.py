@@ -176,6 +176,10 @@ class FakeOpportunityService:
             "option_marketability": {
                 "WEGEV500": {"eligible": True, "bid": 1.2}
             },
+            "opportunity_ranking_status": "DEFERRED_INCOMPLETE_CONTEXT",
+            "opportunity_ranking_reason": (
+                "Economic ranking deferred in fake service."
+            ),
             "limitations": ["Stock valuation unavailable."],
         }
 
@@ -276,8 +280,10 @@ def test_workspace_context_omits_degraded_local_and_fails_soft_on_joao(monkeypat
     assert local["quality_flags"] == ["INVALID_JSON"]
     assert "analysis" not in local
 
-    opportunity_set = result.deterministic_context["workspace_result"]["opportunity_set"]
+    workspace_result = result.deterministic_context["workspace_result"]
+    opportunity_set = workspace_result["opportunity_set"]
     assert opportunity_set["ranked_opportunities"][0]["opportunity_id"] == "SELL_PUT:WEGEV500"
+    assert workspace_result["opportunity_ranking_status"] == "DEFERRED_INCOMPLETE_CONTEXT"
 
     joao = result.derived_intelligence["joao_resolve"]
     assert joao["status"] == "UNAVAILABLE"
