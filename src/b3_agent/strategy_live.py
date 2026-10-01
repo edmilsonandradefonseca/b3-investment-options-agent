@@ -4,10 +4,12 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
 
+from b3_agent.options.put import PutAnalysisEngine
 from b3_agent.orchestration.live_providers import LiveProviderService
 from b3_agent.portfolio.snapshot import load_active_snapshots
 from b3_agent.providers.brapi.fundamentals import BrapiFundamentalsAdapter
 from b3_agent.providers.oplab.adapter import OplabAdapter
+from b3_agent.providers.oplab.options import OplabOptionsAdapter
 from b3_agent.quant_engine import compute_quant_features
 from b3_agent.schemas.position import PortfolioContext
 from b3_agent.schemas.strategy_comparison import StrategyAlternative
@@ -233,10 +235,11 @@ class StrategyEvidenceService:
 
 
 class LiveStrategyComparisonService:
-    """Compose UC-04 BUY_STOCK/HOLD alternatives from live deterministic facts.
+    """Compose UC-04 alternatives from live deterministic facts.
 
-    This is an additive V4.3 composition service. It deliberately does not rank
-    alternatives and does not manufacture expected returns or valuation inputs.
+    BUY_STOCK and HOLD use the current OPLAB underlying quote plus historical
+    evidence. SELL_PUT requires an explicit OPLAB option identifier; the service
+    never chooses an option contract silently.
     """
 
     _STRATEGY_ALIASES = {
@@ -246,6 +249,9 @@ class LiveStrategyComparisonService:
         "buy_stock": "BUY_STOCK",
         "manter": "HOLD",
         "hold": "HOLD",
+        "vender put": "SELL_PUT",
+        "sell put": "SELL_PUT",
+        "sell_put": "SELL_PUT",
     }
 
     def __init__(
@@ -253,29 +259,47 @@ class LiveStrategyComparisonService:
         *,
         evidence_service: StrategyEvidenceService | None = None,
         comparison_engine: StrategyComparisonEngine | None = None,
+        options_provider: OplabOptionsAdapter | None = None,
     ) -> None:
         self.evidence_service = evidence_service or StrategyEvidenceService()
         self.comparison_engine = comparison_engine or StrategyComparisonEngine()
+        self.options_provider = options_provider or OplabOptionsAdapter()
 
     @classmethod
     def normalize_strategy(cls, value: str) -> str | None:
         return cls._STRATEGY_ALIASES.get(" ".join(value.casefold().split()))
 
     @classmethod
-    def supports(cls, values: tuple[str, str]) -> bool:
-        return all(cls.normalize_strategy(value) is not None for value in values)
+    def supports(
+        cls,
+        values: tuple[str, str],
+        *,
+        option_ids: tuple[str | None, str | None] = (None, None),
+    ) -> bool:
+        if len(values) != 2 or len(option_ids) != 2:
+            return False
+        for strategy, option_id in zip(values, option_ids, strict=True):
+            normalized = cls.normalize_strategy(strategy)
+            if normalized is None:
+                return False
+            if normalized == "SELL_PUT" and not str(option_id or "").strip():
+                return False
+        return True
 
     def compare(
         self,
         *,
         assets: tuple[str, str],
         strategies: tuple[str, str],
+        option_ids: tuple[str | None, str | None] = (None, None),
         amount: float | None = None,
         portfolio: PortfolioContext | None = None,
         as_of: datetime | None = None,
     ) -> dict[str, Any]:
-        if len(assets) != 2 or len(strategies) != 2:
-            raise ValueError("strategy comparison requires exactly two alternatives")
+        if len(assets) != 2 or len(strategies) != 2 or len(option_ids) != 2:
+            raise ValueError(
+                "strategy comparison requires exactly two alternatives"
+            )
         if amount is not None and amount < 0:
             raise ValueError("comparison amount must be non-negative")
 
@@ -284,7 +308,11 @@ class LiveStrategyComparisonService:
         )
         if any(value is None for value in normalized_strategies):
             raise ValueError(
-                "live deterministic comparison currently supports BUY_STOCK and HOLD"
+                "live deterministic comparison supports BUY_STOCK, HOLD and SELL_PUT"
+            )
+        if not self.supports(strategies, option_ids=option_ids):
+            raise ValueError(
+                "SELL_PUT requires an explicit current OPLAB option identifier"
             )
 
         effective_as_of = as_of or datetime.now(timezone.utc)
@@ -300,36 +328,139 @@ class LiveStrategyComparisonService:
             for ticker in assets
         )
 
-        alternatives = []
-        for index, (pack, original, normalized_strategy) in enumerate(
-            zip(packs, strategies, normalized_strategies, strict=True),
+        alternatives: list[StrategyAlternative] = []
+        option_evidence: dict[str, dict[str, Any]] = {}
+        option_snapshots: dict[str, tuple[list[Any], list[Any]]] = {}
+        all_sources: list[str] = [
+            source for pack in packs for source in pack.source_refs
+        ]
+
+        for index, (pack, original, normalized_strategy, option_id) in enumerate(
+            zip(
+                packs,
+                strategies,
+                normalized_strategies,
+                option_ids,
+                strict=True,
+            ),
             start=1,
         ):
             assert normalized_strategy is not None
+            assumptions: dict[str, Any] = {
+                "amount": amount,
+                "expected_return": "not_inferred",
+                "valuation": "not_computed_without_explicit_assumptions",
+                "ranking": "not_applied",
+                "current_underlying_quote": pack.market.get("current_quote"),
+            }
+            capital_required = (
+                amount if normalized_strategy == "BUY_STOCK" else 0.0
+            )
+            max_loss = None
+            subject_id = pack.ticker
+            label = f"{original} · {pack.ticker}"
+            alternative_sources = list(pack.source_refs)
+
+            if normalized_strategy == "SELL_PUT":
+                normalized_option = str(option_id or "").upper().strip()
+                if pack.ticker not in option_snapshots:
+                    option_snapshots[pack.ticker] = self.options_provider.get_snapshot(
+                        pack.ticker,
+                        effective_as_of,
+                    )
+                contracts, quotes = option_snapshots[pack.ticker]
+                contract = next(
+                    (
+                        item
+                        for item in contracts
+                        if item.option_id.upper() == normalized_option
+                    ),
+                    None,
+                )
+                quote = next(
+                    (
+                        item
+                        for item in quotes
+                        if item.option_id.upper() == normalized_option
+                    ),
+                    None,
+                )
+                if contract is None:
+                    raise ValueError(
+                        f"OPLAB contract {normalized_option} was not found for {pack.ticker}"
+                    )
+                if contract.option_type.upper() != "PUT":
+                    raise ValueError(
+                        f"{normalized_option} is not a PUT contract"
+                    )
+                if contract.expiration_date <= effective_as_of.date():
+                    raise ValueError(
+                        f"{normalized_option} is expired or expires today"
+                    )
+                if quote is None:
+                    raise ValueError(
+                        f"OPLAB current quote {normalized_option} was not found"
+                    )
+                if quote.bid is None or quote.bid <= 0:
+                    raise ValueError(
+                        f"{normalized_option} has no executable current bid"
+                    )
+
+                put = PutAnalysisEngine().analyze(
+                    option_id=contract.option_id,
+                    underlying_ticker=pack.ticker,
+                    strike=contract.strike,
+                    expiration_date=contract.expiration_date,
+                    premium=quote.bid,
+                    contract_multiplier=contract.contract_multiplier,
+                    as_of=effective_as_of.date(),
+                )
+                subject_id = contract.option_id
+                label = f"{original} {contract.option_id} · {pack.ticker}"
+                capital_required = (
+                    contract.strike * contract.contract_multiplier
+                )
+                max_loss = (
+                    put.effective_price * contract.contract_multiplier
+                )
+                assumptions.update({
+                    "contract_count": 1,
+                    "cash_secured": True,
+                    "premium_basis": "current_bid",
+                    "option_id": contract.option_id,
+                    "current_option_quote": asdict(quote),
+                    "put_analysis": asdict(put),
+                })
+                option_evidence[contract.option_id] = {
+                    "underlying_ticker": pack.ticker,
+                    "contract": asdict(contract),
+                    "current_quote": asdict(quote),
+                    "put_analysis": asdict(put),
+                    "premium_basis": "current_bid",
+                    "contract_count": 1,
+                }
+                alternative_sources.append(quote.source)
+                all_sources.append(quote.source)
+
+            alternative_sources = list(dict.fromkeys(alternative_sources))
             alternatives.append(
                 StrategyAlternative(
                     alternative_id=(
-                        f"LIVE-{index}-{pack.ticker}-{normalized_strategy}-"
+                        f"LIVE-{index}-{subject_id}-{normalized_strategy}-"
                         f"{effective_as_of.isoformat()}"
                     ),
-                    label=f"{original} · {pack.ticker}",
+                    label=label,
                     action_type=normalized_strategy,
-                    subject_id=pack.ticker,
+                    subject_id=subject_id,
                     as_of=effective_as_of,
-                    capital_required=(
-                        amount if normalized_strategy == "BUY_STOCK" else 0.0
-                    ),
-                    assumptions={
-                        "amount": amount,
-                        "expected_return": "not_inferred",
-                        "valuation": "not_computed_without_explicit_assumptions",
-                        "ranking": "not_applied",
-                    },
+                    capital_required=capital_required,
+                    max_loss=max_loss,
+                    assumptions=assumptions,
                     evidence_refs=tuple(
-                        f"asset_evidence:{pack.ticker}:{source}"
-                        for source in pack.source_refs
+                        f"strategy_evidence:{subject_id}:{source}"
+                        for source in alternative_sources
                     ),
-                    source_refs=pack.source_refs,
+                    source_refs=tuple(alternative_sources),
                     quality_status=pack.quality_status,
                 )
             )
@@ -338,44 +469,44 @@ class LiveStrategyComparisonService:
             alternatives[0],
             alternatives[1],
         )
-        limitations = tuple(
-            dict.fromkeys(
-                [
-                    *(
-                        item
-                        for pack in packs
-                        for item in pack.limitations
-                    ),
-                    "Expected return is not inferred from historical returns.",
-                    "Valuation is not computed without explicit, versioned assumptions.",
-                    "Deterministic comparative ranking is not yet applied.",
-                ]
+        limitations = [
+            item
+            for pack in packs
+            for item in pack.limitations
+        ]
+        if any(
+            strategy == "SELL_PUT"
+            for strategy in normalized_strategies
+        ):
+            limitations.append(
+                "SELL_PUT uses one cash-secured contract and the current OPLAB bid; "
+                "no option contract or execution price is inferred."
             )
-        )
-        quality = comparison.quality_status
+        limitations.extend([
+            "Expected return is not inferred from historical returns.",
+            "Valuation is not computed without explicit, versioned assumptions.",
+            "Deterministic comparative ranking is not yet applied.",
+        ])
+        limitations = list(dict.fromkeys(limitations))
 
         return {
             "as_of": effective_as_of,
-            "quality_status": quality,
+            "quality_status": comparison.quality_status,
             "summary": (
                 f"Comparação determinística construída para "
                 f"{alternatives[0].label} versus {alternatives[1].label} "
-                "com dados de mercado, indicadores quantitativos, fundamentos "
-                "disponíveis e contexto de carteira. Ranking não aplicado."
+                "com cotações atuais OPLAB separadas do histórico, indicadores "
+                "quantitativos, fundamentos disponíveis e contexto de carteira. "
+                "Ranking não aplicado."
             ),
             "strategy_comparison": asdict(comparison),
             "asset_evidence": {
                 pack.ticker: asdict(pack)
                 for pack in packs
             },
-            "limitations": list(limitations),
-            "source_refs": list(
-                dict.fromkeys(
-                    source
-                    for pack in packs
-                    for source in pack.source_refs
-                )
-            ),
+            "option_evidence": option_evidence,
+            "limitations": limitations,
+            "source_refs": list(dict.fromkeys(all_sources)),
         }
 
 
