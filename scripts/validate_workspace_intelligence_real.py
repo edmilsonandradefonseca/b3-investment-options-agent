@@ -1,0 +1,216 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import json
+import os
+import time
+import urllib.request
+
+
+BASE_URL = os.getenv("B3_API_URL", "http://127.0.0.1:8000").rstrip("/")
+TIMEOUT = float(os.getenv("B3_WORKSPACE_VALIDATION_TIMEOUT_SECONDS", "300"))
+
+
+def post_orchestrate(payload: dict) -> tuple[dict, float]:
+    request = urllib.request.Request(
+        f"{BASE_URL}/orchestrate",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    started = time.monotonic()
+    with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+        body = json.loads(response.read().decode("utf-8"))
+    elapsed = time.monotonic() - started
+    if not isinstance(body, dict):
+        raise RuntimeError("orchestrate returned a non-object response")
+    return body, elapsed
+
+
+def require_intelligence(
+    name: str,
+    response: dict,
+    *,
+    expected_tickers: tuple[str, ...] = (),
+    require_fast_strategy: bool = False,
+) -> dict:
+    if response.get("error"):
+        raise SystemExit(f"FAIL {name}: {response['error']}")
+
+    result = response.get("result") or {}
+    workspace = result.get("workspace_intelligence") or {}
+    if not workspace:
+        raise SystemExit(f"FAIL {name}: workspace_intelligence missing")
+
+    derived = workspace.get("derived_intelligence") or {}
+    joao = derived.get("joao_resolve") or {}
+    if joao.get("status") != "READY":
+        raise SystemExit(
+            f"FAIL {name}: João Resolve status={joao.get('status')} "
+            f"error={joao.get('error')}"
+        )
+
+    for key in (
+        "market_agent_analysis",
+        "portfolio_agent_analysis",
+        "options_agent_analysis",
+        "synthesis",
+        "proposal",
+    ):
+        if not isinstance(result.get(key), dict):
+            raise SystemExit(f"FAIL {name}: B3 senior output {key} missing")
+
+    if require_fast_strategy:
+        fast = result.get("fast_route") or {}
+        if fast.get("target") != "strategy_engine":
+            raise SystemExit(
+                f"FAIL {name}: deterministic strategy route={fast.get('target')}"
+            )
+        if not result.get("asset_evidence"):
+            raise SystemExit(f"FAIL {name}: deterministic asset evidence missing")
+
+    market = workspace.get("market_context") or {}
+    by_ticker = market.get("tickers") or {}
+    for ticker in expected_tickers:
+        current = (by_ticker.get(ticker) or {}).get("current_quote") or {}
+        if current.get("source") != "oplab":
+            raise SystemExit(
+                f"FAIL {name}: {ticker} current quote is not from OPLAB"
+            )
+        if not isinstance(current.get("close"), (int, float)):
+            raise SystemExit(
+                f"FAIL {name}: {ticker} current OPLAB price missing"
+            )
+
+    return {
+        "status": response.get("status"),
+        "joao": joao.get("status"),
+        "b3_agents": {
+            "market": bool(result.get("market_agent_analysis")),
+            "portfolio": bool(result.get("portfolio_agent_analysis")),
+            "options": bool(result.get("options_agent_analysis")),
+            "synthesis": bool(result.get("synthesis")),
+            "proposal": bool(result.get("proposal")),
+        },
+        "sources": len(response.get("sources") or []),
+        "limitations": workspace.get("limitations") or [],
+        "market": market,
+        "result": result,
+    }
+
+
+def main() -> None:
+    report: dict[str, dict] = {}
+
+    strategy_response, strategy_seconds = post_orchestrate(
+        {
+            "task": (
+                "UC-04: compare Comprar ação em VALE3 e Comprar ação em WEGE3. "
+                "Integre fatos canônicos, mercado atual, inteligência B3/DeepSeek "
+                "e perspectiva João Resolve. Não invente ranking."
+            ),
+            "ticker": None,
+            "context": {
+                "workspace": "Strategy Lab",
+                "selected_ticker": None,
+                "comparison_assets": ["VALE3", "WEGE3"],
+                "strategy_a": "Comprar ação",
+                "strategy_b": "Comprar ação",
+                "comparison_amount": 50000,
+            },
+        }
+    )
+    strategy = require_intelligence(
+        "Strategy Lab",
+        strategy_response,
+        expected_tickers=("VALE3", "WEGE3"),
+        require_fast_strategy=True,
+    )
+    report["strategy_lab"] = {
+        "seconds": round(strategy_seconds, 2),
+        "status": strategy["status"],
+        "joao": strategy["joao"],
+        "b3_agents": strategy["b3_agents"],
+        "sources": strategy["sources"],
+        "limitations": strategy["limitations"],
+    }
+
+    market_response, market_seconds = post_orchestrate(
+        {
+            "task": (
+                "UC-05/06/10: produza inteligência de mercado integrando macro, "
+                "eventos/notícias atuais, agentes B3, DeepSeek disponível e João "
+                "Resolve; preserve fontes, incertezas e autoridade determinística."
+            ),
+            "ticker": None,
+            "context": {
+                "workspace": "Market Intelligence",
+                "selected_ticker": None,
+                "asset_view": False,
+            },
+        }
+    )
+    market = require_intelligence("Market Intelligence", market_response)
+    macro = market["market"].get("macro") or {}
+    if not macro:
+        raise SystemExit("FAIL Market Intelligence: macro context missing")
+    report["market_intelligence"] = {
+        "seconds": round(market_seconds, 2),
+        "status": market["status"],
+        "joao": market["joao"],
+        "b3_agents": market["b3_agents"],
+        "sources": market["sources"],
+        "macro_indicators": sorted(macro),
+        "broad_market_events": len(
+            market["market"].get("market_overview_research") or []
+        ),
+        "limitations": market["limitations"],
+    }
+
+    opportunities_response, opportunities_seconds = post_orchestrate(
+        {
+            "task": (
+                "UC-03: analise WEGE3 sob demanda com dados canônicos disponíveis, "
+                "mercado atual, evidências, agentes B3/DeepSeek e João Resolve. "
+                "Não crie ranking ou valuation ausente."
+            ),
+            "ticker": "WEGE3",
+            "context": {
+                "workspace": "Opportunities",
+                "selected_ticker": "WEGE3",
+            },
+        }
+    )
+    opportunities = require_intelligence(
+        "Opportunities",
+        opportunities_response,
+        expected_tickers=("WEGE3",),
+    )
+    opportunity_result = opportunities["result"]
+    canonical_present = bool(
+        opportunity_result.get("opportunity_set")
+        or opportunity_result.get("opportunities")
+    )
+    report["opportunities"] = {
+        "seconds": round(opportunities_seconds, 2),
+        "status": opportunities["status"],
+        "joao": opportunities["joao"],
+        "b3_agents": opportunities["b3_agents"],
+        "sources": opportunities["sources"],
+        "canonical_opportunity_set_present": canonical_present,
+        "limitations": opportunities["limitations"],
+    }
+
+    report["total_seconds"] = round(
+        strategy_seconds + market_seconds + opportunities_seconds,
+        2,
+    )
+    print("PASS WORKSPACE INTELLIGENCE REAL")
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()
