@@ -318,3 +318,56 @@ def test_structured_covered_call_dispatches_explicit_contract_without_llm(monkey
     assert response.status == "COMPLETED"
     assert response.result["fast_route"]["target"] == "strategy_engine"
     assert response.result["option_evidence"]["PETRJ450"]["current_quote"]["bid"] == 0.8
+
+
+def test_structured_stock_reduction_dispatches_portfolio_and_amount(monkeypatch):
+    _install_portfolio(monkeypatch)
+
+    class FakeStrategyService:
+        def compare(self, **kwargs):
+            assert kwargs["assets"] == ("PETR4", "PETR4")
+            assert kwargs["strategies"] == ("Manter", "Vender/reduzir ação")
+            assert kwargs["amount"] == 2000.0
+            assert kwargs["portfolio"].positions[0].ticker == "PETR4"
+            return {
+                "as_of": "2026-10-01T15:00:00+00:00",
+                "quality_status": "WARNING",
+                "summary": "stock reduction comparison ready",
+                "strategy_comparison": {
+                    "alternatives": [
+                        {"action_type": "HOLD"},
+                        {
+                            "action_type": "SELL_STOCK",
+                            "capital_required": 0.0,
+                            "assumptions": {"capital_released": 2000.0},
+                        },
+                    ],
+                    "assumptions": {"ranking": "not_applied"},
+                },
+                "asset_evidence": {"PETR4": {}},
+                "option_evidence": {},
+                "limitations": [],
+                "source_refs": ["oplab", "BTG:Renda Variavel:Acoes"],
+            }
+
+    monkeypatch.setattr(
+        fast_dispatch,
+        "LiveStrategyComparisonService",
+        FakeStrategyService,
+    )
+    response = FastRouteDispatcher().dispatch(
+        task="UC-04: compare Manter PETR4 e Vender/reduzir ação PETR4",
+        context={
+            "workspace": "Strategy Lab",
+            "comparison_assets": ["PETR4", "PETR4"],
+            "strategy_a": "Manter",
+            "strategy_b": "Vender/reduzir ação",
+            "comparison_amount": 2000,
+        },
+    )
+
+    assert response is not None
+    assert response.status == "COMPLETED"
+    alternatives = response.result["strategy_comparison"]["alternatives"]
+    assert alternatives[1]["action_type"] == "SELL_STOCK"
+    assert alternatives[1]["assumptions"]["capital_released"] == 2000.0
