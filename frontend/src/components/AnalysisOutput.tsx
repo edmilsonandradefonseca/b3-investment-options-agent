@@ -21,6 +21,9 @@ const numberValue = (value: unknown): number | null =>
 const brl = (value: number | null) =>
   value == null ? null : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
+const pct = (value: number | null) =>
+  value == null ? null : new Intl.NumberFormat('pt-BR', { style: 'percent', maximumFractionDigits: 2 }).format(value);
+
 function BulletSection({ title, values }: { title: string; values: string[] }) {
   if (!values.length) return null;
   return <section className="analysis-section"><h4>{title}</h4><ul>{values.map((item, index) => <li key={index}>{item}</li>)}</ul></section>;
@@ -39,6 +42,13 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
   const portfolioIntelligence = asObject(result.portfolio_intelligence);
   const capitalRisk = asObject(portfolioIntelligence?.capital_risk);
   const fastRoute = asObject(result.fast_route);
+  const strategyComparison = asObject(result.strategy_comparison);
+  const assetEvidence = asObject(result.asset_evidence);
+  const evidenceEntries = assetEvidence
+    ? Object.entries(assetEvidence)
+        .map(([key, value]) => [key, asObject(value)] as const)
+        .filter((entry): entry is readonly [string, Obj] => entry[1] !== null)
+    : [];
 
   const summary =
     asText(result.summary) ??
@@ -80,6 +90,44 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
       {(assignmentCapital != null || uncoveredCallShares != null) && <p>
         {assignmentCapital != null ? `Capital potencial de exercício/assign: ${brl(assignmentCapital)}.` : ''}
         {uncoveredCallShares != null ? ` Ações descobertas em calls: ${uncoveredCallShares}.` : ''}
+      </p>}
+    </section>}
+
+    {evidenceEntries.length > 0 && <section className="analysis-section">
+      <h4>Fatos determinísticos por ativo</h4>
+      <div className="evidence-grid">
+        {evidenceEntries.map(([ticker, evidence]) => {
+          const market = asObject(evidence.market);
+          const latest = asObject(market?.latest);
+          const quant = asObject(evidence.quant);
+          const fundamentals = asObject(evidence.fundamentals);
+          const portfolio = asObject(evidence.portfolio);
+          const close = numberValue(latest?.close);
+          const volume = numberValue(latest?.volume);
+          const vol20 = numberValue(quant?.volatility_20d);
+          const vol60 = numberValue(quant?.volatility_60d);
+          const drawdown = numberValue(quant?.max_drawdown);
+          const rsi = numberValue(quant?.rsi_14);
+          const metricCount = numberValue(fundamentals?.metric_count);
+          const held = portfolio?.held === true;
+          const quantity = numberValue(portfolio?.stock_quantity);
+          return <article className="evidence-card" key={ticker}>
+            <h5>{ticker}</h5>
+            <dl>
+              <div><dt>Último preço</dt><dd>{brl(close) ?? 'Indisponível'}</dd></div>
+              <div><dt>Volume</dt><dd>{volume == null ? 'Indisponível' : new Intl.NumberFormat('pt-BR').format(volume)}</dd></div>
+              <div><dt>Volatilidade 20d</dt><dd>{pct(vol20) ?? 'Indisponível'}</dd></div>
+              <div><dt>Volatilidade 60d</dt><dd>{pct(vol60) ?? 'Indisponível'}</dd></div>
+              <div><dt>Drawdown histórico</dt><dd>{pct(drawdown) ?? 'Indisponível'}</dd></div>
+              <div><dt>RSI 14</dt><dd>{rsi == null ? 'Indisponível' : rsi.toFixed(1)}</dd></div>
+              <div><dt>Fundamentos BRAPI</dt><dd>{metricCount == null ? 'Indisponível' : `${metricCount} métricas`}</dd></div>
+              <div><dt>Na carteira</dt><dd>{held ? `Sim${quantity != null ? ` · ${quantity} ações` : ''}` : 'Não'}</dd></div>
+            </dl>
+          </article>;
+        })}
+      </div>
+      {strategyComparison && <p className="muted">
+        Comparação canônica disponível. Ranking: {asText(asObject(strategyComparison.assumptions)?.ranking) ?? 'não aplicado'}.
       </p>}
     </section>}
 
