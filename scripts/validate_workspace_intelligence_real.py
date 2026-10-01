@@ -4,11 +4,36 @@ from __future__ import annotations
 import json
 import os
 import time
+import urllib.error
 import urllib.request
 
 
 BASE_URL = os.getenv("B3_API_URL", "http://127.0.0.1:8000").rstrip("/")
 TIMEOUT = float(os.getenv("B3_WORKSPACE_VALIDATION_TIMEOUT_SECONDS", "180"))
+STARTUP_TIMEOUT = float(os.getenv("B3_WORKSPACE_STARTUP_TIMEOUT_SECONDS", "45"))
+
+
+def wait_for_runtime() -> float:
+    started = time.monotonic()
+    deadline = started + STARTUP_TIMEOUT
+    last_error = "not attempted"
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(
+                f"{BASE_URL}/health",
+                timeout=2.0,
+            ) as response:
+                if 200 <= response.status < 300:
+                    return time.monotonic() - started
+                last_error = f"HTTP {response.status}"
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            last_error = str(exc)
+        time.sleep(0.5)
+    raise SystemExit(
+        f"FAIL runtime did not become healthy within {STARTUP_TIMEOUT:.0f}s: "
+        f"{last_error}. Check: sudo systemctl status b3-runtime.service "
+        "--no-pager -l && sudo journalctl -u b3-runtime.service -n 80 --no-pager"
+    )
 
 
 def post_orchestrate(payload: dict) -> tuple[dict, float]:
@@ -155,6 +180,10 @@ def require_intelligence(
 
 def main() -> None:
     report: dict[str, dict] = {}
+
+    print("[0/3] Aguardando b3-runtime ficar saudável...", flush=True)
+    startup_seconds = wait_for_runtime()
+    print(f"[0/3] b3-runtime saudável em {startup_seconds:.1f}s", flush=True)
 
     print("[1/3] Strategy Lab: validando B3 + João + mercado...", flush=True)
     strategy_response, strategy_seconds = post_orchestrate(
