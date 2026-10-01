@@ -2,6 +2,8 @@ import type {
   ApiErrorPayload,
   CapitalProfile,
   BrokerageLedger,
+  CurrentMarketQuoteResponse,
+  CurrentOptionsResponse,
   PilotAnalysis,
   PortfolioSnapshot,
   BrokerageBatchImportResponse,
@@ -129,6 +131,14 @@ export const b3Api = {
   importBrokerageNote: (file: File) => upload<BrokerageNoteImportResponse>("/imports/brokerage-notes", file),
   importBrokerageBatch: (file: File) => upload<BrokerageBatchImportResponse>("/imports/brokerage-notes/batch", file),
   brokerageBatchUploadUrl: () => apiUrl("/imports/brokerage-notes/upload"),
+  currentMarketQuote: (ticker: string) =>
+    requestJson<CurrentMarketQuoteResponse>(
+      `/market/current/${encodeURIComponent(ticker.trim().toUpperCase())}`,
+    ),
+  currentOptions: (ticker: string, optionType: "PUT" | "CALL" = "PUT", limit = 100) =>
+    requestJson<CurrentOptionsResponse>(
+      `/options/current/${encodeURIComponent(ticker.trim().toUpperCase())}?option_type=${encodeURIComponent(optionType)}&limit=${encodeURIComponent(limit)}`,
+    ),
   liveAnalysis: (ticker: string) =>
     requestJson<LiveAnalysisResponse>(`/analysis/live/${encodeURIComponent(ticker.trim().toUpperCase())}`),
   researchNews: (ticker: string, limit = 20) =>
