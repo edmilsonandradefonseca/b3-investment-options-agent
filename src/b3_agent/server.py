@@ -523,17 +523,24 @@ def live_analysis(ticker: str) -> dict[str, Any]:
     """Return normalized live market/options analytics for one B3 underlying."""
     try:
         snapshot = LiveProviderService().load(ticker)
-        latest = max(
+        history_latest = max(
             snapshot.market_records,
             key=lambda item: item.observation_timestamp,
         )
+        display_latest = snapshot.current_stock_quote or history_latest
         return {
             "ticker": snapshot.ticker,
             "as_of": snapshot.as_of.isoformat(),
             "source_refs": list(snapshot.source_refs),
             "market": {
                 "history_count": len(snapshot.market_records),
-                "latest": asdict(latest),
+                "current_quote": (
+                    asdict(snapshot.current_stock_quote)
+                    if snapshot.current_stock_quote is not None
+                    else None
+                ),
+                "history_latest": asdict(history_latest),
+                "latest": asdict(display_latest),
             },
             "options": {
                 "contract_count": len(snapshot.option_contracts),
