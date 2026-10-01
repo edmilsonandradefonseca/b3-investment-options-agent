@@ -4,11 +4,15 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from b3_agent.config import settings
 from b3_agent.opportunity_pipeline import OpportunityPipeline
 from b3_agent.options.analysis import OptionsAnalysis
+from b3_agent.options.call import CallAnalysisEngine
 from b3_agent.options.put import PutAnalysisEngine
+from b3_agent.portfolio.snapshot import load_active_snapshots
 from b3_agent.orchestration.live_providers import LiveProviderService
 from b3_agent.schemas.opportunity import OpportunitySet
+from b3_agent.schemas.position import PortfolioContext
 
 
 MARKETABILITY_POLICY = "B3_OPTION_MARKETABILITY_V1"
@@ -55,6 +59,7 @@ class LiveOpportunityService:
         *,
         as_of: datetime | None = None,
         limit: int = 20,
+        portfolio: PortfolioContext | None = None,
     ) -> LiveOpportunityResult:
         if limit < 1:
             raise ValueError("limit must be positive")
@@ -66,10 +71,39 @@ class LiveOpportunityService:
         contracts = {item.option_id: item for item in snapshot.option_contracts}
         quotes = {item.option_id: item for item in snapshot.option_quotes}
 
+        if portfolio is None:
+            try:
+                candidate = load_active_snapshots(settings.data_dir).get(
+                    "portfolio_context"
+                )
+                if isinstance(candidate, PortfolioContext):
+                    portfolio = candidate
+            except (OSError, RuntimeError, ValueError):
+                portfolio = None
+
+        normalized_ticker = snapshot.ticker.upper()
+        stock_quantity = 0.0
+        if portfolio is not None:
+            stock_quantity = sum(
+                float(position.quantity)
+                for position in portfolio.positions
+                if position.instrument_type.upper() != "OPTION"
+                and position.ticker.upper() == normalized_ticker
+                and position.quantity > 0
+            )
+
+        current_price = (
+            snapshot.current_stock_quote.close
+            if snapshot.current_stock_quote is not None
+            else None
+        )
+
         puts = []
+        calls = []
         marketability: dict[str, dict[str, Any]] = {}
         for option_id, contract in contracts.items():
-            if contract.option_type.upper() != "PUT":
+            option_type = contract.option_type.upper()
+            if option_type not in {"PUT", "CALL"}:
                 continue
             if contract.expiration_date <= effective_as_of.date():
                 continue
@@ -80,11 +114,18 @@ class LiveOpportunityService:
             bid = quote.bid
             ask = quote.ask
             volume = quote.volume
-            eligible = (
+            two_sided = (
                 bid is not None
                 and bid > 0
                 and ask is not None
                 and ask > 0
+            )
+            covered_call = (
+                option_type == "CALL"
+                and stock_quantity >= float(contract.contract_multiplier)
+            )
+            eligible = two_sided and (
+                option_type == "PUT" or covered_call
             )
             spread_abs = (
                 ask - bid
@@ -104,6 +145,19 @@ class LiveOpportunityService:
             marketability[option_id] = {
                 "policy_version": MARKETABILITY_POLICY,
                 "eligible": eligible,
+                "option_type": option_type,
+                "candidate_action": (
+                    "SELL_PUT" if option_type == "PUT" else "SELL_CALL"
+                ),
+                "covered_call": covered_call if option_type == "CALL" else None,
+                "stock_shares_available": (
+                    stock_quantity if option_type == "CALL" else None
+                ),
+                "covered_shares_required": (
+                    float(contract.contract_multiplier)
+                    if option_type == "CALL"
+                    else None
+                ),
                 "bid": bid,
                 "ask": ask,
                 "last": quote.last,
@@ -123,7 +177,8 @@ class LiveOpportunityService:
             if not eligible:
                 continue
 
-            put_analysis = PutAnalysisEngine().analyze(
+            if option_type == "PUT":
+                put_analysis = PutAnalysisEngine().analyze(
                     option_id=contract.option_id,
                     underlying_ticker=contract.underlying_ticker,
                     strike=contract.strike,
@@ -132,24 +187,48 @@ class LiveOpportunityService:
                     contract_multiplier=contract.contract_multiplier,
                     as_of=effective_as_of.date(),
                 )
-            marketability[option_id].update({
-                "effective_price": put_analysis.effective_price,
-                "premium_yield": (
-                    put_analysis.premium / put_analysis.effective_price
-                ),
-                "annualized_return": put_analysis.annualized_return,
-            })
-            puts.append(put_analysis)
+                marketability[option_id].update({
+                    "effective_price": put_analysis.effective_price,
+                    "premium_yield": (
+                        put_analysis.premium / put_analysis.effective_price
+                    ),
+                    "annualized_return": put_analysis.annualized_return,
+                })
+                puts.append(put_analysis)
+            else:
+                if current_price is None or current_price <= 0:
+                    continue
+                call_analysis = CallAnalysisEngine().analyze(
+                    option_id=contract.option_id,
+                    underlying_ticker=contract.underlying_ticker,
+                    strike=contract.strike,
+                    expiration_date=contract.expiration_date,
+                    premium=float(bid),
+                    contract_multiplier=contract.contract_multiplier,
+                    as_of=effective_as_of.date(),
+                    current_price=float(current_price),
+                )
+                marketability[option_id].update({
+                    "premium_yield": call_analysis.premium_return,
+                    "annualized_return": call_analysis.annualized_premium_return,
+                    "gain_to_strike": call_analysis.gain_to_strike,
+                    "total_return_if_assigned": (
+                        call_analysis.total_return_if_assigned
+                    ),
+                })
+                calls.append(call_analysis)
 
         analysis = OptionsAnalysis(
             puts=tuple(puts),
-            calls=(),
+            calls=tuple(calls),
             source_refs=snapshot.source_refs,
             quality_status="WARNING",
             assumptions={
                 "premium_basis": "current_bid",
                 "marketability_policy": MARKETABILITY_POLICY,
                 "stock_opportunities": "not_built_without_versioned_valuation",
+                "covered_call_requires_canonical_stock_holding": True,
+                "stock_shares_available": stock_quantity,
             },
         )
         built = self.pipeline.build_from_inputs(
@@ -211,7 +290,9 @@ class LiveOpportunityService:
         limitations = [
             "Stock BUY/ACCUMULATE opportunities are not ranked without a "
             "versioned deterministic stock valuation.",
-            "SELL_PUT candidates use current OPLAB bid as executable premium.",
+            "SELL_PUT and covered SELL_CALL candidates use current OPLAB bid as executable premium.",
+            "SELL_CALL candidates are emitted only when the canonical portfolio "
+            "contains enough underlying shares for one covered contract.",
             "Marketability requires a positive two-sided bid/ask market; "
             "volume, open interest and spread are reported but not used as "
             "unversioned liquidity thresholds.",
@@ -219,7 +300,8 @@ class LiveOpportunityService:
         ]
         if not ranked:
             limitations.append(
-                "No SELL_PUT candidate satisfied the current marketability policy."
+                "No option candidate satisfied the current marketability and "
+                "portfolio-coverage policy."
             )
 
         selected_option_ids = {
