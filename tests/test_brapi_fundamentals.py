@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 import json
+from urllib.error import HTTPError
 
 from b3_agent.providers.brapi.fundamentals import BrapiFundamentalsAdapter
 
@@ -122,3 +123,50 @@ def test_brapi_token_is_sent_as_bearer(monkeypatch):
     BrapiFundamentalsAdapter().get_financial_data("PETR4")
 
     assert captured["authorization"] == "Bearer secret-token"
+
+
+def test_financial_data_403_falls_back_to_authenticated_quote_basics(monkeypatch):
+    monkeypatch.setenv("BRAPI_TOKEN", "secret-token")
+    calls = []
+
+    def fake_urlopen(request, timeout):
+        calls.append(request.full_url)
+        if "/api/v2/stocks/financial-data?" in request.full_url:
+            raise HTTPError(
+                request.full_url,
+                403,
+                "Forbidden",
+                hdrs=None,
+                fp=None,
+            )
+        assert request.headers.get("Authorization") == "Bearer secret-token"
+        return FakeResponse(
+            {
+                "results": [
+                    {
+                        "symbol": "WEGE3",
+                        "currency": "BRL",
+                        "regularMarketTime": "2026-10-01T16:07:30.000Z",
+                        "marketCap": 207534735768,
+                        "priceEarnings": 31.25,
+                        "earningsPerShare": 1.58,
+                    }
+                ],
+                "requestedAt": "2026-10-01T16:07:31.000Z",
+            }
+        )
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    records = BrapiFundamentalsAdapter().get_financial_data("WEGE3")
+
+    by_metric = {item.metric: item for item in records}
+    assert set(by_metric) == {"marketCap", "priceEarnings", "earningsPerShare"}
+    assert by_metric["marketCap"].unit == "BRL"
+    assert by_metric["priceEarnings"].unit == "ratio"
+    assert by_metric["earningsPerShare"].unit == "BRL/share"
+    assert by_metric["earningsPerShare"].period_type == "TTM"
+    assert "brapi_quote_fallback" in by_metric["marketCap"].quality_flags
+    assert calls[0].startswith(
+        "https://brapi.dev/api/v2/stocks/financial-data?"
+    )
+    assert calls[1] == "https://brapi.dev/api/quote/WEGE3"
