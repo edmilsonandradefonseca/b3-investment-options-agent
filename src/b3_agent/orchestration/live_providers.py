@@ -8,6 +8,7 @@ from b3_agent.options.analysis import OptionsAnalysis, OptionsAnalysisEngine
 from b3_agent.providers.brapi.adapter import BrapiAdapter
 from b3_agent.providers.brapi.cache import CachedBrapiAdapter
 from b3_agent.providers.local_market_history import LocalFirstMarketDataAdapter
+from b3_agent.providers.oplab.adapter import OplabAdapter
 from b3_agent.providers.oplab.historical import OplabHistoricalAdapter
 from b3_agent.providers.oplab.options import OplabOptionsAdapter
 from b3_agent.schemas.market import StockMarketData
@@ -19,6 +20,7 @@ class LiveProviderSnapshot:
     ticker: str
     as_of: datetime
     market_records: tuple[StockMarketData, ...]
+    current_stock_quote: StockMarketData | None
     option_contracts: tuple[OptionContract, ...]
     option_quotes: tuple[OptionQuote, ...]
     options_analysis: OptionsAnalysis
@@ -44,6 +46,7 @@ class LiveProviderService:
             | None
         ) = None,
         options_provider: OplabOptionsAdapter | None = None,
+        current_market_provider: OplabAdapter | None = None,
         history_days: int = 120,
     ) -> None:
         if history_days < 1:
@@ -54,6 +57,7 @@ class LiveProviderService:
             oplab_provider=OplabHistoricalAdapter(),
         )
         self.options_provider = options_provider or OplabOptionsAdapter()
+        self.current_market_provider = current_market_provider or OplabAdapter()
         self.history_days = history_days
 
     def load(self, ticker: str, *, as_of: datetime | None = None) -> LiveProviderSnapshot:
@@ -71,6 +75,15 @@ class LiveProviderService:
         )
         if not market_records:
             raise ValueError(f"no market data returned for {normalized}")
+
+        current_stock_quote = None
+        current_quote_error = None
+        try:
+            current_stock_quote = self.current_market_provider.get_current_quote(
+                normalized
+            )
+        except (OSError, RuntimeError, ValueError) as exc:
+            current_quote_error = str(exc)
 
         if isinstance(self.options_provider, OplabOptionsAdapter):
             option_contracts, option_quotes = self.options_provider.get_snapshot(
@@ -93,27 +106,48 @@ class LiveProviderService:
         market_sources = tuple(
             dict.fromkeys(record.source for record in market_records)
         )
-        source_refs = tuple(
-            dict.fromkeys((*market_sources, self.options_provider.name))
+        quote_sources = (
+            (current_stock_quote.source,)
+            if current_stock_quote is not None
+            else ()
         )
+        source_refs = tuple(
+            dict.fromkeys(
+                (*market_sources, *quote_sources, self.options_provider.name)
+            )
+        )
+        current_price = (
+            current_stock_quote.close
+            if current_stock_quote is not None
+            else latest.close
+        )
+        assumptions = {
+            "live_provider_snapshot": True,
+            "market_history_start": start.isoformat(),
+            "market_history_end": end.isoformat(),
+            "market_provider_precedence": "COTAHIST>OPLAB>BRAPI",
+            "current_stock_price_source": (
+                current_stock_quote.source
+                if current_stock_quote is not None
+                else "historical_close_fallback"
+            ),
+        }
+        if current_quote_error is not None:
+            assumptions["current_stock_quote_error"] = current_quote_error
         analysis = OptionsAnalysisEngine().analyze_quotes(
             contracts=contracts,
             quotes=quotes,
             as_of=end,
-            current_prices={normalized: latest.close},
+            current_prices={normalized: current_price},
             source_refs=source_refs,
-            assumptions={
-                "live_provider_snapshot": True,
-                "market_history_start": start.isoformat(),
-                "market_history_end": end.isoformat(),
-                "market_provider_precedence": "COTAHIST>OPLAB>BRAPI",
-            },
+            assumptions=assumptions,
         )
 
         return LiveProviderSnapshot(
             ticker=normalized,
             as_of=effective_as_of,
             market_records=market_records,
+            current_stock_quote=current_stock_quote,
             option_contracts=contracts,
             option_quotes=quotes,
             options_analysis=analysis,
