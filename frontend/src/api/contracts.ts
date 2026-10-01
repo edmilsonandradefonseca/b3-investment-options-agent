@@ -83,6 +83,36 @@ export type BrokerageNoteImportResponse = {
 
 export type BrokerageBatchImportResponse = Record<string, unknown>;
 
+export type PortfolioPosition = {
+  position_id: string; ticker: string; instrument_type: "STOCK" | "OPTION";
+  quantity: number; average_cost: number | null; market_price: number | null;
+  market_value: number | null; underlying_ticker: string | null;
+  option_type: string | null; strike: number | null; expiration_date: string | null;
+  source_ref: string;
+};
+export type PortfolioSnapshot = {
+  status: string; as_of: string | null; updated_at: string | null;
+  source_refs?: string[]; positions: PortfolioPosition[];
+};
+export type CapitalProfile = {
+  status: string; account: string; available_capital: number | null;
+  minimum_reserve: number | null; usable_capital: number | null; updated_at: string | null;
+};
+
+export type BrokerageOperation = {
+  transaction_id: string; option_ticker: string; side: "BUY" | "SELL";
+  quantity: number; execution_price: number | null; cash_flow: number | null;
+  trade_date: string | null; broker: string; note_number: string | null; source_ref: string;
+};
+export type BrokerageLedger = { status: string; operations: BrokerageOperation[] };
+export type PilotAnalysis = {
+  ticker: string; status: string;
+  evidence?: { collected_at: string; source_refs: string[]; news: Array<{headline: string; published_date: string; source_ref: string}>; latest_market_record?: {close: number; observation_timestamp: string; source: string}; news_error?: string | null };
+  deepseek_status?: string; deepseek?: {model: string; analysis: string};
+  openclaw_status?: string; openclaw?: {model: string; analysis: {summary: string; risks: string[]; catalysts: string[]; limitations: string[]; evidence_refs: string[]}};
+  deepseek_error?: string; openclaw_error?: string;
+};
+
 export type DataRecord = {
   instrument_id: string;
   ticker: string;
