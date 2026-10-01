@@ -257,6 +257,8 @@ def main() -> None:
     macro = market["market"].get("macro") or {}
     if not macro:
         raise SystemExit("FAIL Market Intelligence: macro context missing")
+    broad_events = market["market"].get("market_overview_research") or []
+    broad_diagnostics = market["market"].get("market_overview_diagnostics") or []
     report["market_intelligence"] = {
         "seconds": round(market_seconds, 2),
         "status": market["status"],
@@ -266,9 +268,13 @@ def main() -> None:
         "sources": market["sources"],
         "b3_local_intelligence": market["b3_local_intelligence"],
         "macro_indicators": sorted(macro),
-        "broad_market_events": len(
-            market["market"].get("market_overview_research") or []
-        ),
+        "broad_market_events": len(broad_events),
+        "research_diagnostics": broad_diagnostics,
+        "research_sources": sorted({
+            str((item or {}).get("source_ref") or "")
+            for item in broad_events
+            if isinstance(item, dict) and (item or {}).get("source_ref")
+        }),
         "limitations": market["limitations"],
     }
 
@@ -301,6 +307,17 @@ def main() -> None:
             "FAIL Opportunities: canonical UC-03 OpportunitySet missing"
         )
     ranked = canonical_set.get("ranked_opportunities") or []
+    ranking_status = opportunity_result.get("opportunity_ranking_status")
+    ranking_reason = opportunity_result.get("opportunity_ranking_reason")
+    if ranking_status != "DEFERRED_INCOMPLETE_CONTEXT":
+        raise SystemExit(
+            "FAIL Opportunities: incomplete live context must defer economic "
+            f"ranking, got {ranking_status!r}"
+        )
+    if not ranking_reason:
+        raise SystemExit(
+            "FAIL Opportunities: deferred ranking reason is missing"
+        )
     print(
         f"[3/3] Opportunities OK em {opportunities_seconds:.1f}s "
         f"({len(ranked)} candidato(s) executável(is))",
@@ -318,7 +335,9 @@ def main() -> None:
         "canonical_opportunity_set_present": canonical_present,
         "ranked_opportunity_count": len(ranked),
         "ranking_policy_version": canonical_set.get("ranking_policy_version"),
-        "top_opportunity": ranked[0] if ranked else None,
+        "ranking_status": ranking_status,
+        "ranking_reason": ranking_reason,
+        "first_candidate": ranked[0] if ranked else None,
         "limitations": opportunities["limitations"],
     }
 
