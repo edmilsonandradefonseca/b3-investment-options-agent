@@ -5,12 +5,9 @@ import type { CapitalProfile, PortfolioSnapshot, BrokerageOperation, PilotAnalys
 
 type Page = 'Portfolio'|'Options'|'Opportunities'|'Strategy Lab'|'Market Intelligence';
 const pages: Page[] = ['Portfolio','Options','Opportunities','Strategy Lab','Market Intelligence'];
-const pageUseCases: Record<Page, string[]> = {
-  Portfolio: ['UC-01','UC-02'],
-  Options: ['UC-02','UC-07','UC-08'],
-  Opportunities: ['UC-03','UC-05','UC-06','UC-09','UC-10','UC-11'],
-  'Strategy Lab': ['UC-04','UC-09','UC-11'],
-  'Market Intelligence': ['UC-05','UC-06','UC-10'],
+const dashboardFastPathUseCases: Partial<Record<Page, string[]>> = {
+  Portfolio: ['UC-01'],
+  Options: ['UC-02'],
 };
 const brl = (n?: number|null) => n == null ? 'Indisponível' : new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n);
 const when = (s?:string|null) => s ? new Date(s).toLocaleString('pt-BR') : 'Indisponível';
@@ -33,7 +30,8 @@ export default function App(){
   // Workspace actions can use the deterministic dashboard fast path. Free-form
   // Copilot questions keep only contextual metadata so ambiguous/complex intent
   // can reach the senior reasoning path instead of being forced into a snapshot.
-  if(!conversation){context.dashboard_page=page;context.use_cases=pageUseCases[page]}
+  const fastPathUseCases=dashboardFastPathUseCases[page];
+  if(!conversation&&fastPathUseCases){context.dashboard_page=page;context.use_cases=fastPathUseCases}
   let pendingIndex=-1;
   if(conversation){
     setQuestion('');
