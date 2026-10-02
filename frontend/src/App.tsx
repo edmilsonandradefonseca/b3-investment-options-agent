@@ -108,7 +108,25 @@ export default function App(){
   }finally{setBusy(false)}
  }
  async function importPortfolio(e:ChangeEvent<HTMLInputElement>){const f=e.target.files?.[0];e.target.value='';if(!f)return;setBusy(true);try{await b3Api.importPortfolio(f);await load();setNotice('Carteira validada e atualizada.')}catch(x){setNotice(`Importação recusada: ${err(x)}`)}finally{setBusy(false)}}
- async function importNotes(e:ChangeEvent<HTMLInputElement>){const files=[...(e.target.files||[])];e.target.value='';if(!files.length)return;if(files.length>100||files.some(f=>f.name.endsWith('.zip'))&&files.length!==1){setNotice('Selecione até 100 PDFs ou um ZIP.');return}setBusy(true);try{if(files[0].name.toLowerCase().endsWith('.zip')){setBatch(JSON.stringify(await b3Api.importBrokerageBatch(files[0]),null,2))}else{const results=[];for(const f of files){try{const r=await b3Api.importBrokerageNote(f);results.push({file:f.name,status:'processado',inseridas:r.inserted_count})}catch(x){results.push({file:f.name,status:'erro',detalhe:err(x)})}}setBatch(JSON.stringify(results,null,2))}setNotice('Lote concluído. Confira o resultado por arquivo.');await load()}catch(x){setNotice(`Lote: ${err(x)}`)}finally{setBusy(false)}}
+ async function importNotes(e:ChangeEvent<HTMLInputElement>){
+  const files=[...(e.target.files||[])];e.target.value='';
+  if(!files.length)return;
+  if(files.length>100||files.some(f=>f.name.toLowerCase().endsWith('.zip'))&&files.length!==1){setNotice('Selecione até 100 PDFs ou um ZIP.');return}
+  setBusy(true);
+  try{
+   if(files[0].name.toLowerCase().endsWith('.zip')){
+    const result=await b3Api.importBrokerageBatch(files[0]);
+    setBatch(JSON.stringify(result,null,2));
+    setNotice(`Notas: ${result.files_processed} PDFs processados, ${result.files_failed} recusados, ${result.inserted_count} execuções inseridas. Confira o resultado por arquivo.`);
+   }else{
+    const results=[];
+    for(const f of files){try{const r=await b3Api.importBrokerageNote(f);results.push({file:f.name,status:'processado',inseridas:r.inserted_count})}catch(x){results.push({file:f.name,status:'erro',detalhe:err(x)})}}
+    setBatch(JSON.stringify(results,null,2));
+    setNotice(`Notas: ${results.filter(r=>r.status==='processado').length} PDFs processados, ${results.filter(r=>r.status==='erro').length} recusados. Confira o resultado por arquivo.`);
+   }
+   await load();
+  }catch(x){setNotice(`Lote: ${err(x)}`)}finally{setBusy(false)}
+ }
  async function inspect(t:string){
   const v=t.trim().toUpperCase();
   if(!/^[A-Z0-9]{4,12}$/.test(v)){setNotice('Informe um ticker B3 válido.');return}

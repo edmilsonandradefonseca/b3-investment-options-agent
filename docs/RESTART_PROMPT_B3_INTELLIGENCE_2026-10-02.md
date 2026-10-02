@@ -1,3 +1,9 @@
+**New source checkpoint — 02/10:** the user confirmed `a0d0a2f` installed,
+then supplied the brokerage-note ZIP. Read
+`docs/BROKERAGE_BATCH_RECONCILIATION_2026-10-02.md` for the real audit,
+additive parser/dedup correction, unsupported source types and pending Ubuntu
+import gate. Do not overwrite the runtime database or repeat source discovery.
+
 Continue o projeto B3 Investment & Options Agent no repositório `edmilsonandradefonseca/b3-investment-options-agent`, branch `feature/react-functional-v43-integration`, PR #66.
 
 **Atualização da retomada de 02/10:** o bloco de código `bf71e654988811647d0a9a8d7c57a3b3e4938ff6`

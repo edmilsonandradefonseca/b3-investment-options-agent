@@ -1,3 +1,9 @@
+**New source checkpoint — 02/10:** the user confirmed `a0d0a2f` installed,
+then supplied the brokerage-note ZIP. Read
+`docs/BROKERAGE_BATCH_RECONCILIATION_2026-10-02.md` for the real audit,
+additive parser/dedup correction, unsupported source types and pending Ubuntu
+import gate. Do not overwrite the runtime database or repeat source discovery.
+
 # B3 Investment & Options Agent — avanços e retomada
 
 > Atualização aditiva de 02/10/2026: código `bf71e65` publicado no mesmo PR/branch,
