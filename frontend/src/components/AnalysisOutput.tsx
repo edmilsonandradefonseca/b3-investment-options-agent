@@ -407,6 +407,7 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
           const returns = asObject(item.return_by_scenario_pct);
           return <article className="evidence-card" key={asText(contract?.option_id) ?? String(index)}>
             <h5>{asText(contract?.option_id) ?? 'Contrato'} · strike {brl(numberValue(contract?.strike)) ?? 'Indisponível'}</h5>
+            <p className="muted">Fonte: {asText(quote?.source) ?? 'UNKNOWN'} · registro {asText(quote?.source_record_id) ?? 'UNKNOWN'}</p>
             <dl>
               <div><dt>Bid / ask / mid</dt><dd>{brl(numberValue(quote?.bid)) ?? 'Indisponível'} / {brl(numberValue(quote?.ask)) ?? 'Indisponível'} / {brl(numberValue(quote?.mid)) ?? 'Indisponível'}</dd></div>
               <div><dt>Prêmio / break-even</dt><dd>{brl(numberValue(item.premium_total_one_contract)) ?? 'Indisponível'} por contrato · {brl(numberValue(item.breakeven_price)) ?? 'Indisponível'} por ação</dd></div>

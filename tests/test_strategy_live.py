@@ -297,7 +297,7 @@ def test_multi_strike_put_comparison_keeps_probability_and_assignment_measures_s
         scenario_shocks_pct=(-10, 0, 10),
         scenario_objective="MAXIMIZE_WORST_CASE_RETURN_ON_CAPITAL",
         portfolio=_portfolio(),
-        as_of=datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc),
+        as_of=datetime(2026, 10, 1, 16, 0, tzinfo=timezone.utc),
     )
     comparison = result["put_chain_comparison"]
     assert comparison["candidate_count"] == 2
