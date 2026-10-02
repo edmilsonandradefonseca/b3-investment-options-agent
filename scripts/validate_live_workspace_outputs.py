@@ -35,7 +35,7 @@ def make_cases() -> list[dict[str, Any]]:
             "id": "opportunities_petr4",
             "label": "Opportunities / PETR4",
             "request": {
-                "task": "UC-03: analise PETR4 sob demanda, elegibilidade, risco, evidências e ranking canônico disponível.",
+                "task": "Analise PETR4 em Opportunities como oportunidade dentro e fora da carteira. Compare manter a posição atual, comprar a ação e alternativas canônicas disponíveis, incluindo opções apenas se houver cadeia válida. Mostre os candidatos realmente calculados, preço e horário, retorno/risco e liquidez somente quando disponíveis, capital exigido, impacto na carteira, custo de oportunidade e critérios de ranking. Explique evidências favoráveis e contrárias, riscos, fontes, as_of e dados faltantes. Separe fatos determinísticos de hipóteses qualitativas; não invente candidatos, preços, probabilidades ou recomendação de compra/venda."
                 "ticker": "PETR4",
                 "context": {
                     **common,
@@ -46,15 +46,15 @@ def make_cases() -> list[dict[str, Any]]:
             },
         },
         {
-            "id": "market_intelligence_vale4",
-            "label": "Market Intelligence / VALE4",
+            "id": "market_intelligence_vale3",
+            "label": "Market Intelligence / VALE3",
             "request": {
-                "task": "UC-05/06/10: analise VALE4 integrando preço atual, histórico, fundamentos, regime/fatores disponíveis, notícias/eventos e inteligência derivada B3/João. Preserve fatos canônicos, as_of, riscos, contradições, limitações e fontes.",
-                "ticker": "VALE4",
+                "task": "Faça uma análise de Market Intelligence de VALE3. Apresente cotação e horário, gráfico/série histórica e volume para os períodos disponíveis, tendência e indicadores técnicos determinísticos, fundamentos e estimativas apenas com fonte e data, regime de mercado e fatores relevantes (minério de ferro, China, dólar, juros e fluxo) quando houver dados. Resuma notícias/eventos com publicação, fonte, impacto potencial, evidência favorável e contrária; inclua riscos, cenários qualitativos, conclusão proporcional à qualidade da evidência e lacunas. UC-05/06/10: diferencie fatos canônicos, pesquisa armazenada/atualizada e inferência; preserve as_of e proveniência; declare UNKNOWN quando faltar dado. Não invente números, consenso ou notícias."
+                "ticker": "VALE3",
                 "context": {
                     **common,
                     "workspace": "Market Intelligence",
-                    "selected_ticker": "VALE4",
+                    "selected_ticker": "VALE3",
                     "asset_view": True,
                 },
             },
@@ -63,7 +63,7 @@ def make_cases() -> list[dict[str, Any]]:
             "id": "strategy_lab_stock_buy_comparison",
             "label": "Strategy Lab / ITUB4 BUY × BBDC4 BUY",
             "request": {
-                "task": "UC-04: compare Comprar ação em ITUB4 e Comprar ação em BBDC4. Use cotações atuais OPLAB separadas do histórico. Mostre cenários, premissas e riscos canônicos; não atribua probabilidade aos choques.",
+                "task": "No Strategy Lab, compare duas alternativas equivalentes: comprar ações ITUB4 versus comprar ações BBDC4, sem opções e sem executar ordens. Para cada uma mostre cotação atual e horário, capital por ação e para uma mesma quantidade/orçamento somente se disponível, histórico e retorno nos períodos suportados, risco/volatilidade e drawdown determinísticos, liquidez, fundamentos e eventos com data/fonte. Compare lado a lado retorno, risco, concentração/setor e impacto na minha carteira, dividendos se houver informação canônica, cenários explícitos sem atribuir probabilidades não calculadas, custo de oportunidade, premissas, evidência a favor/contra e dados ausentes. Indique qual métrica permite ou impede ordenar as alternativas; não declare vencedor se os dados ou política determinística não sustentarem. UC-04: separe fatos, cenários e interpretação, preserve as_of e proveniência; não invente números."
                 "ticker": None,
                 "context": {
                     **common,
@@ -86,7 +86,7 @@ def make_cases() -> list[dict[str, Any]]:
             "id": "copilot_natural_language_compare",
             "label": "Copilot / comparar ITUB4 versus BBDC4",
             "request": {
-                "task": "comparar itub4 versus bbdc4",
+                "task": "Compare comprar ações ITUB4 e comprar ações BBDC4. Use dados atuais e históricos disponíveis, risco, valuation/fundamentos, dividendos e efeito na minha carteira; mostre valores, datas e fontes e explicite o que estiver indisponível. Não invente dados nem force um vencedor."
                 "ticker": "PETR4",
                 "context": {
                     **common,
