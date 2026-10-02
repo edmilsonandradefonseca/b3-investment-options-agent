@@ -5,7 +5,10 @@
 > A autoridade do registro de pausa abaixo permanece. Leia o novo bloco/matriz em
 > `docs/UC070809_OBSERVED_LIFECYCLE_BLOCK_2026-10-02.md`: movimentos observados,
 > proteção temporal e integridade de amostra nos serviços UC-08/09, sem novo ledger.
-> Ubuntu/desktop ainda não validaram este bloco; último instalado confirmado continua `8bc7cb9`.
+> Atualização real posterior de 02/10: Ubuntu atualizado para `d8423e4`; projeção
+> observada e corte histórico estrito PASS conforme `Texto colado(9).txt`.
+> Detalhes na seção Real Ubuntu acceptance do novo bloco. Desktop visual E2E e
+> UC-07/08/09 integrais seguem abertos. Não repetir a validação concluída.
 
 Data local da pausa: **01/10/2026, America/Sao_Paulo**, aproximadamente 21:38. No Ubuntu/GitHub, os registros em UTC já indicam 02/10. Retomada prevista: 02/10/2026 no horário local.
 

@@ -3,8 +3,11 @@ Continue o projeto B3 Investment & Options Agent no repositório `edmilsonandrad
 **Atualização da retomada de 02/10:** o bloco de código `bf71e654988811647d0a9a8d7c57a3b3e4938ff6`
 foi publicado; CI #1270 SUCCESS. Leia também `docs/UC070809_OBSERVED_LIFECYCLE_BLOCK_2026-10-02.md`
 antes de código: sua matriz e próximos passos atualizam a projeção UC-07 e os gates UC-08/09.
-A validação Ubuntu desse bloco ainda está pendente; não presumir que substituiu o último
-código instalado `8bc7cb9`. Não repetir sua implementação ou o diagnóstico OPLAB.
+O usuário atualizou o Ubuntu para `d8423e4` e forneceu PASS real da projeção observada
+e do corte histórico estrito em 02/10. Último instalado confirmado: `d8423e4`.
+Leia a seção Real Ubuntu acceptance no novo bloco; não repetir implementação,
+validação concluída, varredura de diretórios ou diagnóstico OPLAB. Cobertura completa
+e UC-07/08/09 integrais continuam abertos.
 
 Antes de alterar código, confirme branch/HEAD/PR/CI no GitHub e leia obrigatoriamente:
 

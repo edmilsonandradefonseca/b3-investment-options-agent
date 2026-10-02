@@ -136,3 +136,44 @@ Limit: canonical domain contracts do not themselves carry full ingestion-history
 proof. The new version/outcome timestamp checks are necessary gates; loaders must
 still prove availability and canonical version ownership. They do not manufacture
 an as-loaded record's availability at a historical cutoff.
+
+## Real Ubuntu acceptance — 2026-10-02
+
+User supplied `Texto colado(9).txt`, containing the complete update/restart and
+focused validation output. Checkout fast-forwarded from `8bc7cb9` to `d8423e4`.
+The new API payload and both final PASS markers confirm the observed read block
+is deployed and real-validated. No additional restart or exploratory command is
+required for this block.
+
+| Check | Observed real result |
+|---|---|
+| option_transactions | READ_OK, one row, no truncation |
+| transactions | READ_OK, zero rows |
+| source_manifest | MISSING |
+| ALL retrospective | One observed outstanding delta for GGBRE221W2, BUY 2500, execution cash flow -1700; unknown initial balance/outcome/current position |
+| Eligible learning outcomes | Zero admitted; assignment/exercise/expiry/roll and P&L remain null |
+| PETR4 / VALE3 / RENT3 | No matching executions in the consulted stores |
+| Strict known-at-time history | Zero admitted executions; one excluded with AVAILABILITY_NOT_PROVEN_AT_AS_OF |
+| History total processing time | MISS 3.780 ms; HIT approximately 0.262–0.319 ms |
+
+Acceptance markers:
+
+```text
+PASS PERSONAL HISTORY READ PROJECTION — lifecycle/learning remain limited
+PASS OBSERVED LIFECYCLE + STRICT HISTORY CUTOFF — complete UC-07/08/09 NOT VALIDATED
+```
+
+Updated matrix: observed read projection and strict-history cutoff are now
+**fully implemented / real gate PASS** in this limited scope. The desktop visual
+E2E and full-account historical lifecycle/learning/similarity gates remain open.
+The timings describe history processing only, not an agent-cycle speedup.
+
+The missing source manifest correctly prevents historical availability from being
+invented. No duplicate operation, assignment rate or loss observation is created
+from the single row. This confirms admission safety, not complete account history.
+
+Next historical dependency: new evidence identifying how/where the claimed
+complete PDF/ZIP batch was imported (frontend receipt, script/environment, or
+original source location). Do not repeat the completed directory scan, infer data
+loss or silently reingest. Provider-independent context/UI work can proceed while
+that dependency is clarified. OPLAB remains an independent external gate.
