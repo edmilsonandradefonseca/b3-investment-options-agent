@@ -148,7 +148,7 @@ def configure_default_workflow(
         memory_manager=memory_manager,
         personal_history_service=PersonalHistoryService(settings.data_dir),
         experience_context_service=experience_context_service,
-        single_synthesis=os.getenv("B3_WORKSPACE_SINGLE_SYNTHESIS", "false").lower() == "true",
+        single_synthesis=os.getenv("B3_WORKSPACE_SINGLE_SYNTHESIS", "true").lower() == "true",
         market_agent=MarketAnalysisAgent(llm),
         portfolio_agent=PortfolioAnalysisAgent(llm),
         options_agent=OptionsAnalysisAgent(llm),
