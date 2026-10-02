@@ -73,6 +73,9 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
   const scenarioWinner = scenarioAlternatives.find(item => asText(item.alternative_id) === scenarioWinnerId);
   const scenarioWorstReturns = asObject(scenarioObjectivePolicy?.worst_case_return_pct_by_alternative);
   const workspaceIntelligence = asObject(result.workspace_intelligence);
+  const workspaceName = asText(workspaceIntelligence?.workspace);
+  const workspaceLimitations = asStrings(workspaceIntelligence?.limitations);
+  const opportunityLimitations = asStrings(result.opportunity_limitations);
   const marketAgent = asObject(result.market_agent_analysis);
   const portfolioAgent = asObject(result.portfolio_agent_analysis);
   const optionsAgent = asObject(result.options_agent_analysis);
@@ -126,7 +129,7 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
   const uncertainties = asStrings(synthesis?.uncertainties);
   const evidenceGaps = asStrings(synthesis?.evidence_gaps);
   const risks = asStrings(proposal?.risks);
-  const limitations = asStrings(result.limitations);
+  const limitations = [...asStrings(result.limitations), ...workspaceLimitations, ...opportunityLimitations];
   const positions = asArray(portfolioContext?.positions);
   const asOf = asText(proposal?.as_of) ?? asText(result.as_of) ?? asText(portfolioContext?.as_of);
   const quality = asText(result.quality_status) ?? asText(portfolioContext?.quality_status);
@@ -146,6 +149,18 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
     {summary && <section className="analysis-summary"><h3>Resumo</h3><p>{summary}</p></section>}
 
     {rationale && <section className="analysis-section"><h4>Racional</h4><p>{rationale}</p></section>}
+    {workspaceName === 'Opportunities' && rankedOpportunities.length === 0 && <div className="state-banner limited">
+      <strong>Sem ranking disponível</strong>
+      <span>{opportunityRankingReason ?? (opportunitySet ? 'O pipeline não retornou candidatos canônicos nesta execução.' : 'O pipeline canônico não retornou um conjunto de oportunidades.')}{opportunityRankingStatus ? ` · estado ${opportunityRankingStatus}` : ''}</span>
+    </div>}
+    {workspaceName === 'Strategy Lab' && strategyAlternatives.length === 0 && <div className="state-banner limited">
+      <strong>Comparação não calculada</strong>
+      <span>O backend não forneceu alternativas determinísticas nesta execução. O sistema não declara vencedor sem cotações e métricas comparáveis.</span>
+    </div>}
+    {workspaceName === 'Market Intelligence' && !summary && workspaceLimitations.length > 0 && <div className="state-banner limited">
+      <strong>Inteligência limitada</strong>
+      <span>{workspaceLimitations.join(' · ')}</span>
+    </div>}
 
     {workspaceIntelligence && <section className="analysis-section">
       <h4>Inteligência integrada</h4>
