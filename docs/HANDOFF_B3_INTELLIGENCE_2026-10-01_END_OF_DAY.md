@@ -1,3 +1,11 @@
+**Registered storage gate — 02/10:**
+The SQLite-only gate is now complete at installed `2104696` (all three files
+READ_OK, untruncated). No dedicated canonical domain tables in those files;
+`dataset_references` may still declare Parquet storage. Read the real schema
+section and use only the new `--registered-datasets` gate before choosing an
+adapter. Do not repeat the completed known-SQLite inventory or overload claims
+and retrieval traces as a hidden learning ledger.
+
 **Canonical boundary block — 02/10:** read
 `docs/UC08_CANONICAL_BOUNDARY_BLOCK_2026-10-02.md` first for commit-before-
 projection/replay, typed PRE-ANALYSIS runtime composition, shared canonical

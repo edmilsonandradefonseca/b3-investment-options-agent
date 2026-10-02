@@ -115,3 +115,49 @@ sudo systemctl restart b3-runtime.service && \
 Review this schema evidence before selecting an existing canonical adapter or
 proposing essential persistence. Do not load client JSON or graph/vector memory
 as a convenient canonical fallback.
+
+## Real SQLite schema evidence — 2026-10-02 12:09 America/Sao_Paulo
+
+The user supplied the terminal output after installing `2104696`, restarting
+the runtime and running the known-SQLite inspector. All three files READ_OK,
+all table inventories untruncated, no business rows read. This gate is complete.
+
+| Known owner | Confirmed schema role | Outcome/Learning authority conclusion |
+| --- | --- | --- |
+| options.sqlite3 | option_transactions with source IDs, fingerprint and execution economics | Existing execution owner; no final economic outcome contract |
+| source_manifest.sqlite3 | source_manifest with import/coverage/scope/completeness fields | Source availability/provenance; no final outcome or learning version |
+| b3_agent.db | 11 tables: instruments, transactions, capital_profile, sources/ingestion, dataset registry, claims/source links, retrieval traces and usefulness attribution | No dedicated Operation/Outcome/FeatureSnapshot/MarketRegime/Learning tables in this file |
+
+Claims and evidence links can represent sourced claims; their presence is not a
+canonical Learning with statistical sample, strategy/regime/PIT snapshots and
+atomic OutcomeFinalized replay. Retrieval traces and usefulness attribution
+cannot supply the missing numerical truth. Do not overload them as a convenient
+hidden learning ledger.
+
+The SQLite-only inspection does **not** prove there is no canonical Parquet
+storage: `dataset_references` exists, and no registry records were read in the
+completed gate. The updated matrix is therefore: known SQLite schemas fully
+inspected; declared dataset ownership missing real metadata; production adapter
+still missing implementation; terminal/PIT outcome facts still missing real data.
+
+The inspector now has a separate `--registered-datasets` mode. It reads only
+registry metadata from b3_agent.db, then schemas of explicitly registered Parquet
+files inside the supplied data directory. It does not repeat the three-file
+schema inventory, scan registered directories, follow paths outside that scope,
+read Parquet business rows or infer eligibility from column names. Empty/stale
+registries remain explicit; they do not prove global absence of storage.
+
+Verification for this focused addition: **760 Python regression tests PASS**;
+no React code changes. Tests prove no business values are exposed, DB/file bytes
+are preserved, registry limits are reported and directories are not scanned.
+
+After publication and green CI, run the new metadata gate once:
+
+```bash
+cd /opt/b3-investment-options-agent && \
+git pull --ff-only origin feature/react-functional-v43-integration && \
+./.venv/bin/python scripts/inspect_canonical_learning_storage.py --data-dir /opt/b3-runtime/data --registered-datasets
+```
+
+No service restart is required for this schema-only script/docs addition. Do not
+repeat the completed lifecycle, exact-history or known-SQLite schema checks.
