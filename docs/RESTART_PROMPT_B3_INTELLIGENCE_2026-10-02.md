@@ -15,9 +15,9 @@ over closing the decision workflows. Preserve UNKNOWN, PIT and V4.3.
 HEAD/PR #66/CI before work. Read
 `docs/UC04_EXPLICIT_SCENARIO_COMPARISON_BLOCK_2026-10-02.md`. The active branch
 is `feature/react-functional-v43-integration`; the user has confirmed `cb82c80`
-installed in Ubuntu, and service restart completed. Awaiting next published
-scenario block for real Strategy Lab acceptance; never interpret test fixtures
-as live financial acceptance.
+installed in Ubuntu, and service restart completed. Commit `f8f975f` is published
+and GitHub CI #1282 passed. Install this newer commit for real Strategy Lab
+acceptance; never interpret test fixtures as live financial acceptance.
 
 **Registered storage gate complete — 02/10:**
 Ubuntu installed `e816ef7`; registered-dataset metadata READ_OK, untruncated.

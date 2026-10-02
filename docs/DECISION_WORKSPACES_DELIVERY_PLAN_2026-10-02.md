@@ -128,6 +128,8 @@ continua responsável por persistência/atualização.
   comparável de cadeia/strikes, custos/impostos, caixa e duas pernas financiadas
   sell-to-buy. O caso ASAI3→Embraer permanece pendente da resolução do ticker e
   das duas pernas econômicas. Oportunidades continua sem ranking live.
+- Verificação local: 791 testes Python, TypeScript/Vite build e diff check PASS;
+  GitHub CI #1282 PASS no commit `f8f975f`. Aceite Ubuntu/desktop ainda pendente.
 
 Matriz: Strategy Lab passa de “cenários não expostos” para **parcial** para
 choques fornecidos pelo usuário; os casos AC-15…AC-20 e AC-26 seguem abertos

@@ -48,7 +48,9 @@ dispatch wiring and pairwise scenario deltas. `tests/test_strategy_live.py` and
 local reasoning lock is configured under writable `/tmp` (the managed sandbox
 mounts `/var/lock` read-only). TypeScript/Vite production build passes.
 
-The Ubuntu and Windows UI acceptance is pending publication and green CI. It
+GitHub CI #1282 for commit `f8f975f` passed (Python regression and frontend
+production build); the 791-test Python suite, TypeScript/Vite build and diff
+check also pass locally. Ubuntu and Windows UI acceptance remain pending. It
 must inspect a real selected contract whose expiry matches the horizon, and
 confirm each explicit shock's P&L displays with no winner/probability. This
 increment does not complete the objective/constraint policy, PUT-chain ranking,

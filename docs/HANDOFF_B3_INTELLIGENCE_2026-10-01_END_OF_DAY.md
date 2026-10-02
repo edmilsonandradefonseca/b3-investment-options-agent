@@ -217,7 +217,8 @@ e CALL coberta. A data comum precisa coincidir com o vencimento da opção para
 expor seu payoff; mismatch ou dados essenciais ausentes ficam parciais. Choques
 não são probabilidades, previsões, retorno esperado ou classificação.
 
-O bloco foi implementado localmente e aguarda publicação/CI. Leia
+Commit `f8f975f` foi publicado e o CI #1282 passou. O usuário ainda precisa
+instalar o código e conferir a tela/cenário com contrato real. Leia
 `docs/UC04_EXPLICIT_SCENARIO_COMPARISON_BLOCK_2026-10-02.md` para escopo,
 equações, limites e aceite Ubuntu/UI pendente. A matriz funcional está em
 `docs/DECISION_WORKSPACES_DELIVERY_PLAN_2026-10-02.md`. Próximo: B2, objetivos e
