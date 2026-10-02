@@ -33,3 +33,9 @@ This block does **not** claim completed UC-07/08/09. Verified expiry/assignment/
 ## Focused real acceptance
 
 After the CI-green update/restart, run `scripts/validate_personal_history_real.py`. It reads the running API for ALL/PETR4/VALE3/RENT3, validates null lifecycle frequencies and reports source counts/telemetry. It does not invoke senior reasoning, ingest notes or validate a historical win rate.
+
+## Real acceptance result and frontend follow-up
+
+The user ran the validator against the active Ubuntu service on 2026-10-01 (America/Sao_Paulo): PASS. ALL loaded one option execution, zero manual transactions and no manifest; PETR4/VALE3/RENT3 had no matching executions. History processing took approximately 1.67 ms on MISS and 0.12–0.14 ms on HIT. These are history-context processing times, not full agent latency. The first immediate-after-restart attempt refused the connection; the readiness-aware validator subsequently passed without another restart.
+
+Frontend follow-up exposes source-linked personal executions, coverage, cash flow and eligible sample size in the common AnalysisOutput used by workspaces and Copilot. Unknown lifecycle/similarity remains explicitly unavailable; empty matching history is not presented as complete account history. Market asset inspection publishes each existing parallel request independently, instead of delaying all cards until the senior result finishes. No extra orchestration call is introduced. Asset inspection additionally reads the cheap `/history/context` endpoint so SQLite evidence can appear before the model synthesis. Late replies from an earlier asset selection cannot overwrite a newer inspection. This improves time to visible evidence, not agent execution time; Opportunities/Strategy Lab two-stage orchestration and cross-provider reuse remain open.

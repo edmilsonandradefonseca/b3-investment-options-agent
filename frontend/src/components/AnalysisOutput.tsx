@@ -1,3 +1,4 @@
+import PersonalHistory from './PersonalHistory';
 import type { OrchestrateResponse } from '../api/contracts';
 
 type Obj = Record<string, unknown>;
@@ -394,6 +395,8 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
         })}
       </div>
     </section>}
+
+    <PersonalHistory value={result.personal_history} />
 
     <BulletSection title="Pontos confirmados" values={agreements} />
     <BulletSection title="Riscos" values={risks} />
