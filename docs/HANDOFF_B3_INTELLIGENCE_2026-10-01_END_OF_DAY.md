@@ -248,3 +248,22 @@ Este workspace não tinha mais o Python 3.14 temporário para executar a suíte 
 reinicialização e não conseguiu baixar dependências pelo limite de rede. Fonte
 Python compila, React/Vite build passa; regression tests adicionados devem ser
 confirmados no CI do commit B2. Não pedir instalação Ubuntu antes do CI verde.
+
+### B3A — comparação multi-strike PUT em Strategy Lab (em validação)
+
+O serviço e a tela agora comparam 2–20 contratos PUT selecionados por ID exato,
+do mesmo ticker/vencimento, usando uma única cadeia corrente. Expõem bid/ask/mid,
+spread, IV/Greeks, volume/OI, prêmio, break-even, colateral, perda máxima antes
+de custos e choques explícitos. A política B2 pode calcular maximin somente
+dentro dos choques e sobre colateral de strike conhecido.
+
+P(ITM) e P(touch) são proxy lognormal não calibrado sob taxa/carry zero; IV ausente
+ou ambígua deixa ambos UNKNOWN. Frequência pessoal UC-07/08/09 segue UNKNOWN.
+Estilo de exercício aparece como campo reportado pela OPLAB, sem afirmar
+verificação legal independente; assignment antecipado não é modelado. Não fecha
+AC-15/16/17 sem cadeia real e aceite Ubuntu.
+
+Bloco detalhado: `docs/UC04_PUT_CHAIN_COMPARISON_BLOCK_2026-10-02.md`.
+Verificação até agora: Python compilado, diff check PASS e TypeScript/Vite build
+PASS. O sandbox não tem pytest nem o venv do projeto; testes focados adicionados
+serão confirmados no CI do commit. Ubuntu permanece pendente até CI verde.

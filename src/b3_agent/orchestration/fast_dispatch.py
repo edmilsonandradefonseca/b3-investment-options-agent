@@ -229,6 +229,44 @@ class FastRouteDispatcher:
         decision: RouteDecision,
     ) -> OrchestratorResponse:
         context = decision.metadata
+        raw_put_ids = context.get("put_candidate_option_ids")
+        if raw_put_ids is not None:
+            if not isinstance(raw_put_ids, (list, tuple)):
+                raise ValueError("put_candidate_option_ids must be a list of exact option identifiers")
+            ticker = str(
+                context.get("comparison_ticker")
+                or context.get("selected_ticker")
+                or context.get("ticker")
+                or ""
+            ).upper().strip()
+            if not ticker:
+                raise ValueError("multi-strike PUT comparison requires an explicit underlying ticker")
+            raw_horizon = context.get("scenario_horizon")
+            horizon = str(raw_horizon).strip() if raw_horizon not in (None, "") else None
+            raw_shocks = context.get("scenario_shocks_pct")
+            if raw_shocks in (None, ""):
+                shocks = None
+            elif isinstance(raw_shocks, (list, tuple)):
+                shocks = [float(item) for item in raw_shocks]
+            else:
+                raise ValueError("scenario_shocks_pct must be a list of numeric percentages")
+            portfolio = self._portfolio()
+            result = LiveStrategyComparisonService().compare_put_candidates(
+                ticker=ticker,
+                option_ids=tuple(str(item) for item in raw_put_ids),
+                scenario_horizon=horizon,
+                scenario_shocks_pct=shocks,
+                scenario_objective=str(context.get("scenario_objective") or "COMPARE_ONLY"),
+                portfolio=portfolio,
+            )
+            sources = tuple(str(item) for item in result.pop("source_refs", ()))
+            return self._response(
+                decision,
+                status="COMPLETED",
+                result=result,
+                sources=sources,
+            )
+
         raw_assets = context.get("comparison_assets")
         if not isinstance(raw_assets, (list, tuple)) or len(raw_assets) != 2:
             raise ValueError("strategy comparison requires two explicit assets")

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta, timezone
 import math
+from statistics import NormalDist
 from typing import Any, Protocol
 
 from b3_agent.options.call import CallAnalysisEngine
@@ -305,6 +306,204 @@ class LiveStrategyComparisonService:
     @classmethod
     def normalize_strategy(cls, value: str) -> str | None:
         return cls._STRATEGY_ALIASES.get(" ".join(value.casefold().split()))
+
+    def compare_put_candidates(
+        self,
+        *,
+        ticker: str,
+        option_ids: tuple[str, ...] | list[str],
+        scenario_horizon: date | str | None = None,
+        scenario_shocks_pct: list[float] | tuple[float, ...] | None = None,
+        scenario_objective: str = "COMPARE_ONLY",
+        portfolio: PortfolioContext | None = None,
+        as_of: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Compare explicit same-expiry PUTs from one live option-chain snapshot."""
+        normalized_ticker = ticker.upper().strip()
+        normalized_ids = tuple(str(item).upper().strip() for item in option_ids)
+        if not normalized_ticker:
+            raise ValueError("PUT comparison requires an explicit underlying ticker")
+        if not 2 <= len(normalized_ids) <= 20:
+            raise ValueError("PUT comparison requires between 2 and 20 explicit contracts")
+        if any(not item for item in normalized_ids) or len(set(normalized_ids)) != len(normalized_ids):
+            raise ValueError("PUT contract identifiers must be non-empty and unique")
+
+        effective_as_of = as_of or datetime.now(timezone.utc)
+        if effective_as_of.tzinfo is None or effective_as_of.utcoffset() is None:
+            raise ValueError("as_of must be timezone-aware")
+        horizon = (
+            date.fromisoformat(scenario_horizon)
+            if isinstance(scenario_horizon, str) and scenario_horizon.strip()
+            else scenario_horizon
+        )
+        shocks = tuple(scenario_shocks_pct or ())
+        if len(shocks) > 9 or any(
+            not isinstance(value, (int, float)) or not math.isfinite(value) or value < -90 or value > 300
+            for value in shocks
+        ) or len(set(shocks)) != len(shocks):
+            raise ValueError("scenario shocks must be unique finite percentages from -90 to 300 (maximum nine)")
+        objective = str(scenario_objective or "COMPARE_ONLY").upper().strip()
+        if objective not in {"COMPARE_ONLY", "MAXIMIZE_WORST_CASE_RETURN_ON_CAPITAL"}:
+            raise ValueError("unsupported explicit scenario objective")
+        if shocks and horizon is None:
+            raise ValueError("scenario horizon is required for explicit price scenarios")
+        if horizon is not None and horizon <= effective_as_of.date():
+            raise ValueError("scenario horizon must be after the comparison date")
+
+        pack = self.evidence_service.build(normalized_ticker, as_of=effective_as_of, portfolio=portfolio)
+        contracts, quotes = self.options_provider.get_snapshot(normalized_ticker, effective_as_of)
+        by_id: dict[str, list[Any]] = {}
+        quote_by_id: dict[str, list[Any]] = {}
+        for contract in contracts:
+            by_id.setdefault(contract.option_id.upper(), []).append(contract)
+        for quote in quotes:
+            quote_by_id.setdefault(quote.option_id.upper(), []).append(quote)
+
+        selected: list[tuple[Any, Any]] = []
+        for option_id in normalized_ids:
+            matches = by_id.get(option_id, [])
+            if len(matches) != 1:
+                raise ValueError(f"{option_id} must identify exactly one current contract for {normalized_ticker}")
+            contract = matches[0]
+            if contract.underlying_ticker.upper() != normalized_ticker or contract.option_type.upper() != "PUT":
+                raise ValueError(f"{option_id} is not an exact {normalized_ticker} PUT contract")
+            if contract.expiration_date <= effective_as_of.date():
+                raise ValueError(f"{option_id} is expired or expires today")
+            matched_quotes = quote_by_id.get(option_id, [])
+            if len(matched_quotes) != 1:
+                raise ValueError(f"{option_id} must have exactly one quote in the same current chain snapshot")
+            quote = matched_quotes[0]
+            if quote.bid is None or quote.bid <= 0:
+                raise ValueError(f"{option_id} has no executable current bid")
+            if as_of is not None and (
+                quote.observation_timestamp > effective_as_of
+                or quote.available_timestamp > effective_as_of
+            ):
+                raise ValueError(f"{option_id} quote was not observable and available at the requested as_of")
+            selected.append((contract, quote))
+
+        expirations = {contract.expiration_date for contract, _ in selected}
+        if len(expirations) != 1:
+            raise ValueError("selected PUT contracts must share one exact expiration date")
+        expiration = next(iter(expirations))
+        if shocks and horizon != expiration:
+            raise ValueError("PUT terminal scenarios require a horizon equal to the selected contracts' expiration")
+        underlying = pack.market.get("current_quote")
+        spot = (
+            float(underlying["close"])
+            if isinstance(underlying, dict)
+            and isinstance(underlying.get("close"), (int, float))
+            and float(underlying["close"]) > 0
+            else None
+        )
+        days_to_expiration = (expiration - effective_as_of.date()).days
+        candidates: list[dict[str, Any]] = []
+        source_refs = list(pack.source_refs)
+        for contract, quote in sorted(selected, key=lambda row: (row[0].strike, row[0].option_id)):
+            multiplier = float(contract.contract_multiplier)
+            premium = float(quote.bid)
+            break_even = float(contract.strike) - premium
+            probability = _put_model_probabilities(
+                spot=spot, strike=float(contract.strike), volatility=quote.implied_volatility,
+                days=days_to_expiration,
+            )
+            raw_style = str(contract.exercise_style or "").strip()
+            style = _normalize_exercise_style(raw_style)
+            payoff_by_scenario: dict[str, float] = {}
+            if shocks and horizon == expiration and spot is not None:
+                for shock in shocks:
+                    scenario_id = f"{horizon.isoformat()}:{shock:g}%"
+                    terminal = spot * (1 + shock / 100)
+                    pnl = (premium - max(float(contract.strike) - terminal, 0.0)) * multiplier
+                    payoff_by_scenario[scenario_id] = round(pnl, 8)
+            spread = float(quote.ask) - premium if quote.ask is not None and quote.ask >= premium else None
+            source_refs.extend([quote.source, contract.option_ticker])
+            candidates.append({
+                "contract": asdict(contract),
+                "quote": asdict(quote),
+                "premium_per_share_at_bid": premium,
+                "premium_total_one_contract": premium * multiplier,
+                "capital_required_one_contract": float(contract.strike) * multiplier,
+                "maximum_loss_one_contract_before_costs": break_even * multiplier,
+                "breakeven_price": break_even,
+                "spread_abs": spread,
+                "spread_pct_of_mid": spread / quote.mid if spread is not None and quote.mid and quote.mid > 0 else None,
+                "volume": quote.volume,
+                "open_interest": quote.open_interest,
+                "days_to_expiration": days_to_expiration,
+                "probability_estimates": {
+                    **probability,
+                    "source": "current chain implied volatility" if probability["expiry_itm_probability"] is not None else None,
+                    "model": "risk-neutral lognormal proxy; zero rate and zero carry assumptions",
+                    "as_of": quote.observation_timestamp.isoformat(),
+                    "calibration_status": "NOT_CALIBRATED",
+                    "not_personal_frequency": True,
+                },
+                "exercise_style": {"raw": raw_style or None, "normalized": style, "status": "PROVIDER_REPORTED" if style else "UNKNOWN"},
+                "early_assignment": {
+                    "status": "NOT_APPLICABLE_BY_PROVIDER_REPORTED_EUROPEAN_STYLE" if style == "EUROPEAN" else "UNKNOWN",
+                    "reason": "American early-exercise behavior is not modeled; provider-reported style is not independently verified." if style != "EUROPEAN" else "OPLAB reports European style; this is a provider field, not independent legal verification.",
+                },
+                "personal_assignment_frequency": {
+                    "status": "UNKNOWN", "numerator": None, "eligible_denominator": None,
+                    "reason": "No eligible, PIT-comparable personal outcomes are supplied to this chain comparison.",
+                },
+                "pnl_by_scenario_brl": payoff_by_scenario,
+                "return_by_scenario_pct": {
+                    key: round(value / (float(contract.strike) * multiplier) * 100, 8)
+                    for key, value in payoff_by_scenario.items()
+                },
+            })
+
+        ranking: dict[str, Any] = {
+            "requested_objective": objective,
+            "status": "NOT_REQUESTED" if objective == "COMPARE_ONLY" else "UNAVAILABLE",
+            "ranked_option_id": None, "tie_option_ids": [],
+            "metric": "MAXIMIZE_MINIMUM_USER_SCENARIO_RETURN_ON_COLLATERAL", "not_a_forecast": True,
+        }
+        expected = {f"{horizon.isoformat()}:{shock:g}%" for shock in shocks} if horizon else set()
+        if objective != "COMPARE_ONLY":
+            complete = bool(expected) and all(
+                set(candidate["pnl_by_scenario_brl"]) == expected
+                and candidate["capital_required_one_contract"] > 0 for candidate in candidates
+            )
+            if complete:
+                scores = [min(candidate["return_by_scenario_pct"].values()) for candidate in candidates]
+                best = max(scores)
+                winners = [candidate["contract"]["option_id"] for candidate, score in zip(candidates, scores, strict=True) if abs(score - best) <= 1e-9]
+                ranking["status"] = "TIE" if len(winners) > 1 else "CONDITIONAL_RANKING"
+                ranking["ranked_option_id"] = winners[0] if len(winners) == 1 else None
+                ranking["tie_option_ids"] = winners if len(winners) > 1 else []
+                ranking["worst_case_return_pct_by_option"] = {
+                    candidate["contract"]["option_id"]: round(score, 8)
+                    for candidate, score in zip(candidates, scores, strict=True)
+                }
+            else:
+                ranking["reason"] = "Every candidate needs complete P&L for every explicit shock and known positive strike collateral."
+        source_refs = list(dict.fromkeys(source_refs))
+        return {
+            "as_of": effective_as_of.isoformat(),
+            "quality_status": pack.quality_status,
+            "summary": f"Comparação de {len(candidates)} PUTs explícitas de {normalized_ticker}, vencimento {expiration.isoformat()}; sem ranking automático.",
+            "put_chain_comparison": {
+                "policy_version": "put-chain-comparison-v1", "ticker": normalized_ticker,
+                "underlying_price": spot,
+                "underlying_quote_as_of": underlying.get("observation_timestamp") if isinstance(underlying, dict) else None,
+                "expiration_date": expiration.isoformat(),
+                "quote_snapshot_as_of": max(quote.observation_timestamp for _, quote in selected).isoformat(),
+                "candidate_count": len(candidates), "ranking": ranking,
+                "probability_semantics": "Separate uncalibrated model estimates for expiry ITM and first touch; early assignment and personal frequency have separate fields.",
+                "limitations": [
+                    "Premium uses the current bid for one contract; fees, taxes, slippage and financing are excluded.",
+                    "Expiry ITM/touch values are uncalibrated model estimates, not real-world probabilities or personal outcomes.",
+                    "Personal assignment frequency remains UNKNOWN without eligible comparable outcomes and PIT entry evidence.",
+                    "No selected contract is silently substituted; this comparison reads one chain snapshot.",
+                ],
+                "candidates": candidates,
+            },
+            "asset_evidence": {pack.ticker: asdict(pack)},
+            "source_refs": source_refs,
+        }
 
     @classmethod
     def supports(
@@ -949,3 +1148,53 @@ def _scenario_capital_basis(alternative: StrategyAlternative) -> float | None:
     """Return the explicit capital denominator used only for scenario ranking."""
     value = alternative.assumptions.get("scenario_capital_basis_brl")
     return float(value) if isinstance(value, (int, float)) and value > 0 else None
+
+
+def _normalize_exercise_style(value: str) -> str | None:
+    normalized = " ".join(value.casefold().replace("_", " ").split())
+    if normalized in {"european", "europeia", "europeu", "european style"}:
+        return "EUROPEAN"
+    if normalized in {"american", "americana", "americano", "american style"}:
+        return "AMERICAN"
+    return None
+
+
+def _put_model_probabilities(
+    *, spot: float | None, strike: float, volatility: float | None, days: int
+) -> dict[str, Any]:
+    unavailable = {"expiry_itm_probability": None, "touch_probability": None}
+    if spot is None or spot <= 0:
+        return {**unavailable, "status": "UNKNOWN", "reason": "A current underlying price is unavailable."}
+    if volatility is None or not math.isfinite(float(volatility)) or not 0 < float(volatility) <= 3:
+        return {**unavailable, "status": "UNKNOWN", "reason": "A positive implied volatility in decimal units is unavailable or ambiguous."}
+    if days <= 0:
+        return {**unavailable, "status": "UNKNOWN", "reason": "A future expiry is required."}
+    sigma = float(volatility)
+    years = days / 365.0
+    scale = sigma * math.sqrt(years)
+    d2 = (math.log(spot / strike) - 0.5 * sigma * sigma * years) / scale
+    expiry_itm = NormalDist().cdf(-d2)
+    if spot <= strike:
+        touch = 1.0
+    else:
+        distance = math.log(spot / strike)
+        drift = -0.5 * sigma * sigma
+        root = sigma * math.sqrt(years)
+        first = NormalDist().cdf((-distance - drift * years) / root)
+        second = math.exp(-2 * drift * distance / (sigma * sigma)) * NormalDist().cdf(
+            (-distance + drift * years) / root
+        )
+        touch = min(1.0, max(0.0, first + second))
+    return {
+        "expiry_itm_probability": round(min(1.0, max(0.0, expiry_itm)), 8),
+        "touch_probability": round(touch, 8),
+        "status": "MODEL_ESTIMATE",
+        "reason": None,
+        "assumptions": {
+            "volatility": sigma,
+            "volatility_unit": "decimal annualized",
+            "annual_rate": 0.0,
+            "dividend_yield": 0.0,
+            "days_to_expiration": days,
+        },
+    }

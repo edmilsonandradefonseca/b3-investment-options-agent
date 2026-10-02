@@ -29,7 +29,7 @@ Não usar desconhecidos como zero, nem aceitar uma comparação sem dados essenc
 | Bloco | Entrega funcional | Aceite / estado |
 | --- | --- | --- |
 | A — Contexto e research existente | SQLite de carteira/execuções já ligado; consultar notícias Qdrant e relações de eventos Neo4j antes da busca externa, para cada ativo explícito e IBOV | Este bloco implementa a parcela **research**. Fontes/datas/origem, exclusões, busca só quando não há evento recente admissível ou refresh explícito. Não conclui toda cobertura de informação/valuation. |
-| B — Comparação econômica | Comparar ativos, strikes/vencimentos e manter/reduzir/comprar com objetivo, horizonte, tamanho, capital e cenários compatíveis | **Parcial:** B1 calcula payoffs em choques do usuário; B2 permite ranking condicional maximin em base de capital conhecida. Faltam múltiplas opções/cadeia, restrições econômicas completas e custos/troca. |
+| B — Comparação econômica | Comparar ativos, strikes/vencimentos e manter/reduzir/comprar com objetivo, horizonte, tamanho, capital e cenários compatíveis | **Parcial:** B1 calcula payoffs em choques do usuário; B2 permite ranking condicional maximin em base de capital conhecida; B3A compara PUTs exatas do mesmo vencimento numa leitura única da cadeia. Modelo de P(ITM)/P(touch) não calibrado; faltam restrições econômicas completas e custos/troca. |
 | C — Opportunities dentro/fora | Universo explícito de carteira + candidatos/watchlist, elegibilidade e ordenação explicável por objetivo | Continua aberto. Falta ranking econômico no live path: DEFERRED_INCOMPLETE_CONTEXT. Implementar política determinística versionada; permitir ranking sem componente de experiência quando os demais dados exigidos forem válidos; mostrar exclusões e empates/incomparabilidade. |
 | D — Market Intelligence | Evidências compartilhadas, fundamentos, alvos com instituição/data/horizonte, eventos e riscos | Research compartilhado avança neste bloco; alvos estruturados, cobertura de lacunas por tipo e fechamento dos fluxos continuam abertos. Nenhum alvo é inferido de snippet ou consenso sem população definida. |
 | E — UC-07/08/09 | Desfechos comprovados, contexto PIT, experiência persistente e precedentes comparáveis | Execuções observadas e ligação exata já funcionam; desfechos elegíveis reais = 0. Owner canônico de produção e fatos terminais/PIT ainda faltam. Não bloquear B/C/D por esses gaps; não promover Qdrant/Neo4j a owner econômico. |
@@ -56,9 +56,9 @@ Todos os casos financeiros permanecem **abertos para aceite ponta a ponta**.
 | AC-12 Market | Faixa de VALE3 até 16/10? | Expected move/distribuição com modelo, prazo, spot e volatilidade; faixa probabilística não é previsão garantida. |
 | AC-13 Market | Eventos de RENT3 nas próximas semanas? | Agenda com datas dos eventos e disponibilidade das fontes; notícia recente não prova ausência de eventos futuros. Research A é parcial. |
 | AC-14 Market | Meu risco se VALE3 cair 10%? | Posições reais, ações/opções, método full revaluation ou aproximação delta indicada; dados essenciais desconhecidos impedem total completo. |
-| AC-15 Lab | PUT VALE3 para 16/10: quais strikes? | Contratos listados, bid/ask/mid, prêmio, delta/IV quando disponíveis, liquidez, breakeven e capital; economia/chain parcial existente, seleção aberta. |
-| AC-16 Lab | Risco de exercício da PUT 67,14? | Estimativa ITM no vencimento com modelo/premissas; tocar strike, assignment antecipado e frequência pessoal separados; delta não vira probabilidade autoritativa. |
-| AC-17 Lab | Comparar PUTs 67,14/66,64/65,64? | Mesmo as-of, prazo e tamanho; prêmio/capital, breakeven, stress, liquidez e estimativas válidas; identificação real dos contratos exigida. |
+| AC-15 Lab | PUT VALE3 para 16/10: quais strikes? | Contratos listados e explicitamente selecionados, bid/ask/mid, prêmio, delta/IV quando disponíveis, liquidez, breakeven e colateral; chain agora é comparável, aceite live ainda pendente. |
+| AC-16 Lab | Risco de exercício da PUT 67,14? | P(ITM) e P(touch) modelados em campos distintos, sem calibração; assignment antecipado exige estilo confiável e não é estimado; frequência pessoal permanece UNKNOWN sem desfechos comparáveis. |
+| AC-17 Lab | Comparar PUTs 67,14/66,64/65,64? | B3A compara IDs exatos do mesmo vencimento/as-of, bid, spread, IV/Greeks, liquidez, break-even, colateral e cenários do usuário. IDs live, sizing comum e aceite ponta a ponta seguem pendentes. |
 | AC-18 Lab | Vender PUT VALE3 ou RENT3? | Objetivo, vontade/capacidade de receber ação, exposição e critérios compatíveis; ranking entre ativos aberto. |
 | AC-19 Lab | RENT3 a R$35: resultado da minha PUT? | Strike, quantidade e prêmio reais; payoff no vencimento separado de recompra antes do vencimento e custos conhecidos. |
 | AC-20 Lab | PUT ITM: aceitar, recomprar ou rolar? | Fechar pelo ask, eventual entrega e roll ligado com crédito/débito, novo capital/risco; assignment não presumido; gestão completa aberta. |
@@ -174,6 +174,34 @@ Intelligence; **E** sell-to-buy, caixa/custos e stress de carteira; **F** AC-27/
 continuidade e orquestração do Copilot; depois gates UC-07/08/09 e golden cases
 VALE3/RENT3 ponta a ponta. Nenhum desses blocos cria persistência por conveniência.
 Histórico UC-07/08/09 continua incapaz de alterar ranking sem desfecho elegível.
+
+## Bloco B3A — comparação de PUTs multi-strike
+
+`LiveStrategyComparisonService.compare_put_candidates` aceita de 2 a 20 IDs
+exatos escolhidos pela pessoa usuária, exige PUTs do mesmo subjacente e um único
+vencimento, e lê uma cadeia OPLAB uma vez por comparação. Exige bid positivo e
+quote único por contrato; não completa seleção com strikes vizinhos. Exibe bid,
+ask, mid, IV/Greeks disponíveis, spread, volume/OI, prêmio por contrato,
+break-even, colateral de strike, perda máxima antes de custos e P&L nos choques
+terminais selecionados pelo usuário. A política opcional B2 pode ranquear apenas
+o pior retorno sobre colateral dentro desses choques e produz empate ou
+indisponibilidade quando a entrada não é completa.
+
+P(ITM) e P(touch) são saídas separadas do proxy lognormal sob medida
+risk-neutral, taxa e dividendos iguais a zero. Só calcula quando spot e IV em
+unidade decimal são positivos e inequívocos; marca `NOT_CALIBRATED` e expõe os
+parâmetros. Não representam probabilidade real de assignment. O estilo do
+contrato é exibido como valor reportado pela OPLAB; valor ausente ou não
+reconhecido é UNKNOWN. Nenhum risco American de exercício antecipado é modelado.
+Frequência pessoal continua UNKNOWN porque esta comparação não recebe amostra
+UC-07/08/09 elegível/PIT. Nenhuma saída estimada altera ranking fora do maximin
+explícito dos choques do usuário.
+
+Frontend Strategy Lab expõe uma seção específica para escolher vencimento e
+marcar contratos da mesma cadeia; requer configuração de PUT em Ativo A para
+carregar essa cadeia. Os números dos exemplos VALE3 continuam critérios, não
+contratos assumidos como disponíveis. A implementação não fecha AC-15/16/17
+sem IDs/quotes reais e validação na instalação Ubuntu.
 
 ## Verificação deste bloco
 

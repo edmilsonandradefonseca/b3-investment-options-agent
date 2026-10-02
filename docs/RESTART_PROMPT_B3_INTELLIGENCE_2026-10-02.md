@@ -1,3 +1,5 @@
+**Current checkpoint — 02/10:** GitHub branch HEAD is `942326f9bc99705cb09041aa0188073acd6dc702`, PR #66 remains open/draft, CI #1284 SUCCESS. B2 is published; B1/B2 have not yet received Ubuntu acceptance. The current worktree adds B3A multi-strike PUT comparison and is awaiting publication/CI. Read `docs/UC04_PUT_CHAIN_COMPARISON_BLOCK_2026-10-02.md` before acceptance. No Ubuntu update/restart command until the B3A commit has passed CI.
+
 **Functional delivery plan — 02/10 (latest priority):**
 Read `docs/DECISION_WORKSPACES_DELIVERY_PLAN_2026-10-02.md` before next code.
 The user requires inside/outside-portfolio ranking, PUT risk/return comparison
@@ -5,16 +7,19 @@ and financed sell-to-buy alternatives (ASAI3/Embraer). UC-07/08/09 enrich these
 flows; absent personal history must not block otherwise defensible current
 analysis/ranking. AC-01…AC-28 are acceptance cases, not replacements for UC IDs.
 `cb82c80` added source-first B3 research; the user confirmed it installed on
-Ubuntu and restarted `b3-runtime.service`. Next, B1 added user-supplied terminal
-price shocks in Strategy Lab under `terminal-price-scenarios-v1`; full
-objective/constraint-aware comparison and economic ranking remain open. The
+Ubuntu and restarted `b3-runtime.service`. B1 added user-supplied terminal
+price shocks and B2 conditional scenario maximin to Strategy Lab under
+`terminal-price-scenarios-v1`; full objective-aware economics, Opportunities
+ranking, financing and transaction costs remain open. B3A adds exact multi-strike
+PUT chain comparison; calibrated probabilities and personal assignment frequency
+remain unavailable. The
 latest review adds AC-27 workspace continuity, AC-28 Copilot orchestration, and
 requires contract exercise style before any early-assignment estimate.
 Do not restart completed storage inventories or prioritize new learning storage
 over closing the decision workflows. Preserve UNKNOWN, PIT and V4.3.
 
-**Current code checkpoint — explicit comparison scenarios:** verify the GitHub
-HEAD/PR #66/CI before work. Read
+**Prior code checkpoint — explicit comparison scenarios:** B1 `f8f975f` CI #1282
+passed; B2 `942326f` CI #1284 passed. Read
 `docs/UC04_EXPLICIT_SCENARIO_COMPARISON_BLOCK_2026-10-02.md`. The active branch
 is `feature/react-functional-v43-integration`; the user has confirmed `cb82c80`
 installed in Ubuntu, and service restart completed. Commit `f8f975f` is published

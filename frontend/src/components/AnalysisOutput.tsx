@@ -60,6 +60,11 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
   const fastRoute = asObject(result.fast_route);
   const strategyComparison = asObject(result.strategy_comparison);
   const scenarioAnalysis = asObject(result.scenario_analysis);
+  const putChainComparison = asObject(result.put_chain_comparison);
+  const putChainCandidates = asArray(putChainComparison?.candidates)
+    .map(asObject)
+    .filter((item): item is Obj => item !== null);
+  const putChainRanking = asObject(putChainComparison?.ranking);
   const scenarioObjectivePolicy = asObject(scenarioAnalysis?.objective_policy);
   const scenarioAlternatives = asArray(scenarioAnalysis?.alternatives)
     .map(asObject)
@@ -384,6 +389,42 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
         })}
       </div>
       {asStrings(scenarioAnalysis.limitations).length > 0 && <ul>{asStrings(scenarioAnalysis.limitations).map((item, index) => <li key={index}>{item}</li>)}</ul>}
+    </section>}
+
+    {putChainComparison && <section className="analysis-section">
+      <h4>PUTs do mesmo vencimento · {asText(putChainComparison.ticker) ?? 'ativo'} · {asText(putChainComparison.expiration_date) ?? 'vencimento indisponível'}</h4>
+      <p className="muted">Cotação da cadeia: {when(putChainComparison.quote_snapshot_as_of)} · Subjacente: {brl(numberValue(putChainComparison.underlying_price)) ?? 'Indisponível'} · Política {asText(putChainComparison.policy_version) ?? 'não informada'}.</p>
+      {putChainRanking && asText(putChainRanking.requested_objective) === 'MAXIMIZE_WORST_CASE_RETURN_ON_CAPITAL' && <p className="muted">Ranking maximin: {asText(putChainRanking.status) ?? 'indisponível'}{asText(putChainRanking.ranked_option_id) ? ` · ${asText(putChainRanking.ranked_option_id)}` : ''}{asText(putChainRanking.reason) ? ` · ${asText(putChainRanking.reason)}` : ''}. Critério limitado aos choques informados.</p>}
+      <div className="evidence-grid">
+        {putChainCandidates.map((item, index) => {
+          const contract = asObject(item.contract);
+          const quote = asObject(item.quote);
+          const probabilities = asObject(item.probability_estimates);
+          const style = asObject(item.exercise_style);
+          const early = asObject(item.early_assignment);
+          const personal = asObject(item.personal_assignment_frequency);
+          const payoffs = asObject(item.pnl_by_scenario_brl);
+          const returns = asObject(item.return_by_scenario_pct);
+          return <article className="evidence-card" key={asText(contract?.option_id) ?? String(index)}>
+            <h5>{asText(contract?.option_id) ?? 'Contrato'} · strike {brl(numberValue(contract?.strike)) ?? 'Indisponível'}</h5>
+            <dl>
+              <div><dt>Bid / ask / mid</dt><dd>{brl(numberValue(quote?.bid)) ?? 'Indisponível'} / {brl(numberValue(quote?.ask)) ?? 'Indisponível'} / {brl(numberValue(quote?.mid)) ?? 'Indisponível'}</dd></div>
+              <div><dt>Prêmio / break-even</dt><dd>{brl(numberValue(item.premium_total_one_contract)) ?? 'Indisponível'} por contrato · {brl(numberValue(item.breakeven_price)) ?? 'Indisponível'} por ação</dd></div>
+              <div><dt>Colateral / perda máxima antes de custos</dt><dd>{brl(numberValue(item.capital_required_one_contract)) ?? 'Indisponível'} / {brl(numberValue(item.maximum_loss_one_contract_before_costs)) ?? 'Indisponível'}</dd></div>
+              <div><dt>Spread / volume / OI</dt><dd>{brl(numberValue(item.spread_abs)) ?? 'Indisponível'} · {numberValue(item.volume)?.toLocaleString('pt-BR') ?? 'UNKNOWN'} · {numberValue(item.open_interest)?.toLocaleString('pt-BR') ?? 'UNKNOWN'}</dd></div>
+              <div><dt>IV / delta</dt><dd>{numberValue(quote?.implied_volatility) == null ? 'UNKNOWN' : pct(numberValue(quote?.implied_volatility))} · {numberValue(quote?.delta) == null ? 'UNKNOWN' : numberValue(quote?.delta)?.toLocaleString('pt-BR')}</dd></div>
+              <div><dt>P(ITM) no vencimento / P(touch)</dt><dd>{numberValue(probabilities?.expiry_itm_probability) == null ? 'UNKNOWN' : pct(numberValue(probabilities?.expiry_itm_probability))} / {numberValue(probabilities?.touch_probability) == null ? 'UNKNOWN' : pct(numberValue(probabilities?.touch_probability))} · {asText(probabilities?.status) ?? 'UNKNOWN'}</dd></div>
+              <div><dt>Modelo</dt><dd>{asText(probabilities?.model) ?? 'Indisponível'} · calibração {asText(probabilities?.calibration_status) ?? 'UNKNOWN'}</dd></div>
+              <div><dt>Estilo de exercício</dt><dd>{asText(style?.normalized) ?? 'UNKNOWN'} · {asText(style?.status) ?? 'UNKNOWN'}</dd></div>
+              <div><dt>Assignment antecipado</dt><dd>{asText(early?.status) ?? 'UNKNOWN'} · {asText(early?.reason) ?? 'Sem base disponível'}</dd></div>
+              <div><dt>Frequência pessoal</dt><dd>{asText(personal?.status) ?? 'UNKNOWN'} · denominador {numberValue(personal?.eligible_denominator)?.toLocaleString('pt-BR') ?? 'UNKNOWN'}</dd></div>
+              {Object.entries(payoffs ?? {}).map(([scenario, value]) => <div key={scenario}><dt>{scenario}</dt><dd>{brl(numberValue(value)) ?? 'Indisponível'}{numberValue(returns?.[scenario]) == null ? '' : ` · ${pct(numberValue(returns?.[scenario])! / 100)}`}</dd></div>)}
+            </dl>
+            {asText(personal?.reason) && <p className="muted">{asText(personal?.reason)}</p>}
+          </article>;
+        })}
+      </div>
+      {asStrings(putChainComparison.limitations).length > 0 && <ul>{asStrings(putChainComparison.limitations).map((item, index) => <li key={index}>{item}</li>)}</ul>}
     </section>}
 
     {optionEvidenceEntries.length > 0 && <section className="analysis-section">

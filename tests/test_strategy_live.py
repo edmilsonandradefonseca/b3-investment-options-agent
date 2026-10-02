@@ -72,6 +72,18 @@ class FakeOptionsProvider:
             option_type="PUT",
             strike=50.0,
             expiration_date=date(2026, 11, 20),
+            exercise_style="AMERICAN",
+            contract_multiplier=100.0,
+        )
+        second_put_contract = OptionContract(
+            option_id="WEGEV490",
+            underlying_id="WEGE3",
+            underlying_ticker="WEGE3",
+            option_ticker="WEGEV490",
+            option_type="PUT",
+            strike=49.0,
+            expiration_date=date(2026, 11, 20),
+            exercise_style="EUROPEAN",
             contract_multiplier=100.0,
         )
         call_contract = OptionContract(
@@ -99,6 +111,26 @@ class FakeOptionsProvider:
             mid=1.30,
             volume=1500,
             open_interest=3000,
+            implied_volatility=0.30,
+            delta=-0.48,
+        )
+        second_put_quote = OptionQuote(
+            instrument_id="WEGEV490",
+            ticker="WEGE3",
+            observation_timestamp=as_of,
+            available_timestamp=as_of,
+            source=self.name,
+            ingested_at=as_of,
+            source_record_id="WEGE3:WEGEV490:current",
+            option_id="WEGEV490",
+            bid=0.60,
+            ask=0.80,
+            last=0.70,
+            mid=0.70,
+            volume=700,
+            open_interest=1100,
+            implied_volatility=0.32,
+            delta=-0.39,
         )
         call_quote = OptionQuote(
             instrument_id="WEGEJ550",
@@ -116,7 +148,7 @@ class FakeOptionsProvider:
             volume=900,
             open_interest=1500,
         )
-        return [put_contract, call_contract], [put_quote, call_quote]
+        return [put_contract, second_put_contract, call_contract], [put_quote, second_put_quote, call_quote]
 
 
 class FakeFundamentalsProvider:
@@ -247,6 +279,59 @@ def test_sell_put_uses_current_oplab_bid_and_one_cash_secured_contract():
     assert alternative["assumptions"]["premium_basis"] == "current_bid"
     assert alternative["assumptions"]["current_option_quote"]["bid"] == 1.20
     assert result["option_evidence"]["WEGEV500"]["current_quote"]["last"] == 1.30
+
+
+def test_multi_strike_put_comparison_keeps_probability_and_assignment_measures_separate():
+    evidence = StrategyEvidenceService(
+        market_provider=FakeMarketProvider(),
+        fundamentals_provider=FakeFundamentalsProvider(),
+        current_quote_provider=FakeCurrentQuoteProvider(),
+    )
+    result = LiveStrategyComparisonService(
+        evidence_service=evidence,
+        options_provider=FakeOptionsProvider(),
+    ).compare_put_candidates(
+        ticker="WEGE3",
+        option_ids=("WEGEV500", "WEGEV490"),
+        scenario_horizon="2026-11-20",
+        scenario_shocks_pct=(-10, 0, 10),
+        scenario_objective="MAXIMIZE_WORST_CASE_RETURN_ON_CAPITAL",
+        portfolio=_portfolio(),
+        as_of=datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc),
+    )
+    comparison = result["put_chain_comparison"]
+    assert comparison["candidate_count"] == 2
+    assert [row["contract"]["option_id"] for row in comparison["candidates"]] == ["WEGEV490", "WEGEV500"]
+    low_strike, high_strike = comparison["candidates"]
+    assert low_strike["premium_total_one_contract"] == 60.0
+    assert low_strike["capital_required_one_contract"] == 4900.0
+    assert low_strike["breakeven_price"] == 48.4
+    assert low_strike["probability_estimates"]["expiry_itm_probability"] is not None
+    assert low_strike["probability_estimates"]["touch_probability"] is not None
+    assert low_strike["probability_estimates"]["expiry_itm_probability"] <= low_strike["probability_estimates"]["touch_probability"]
+    assert low_strike["early_assignment"]["status"] == "NOT_APPLICABLE_BY_PROVIDER_REPORTED_EUROPEAN_STYLE"
+    assert high_strike["early_assignment"]["status"] == "UNKNOWN"
+    assert high_strike["personal_assignment_frequency"]["status"] == "UNKNOWN"
+    assert high_strike["pnl_by_scenario_brl"]["2026-11-20:-10%"] == -403.4
+    assert comparison["ranking"]["status"] in {"CONDITIONAL_RANKING", "TIE"}
+
+
+def test_multi_strike_put_requires_exact_ids_and_same_expiration():
+    evidence = StrategyEvidenceService(
+        market_provider=FakeMarketProvider(),
+        fundamentals_provider=FakeFundamentalsProvider(),
+        current_quote_provider=FakeCurrentQuoteProvider(),
+    )
+    service = LiveStrategyComparisonService(evidence_service=evidence, options_provider=FakeOptionsProvider())
+    try:
+        service.compare_put_candidates(
+            ticker="WEGE3", option_ids=("WEGEV500", "NOT-LISTED"),
+            as_of=datetime(2026, 10, 1, tzinfo=timezone.utc),
+        )
+    except ValueError as exc:
+        assert "exactly one current contract" in str(exc)
+    else:
+        raise AssertionError("an unlisted sibling must not be silently substituted")
 
 
 def test_explicit_expiry_scenarios_calculate_stock_and_cash_secured_put_payoffs():

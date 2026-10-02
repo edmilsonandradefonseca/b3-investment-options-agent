@@ -253,6 +253,39 @@ def test_strategy_dispatch_forwards_explicit_price_scenarios(monkeypatch):
     assert response.result["scenario_analysis"]["status"] == "COMPUTED"
 
 
+def test_strategy_dispatch_routes_explicit_multi_strike_put_candidates(monkeypatch):
+    _install_portfolio(monkeypatch)
+
+    class FakeStrategyService:
+        def compare_put_candidates(self, **kwargs):
+            assert kwargs["ticker"] == "VALE3"
+            assert kwargs["option_ids"] == ("VALEV6714", "VALEV6664", "VALEV6564")
+            assert kwargs["scenario_horizon"] == "2026-10-16"
+            assert kwargs["scenario_shocks_pct"] == [-10.0, 0.0, 10.0]
+            return {
+                "as_of": "2026-10-02T15:00:00+00:00",
+                "quality_status": "VALIDATED",
+                "summary": "three PUTs compared",
+                "put_chain_comparison": {"candidate_count": 3},
+                "source_refs": ["oplab"],
+            }
+
+    monkeypatch.setattr(fast_dispatch, "LiveStrategyComparisonService", FakeStrategyService)
+    response = FastRouteDispatcher().dispatch(
+        task="UC-04: compare multiple PUT strikes",
+        context={
+            "workspace": "Strategy Lab",
+            "comparison_ticker": "VALE3",
+            "put_candidate_option_ids": ["VALEV6714", "VALEV6664", "VALEV6564"],
+            "scenario_horizon": "2026-10-16",
+            "scenario_shocks_pct": [-10, 0, 10],
+        },
+    )
+
+    assert response is not None
+    assert response.result["put_chain_comparison"]["candidate_count"] == 3
+
+
 def test_market_price_lookup_uses_current_oplab_quote(monkeypatch):
     current = StockMarketData(
         instrument_id="WEGE3",
