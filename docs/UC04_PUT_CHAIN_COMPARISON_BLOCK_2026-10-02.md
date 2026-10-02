@@ -48,12 +48,15 @@ samples remain unavailable.
 
 - Python compilation and `git diff --check`: PASS.
 - TypeScript/Vite production build: PASS.
-- Focused pytest could not run in the reset sandbox: Python 3.12 runtime has no
-  pytest and the task virtualenv is absent. The focused service/dispatch tests
-  are committed as CI gates; do not treat compilation as test execution.
-- CI and live-provider/UI acceptance are recorded in the PR/handoff after
-  publication. Live OPLAB availability remains an external gate; no mock chain
-  is described as real acceptance.
+- Local focused pytest could not run in the reset sandbox: Python 3.12 runtime
+  has no pytest or project dependencies. GitHub CI #1287 passed all 796 Python
+  tests and the React build on final code commit `b2fb05e`.
+- The earlier CI runs exposed two concrete regressions: missing Strategy Lab
+  route recognition for explicit candidate IDs and a fixture timestamp later
+  than its requested as-of. Commits `7b43ac4` and `b2fb05e` corrected these;
+  final CI is green.
+- Live-provider/UI acceptance is still pending. OPLAB availability remains an
+  external gate; no mock chain is described as real acceptance.
 
 Ubuntu acceptance after CI passes: update the checkout with
 `git pull --ff-only origin feature/react-functional-v43-integration`, restart

@@ -1,4 +1,4 @@
-**Current checkpoint — 02/10:** GitHub branch HEAD is `942326f9bc99705cb09041aa0188073acd6dc702`, PR #66 remains open/draft, CI #1284 SUCCESS. B2 is published; B1/B2 have not yet received Ubuntu acceptance. The current worktree adds B3A multi-strike PUT comparison and is awaiting publication/CI. Read `docs/UC04_PUT_CHAIN_COMPARISON_BLOCK_2026-10-02.md` before acceptance. No Ubuntu update/restart command until the B3A commit has passed CI.
+**Current checkpoint — 02/10:** GitHub branch HEAD is `b2fb05e3b12d6015a9ad04983d42f42c7d819846`, PR #66 remains open/draft, final CI #1287 SUCCESS (796 Python tests and React build). B1/B2/B3A are published; Ubuntu acceptance for these UC-04 increments remains pending. Read `docs/UC04_PUT_CHAIN_COMPARISON_BLOCK_2026-10-02.md` before validation. B3A's final fixes preserve exact route recognition and requested `as_of` constraints.
 
 **Functional delivery plan — 02/10 (latest priority):**
 Read `docs/DECISION_WORKSPACES_DELIVERY_PLAN_2026-10-02.md` before next code.

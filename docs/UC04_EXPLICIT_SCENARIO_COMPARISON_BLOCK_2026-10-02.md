@@ -91,5 +91,7 @@ conditional maximin result for a stock-versus-PUT comparison with a common known
 R$5,000 capital basis, and dispatch of the explicit objective from Strategy Lab.
 The current managed scratch session no longer contains the Python 3.14 test
 environment and outbound package downloads are blocked; Python source compilation
-and TypeScript/Vite build pass locally. GitHub CI is the required Python test
-gate for this increment.
+and TypeScript/Vite build pass locally. B2 was published as `942326f` and CI
+#1284 passed (Python regression and React build). The follow-on multi-strike PUT
+block and its final CI are documented in
+`docs/UC04_PUT_CHAIN_COMPARISON_BLOCK_2026-10-02.md`.

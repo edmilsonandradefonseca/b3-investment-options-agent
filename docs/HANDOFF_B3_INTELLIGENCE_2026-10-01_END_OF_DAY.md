@@ -249,7 +249,7 @@ reinicialização e não conseguiu baixar dependências pelo limite de rede. Fon
 Python compila, React/Vite build passa; regression tests adicionados devem ser
 confirmados no CI do commit B2. Não pedir instalação Ubuntu antes do CI verde.
 
-### B3A — comparação multi-strike PUT em Strategy Lab (em validação)
+### B3A — comparação multi-strike PUT em Strategy Lab (CI verde; Ubuntu pendente)
 
 O serviço e a tela agora comparam 2–20 contratos PUT selecionados por ID exato,
 do mesmo ticker/vencimento, usando uma única cadeia corrente. Expõem bid/ask/mid,
@@ -264,6 +264,7 @@ verificação legal independente; assignment antecipado não é modelado. Não f
 AC-15/16/17 sem cadeia real e aceite Ubuntu.
 
 Bloco detalhado: `docs/UC04_PUT_CHAIN_COMPARISON_BLOCK_2026-10-02.md`.
-Verificação até agora: Python compilado, diff check PASS e TypeScript/Vite build
-PASS. O sandbox não tem pytest nem o venv do projeto; testes focados adicionados
-serão confirmados no CI do commit. Ubuntu permanece pendente até CI verde.
+Commit funcional final `b2fb05e`; CI #1287 SUCCESS: 796 Python tests e build
+React. O sandbox não tem pytest nem dependências Python do projeto; os testes
+foram executados pelo CI. Ubuntu permanece pendente. B1/B2/B3A devem ser
+instalados juntos para o primeiro aceite real do Strategy Lab.
