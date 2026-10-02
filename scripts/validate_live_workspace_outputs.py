@@ -86,7 +86,7 @@ def make_cases() -> list[dict[str, Any]]:
             "id": "copilot_natural_language_compare",
             "label": "Copilot / comparar ITUB4 versus BBDC4",
             "request": {
-                "task": "Compare comprar ações ITUB4 e comprar ações BBDC4. Use dados atuais e históricos disponíveis, risco, valuation/fundamentos, dividendos e efeito na minha carteira; mostre valores, datas e fontes e explicite o que estiver indisponível. Não invente dados nem force um vencedor."
+                "task": "Compare comprar ações ITUB4 e comprar ações BBDC4. Use dados atuais e históricos disponíveis, risco, valuation/fundamentos, dividendos e efeito na minha carteira; mostre valores, datas e fontes e explicite o que estiver indisponível. Não invente dados nem force um vencedor.",
                 "ticker": "PETR4",
                 "context": {
                     **common,
