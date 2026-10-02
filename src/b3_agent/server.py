@@ -438,6 +438,7 @@ def current_portfolio() -> dict[str, Any]:
         "updated_at": datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat(),
         "source_refs": list(context.source_refs),
         "positions": [asdict(position) for position in context.positions],
+        "received_income": asdict(context.received_income) if context.received_income is not None else None,
         "intelligence": asdict(PortfolioIntelligenceEngine().build(context)),
     }
 

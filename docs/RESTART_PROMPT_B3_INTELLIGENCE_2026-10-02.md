@@ -1,3 +1,9 @@
+**Received-income block — 02/10:** the user supplied the BTG workbook and
+authorized Portfolio dividend/JCP extraction. Read
+`docs/BTG_RECEIVED_INCOME_BLOCK_2026-10-02.md` for the additive statement
+projection, source semantics, verification and pending Ubuntu/desktop gate.
+No new ledger or historical learning activation.
+
 **New source checkpoint — 02/10:** the user confirmed `a0d0a2f` installed,
 then supplied the brokerage-note ZIP. Read
 `docs/BROKERAGE_BATCH_RECONCILIATION_2026-10-02.md` for the real audit,

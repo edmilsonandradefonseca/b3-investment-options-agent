@@ -94,6 +94,12 @@ export type PortfolioPosition = {
 export type PortfolioSnapshot = {
   status: string; as_of: string | null; updated_at: string | null;
   source_refs?: string[]; positions: PortfolioPosition[];
+  received_income?: {
+    period_start: string; period_end: string; coverage: string; source_ref: string;
+    duplicate_rows_omitted: number;
+    summaries: Array<{ticker: string; dividends_net: number | null; jcp_net: number | null; total_net: number | null; payment_count: number}>;
+    payments: Array<{ticker: string; payment_date: string; payment_type: string; quantity: number | null; gross_amount: number | null; net_amount: number | null; source_ref: string}>;
+  } | null;
 };
 export type CapitalProfile = {
   status: string; account: string; available_capital: number | null;
