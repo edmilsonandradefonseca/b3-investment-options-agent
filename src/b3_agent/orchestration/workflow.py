@@ -102,20 +102,34 @@ def build_workflow(
         return call
 
     def experience_context(state: B3State) -> dict[str, Any]:
+        unavailable = {
+            "experience_retrieval": None, "experience_assessment": None,
+            "active_learnings": [], "historical_experiences": [],
+        }
         if experience_context_service is None:
-            return {}
+            return {**unavailable, "canonical_experience_context": {
+                "status": "CANONICAL_LOADER_NOT_CONFIGURED", "learnings": [],
+                "assessment": None, "retrieval": None,
+            }}
 
         snapshot = state.get("feature_snapshot")
         regime = state.get("market_regime")
         if not isinstance(snapshot, FeatureSnapshot) or not isinstance(
             regime, MarketRegime
         ):
-            return {}
+            return {**unavailable, "canonical_experience_context": {
+                "status": "TYPED_SNAPSHOT_AND_REGIME_REQUIRED", "learnings": [],
+                "assessment": None, "retrieval": None,
+            }}
 
         as_of = state.get("as_of")
         effective_as_of = (
             as_of if isinstance(as_of, datetime) else snapshot.as_of
         )
+        if isinstance(as_of, str):
+            effective_as_of = datetime.fromisoformat(as_of.replace("Z", "+00:00"))
+        elif as_of is not None and not isinstance(as_of, datetime):
+            raise ValueError("experience as_of requires a timezone-aware timestamp")
         if effective_as_of.tzinfo is None:
             raise ValueError("as_of must be timezone-aware")
 
@@ -128,6 +142,7 @@ def build_workflow(
             top_k=10,
         )
         return {
+            "canonical_experience_context": built.as_payload(),
             "experience_retrieval": built.retrieval,
             "experience_assessment": built.assessment,
             "active_learnings": list(built.learnings),
@@ -192,6 +207,7 @@ def build_workflow(
         keys = (
             "personal_history",
             "decision_history",
+            "canonical_experience_context",
             "portfolio_context",
             "options_transactions",
             "signals",
@@ -359,8 +375,7 @@ def build_workflow(
     graph = StateGraph(B3State)
     graph.add_node("retrieve", retrieve)
     graph.add_node("deterministic_context", deterministic_context)
-    if experience_context_service is not None:
-        graph.add_node("experience_context", experience_context)
+    graph.add_node("experience_context", measured("experience_context", experience_context))
     graph.add_node("knowledge_context", measured("knowledge_context", knowledge_context))
     graph.add_node("personal_history", measured("personal_history", personal_history_context))
     graph.add_node("market_analysis", measured("market_analysis", market_analysis, market_agent))
@@ -377,11 +392,8 @@ def build_workflow(
     graph.add_edge(START, "retrieve")
     graph.add_edge("retrieve", "deterministic_context")
     graph.add_edge("deterministic_context", "personal_history")
-    if experience_context_service is not None:
-        graph.add_edge("personal_history", "experience_context")
-        graph.add_edge("experience_context", "knowledge_context")
-    else:
-        graph.add_edge("personal_history", "knowledge_context")
+    graph.add_edge("personal_history", "experience_context")
+    graph.add_edge("experience_context", "knowledge_context")
 
     def senior_route(state):
         if single_synthesis and state.get("workspace_intelligence"):

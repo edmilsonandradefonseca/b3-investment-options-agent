@@ -32,6 +32,7 @@ class B3State(TypedDict, total=False):
     workspace_intelligence: bool
     personal_history: dict[str, Any]
     decision_history: dict[str, Any]
+    canonical_experience_context: dict[str, Any]
     history_since: str
     stage_telemetry: Annotated[dict[str, Any], or_]
     user_question: str

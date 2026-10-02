@@ -1,3 +1,12 @@
+**Canonical boundary block — 02/10:** read
+`docs/UC08_CANONICAL_BOUNDARY_BLOCK_2026-10-02.md` first for commit-before-
+projection/replay, typed PRE-ANALYSIS runtime composition, shared canonical
+learning presentation and remaining owner/data gates. No new persistence or
+real learning activation. User also supplied observed-lifecycle PASS at installed
+`83e93d5`: 264 executions / 129 observed sequences / zero eligible outcomes.
+Do not repeat completed validators or treat a typed injection hook as a deployed
+canonical persistence adapter.
+
 **Decision-history block — 02/10:** read
 `docs/UC070809_DECISION_HISTORY_BLOCK_2026-10-02.md` first for the updated
 matrix, candidate/contract evidence in Opportunities, Strategy Lab and Copilot,

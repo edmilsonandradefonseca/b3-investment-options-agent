@@ -28,6 +28,7 @@ from b3_agent.schemas.position import PortfolioContext
 
 from .orchestrator import configure_workflow
 from .workflow import build_workflow
+from .experience_workflow import ExperienceContextService
 from b3_agent.intelligence.personal_history import PersonalHistoryService
 from b3_agent.llm.reuse import ReusingLLMClient
 
@@ -118,6 +119,7 @@ def configure_default_workflow(
     vault_path: Path | None = None,
     portfolio_context: PortfolioContext | dict[str, Any] | None = None,
     opportunity_set: OpportunitySet | None = None,
+    experience_context_service: ExperienceContextService | None = None,
 ) -> None:
     """Compose and register the V4 production workflow.
 
@@ -129,6 +131,8 @@ def configure_default_workflow(
     """
     if not settings.llm_enabled:
         raise RuntimeError("B3_AGENT_LLM_ENABLED is false; cannot compose the reasoning workflow")
+    if experience_context_service is not None and not isinstance(experience_context_service, ExperienceContextService):
+        raise TypeError("experience_context_service must be a trusted typed service")
 
     llm = ReusingLLMClient(_build_llm_client())
     memory_manager = None
@@ -143,6 +147,7 @@ def configure_default_workflow(
         knowledge_context_builder=knowledge_context_builder,
         memory_manager=memory_manager,
         personal_history_service=PersonalHistoryService(settings.data_dir),
+        experience_context_service=experience_context_service,
         single_synthesis=os.getenv("B3_WORKSPACE_SINGLE_SYNTHESIS", "false").lower() == "true",
         market_agent=MarketAnalysisAgent(llm),
         portfolio_agent=PortfolioAnalysisAgent(llm),

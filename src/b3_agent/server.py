@@ -207,6 +207,10 @@ def _workspace_intelligence_response(
                 "deterministic_context": context_payload.get("deterministic_context", {}),
                 "personal_history": context_payload.get("deterministic_context", {}).get("personal_history", {}),
                 "decision_history": context_payload.get("deterministic_context", {}).get("decision_history", {}),
+                "canonical_experience_context": {
+                    "status": "CANONICAL_LOADER_NOT_CONFIGURED", "learnings": [],
+                    "assessment": None, "retrieval": None,
+                },
                 "derived_synthesis_status": "NOT_REQUESTED",
                 "telemetry": {"total_ms": (monotonic()-started)*1000, "llm_calls": 0},
             },
@@ -267,6 +271,10 @@ def _workspace_intelligence_response(
         ),
         "personal_history": context_payload.get("deterministic_context", {}).get("personal_history", {}),
         "decision_history": context_payload.get("deterministic_context", {}).get("decision_history", {}),
+        "canonical_experience_context": senior.result.get("canonical_experience_context", {
+            "status": "CANONICAL_LOADER_NOT_CONFIGURED", "learnings": [],
+            "assessment": None, "retrieval": None,
+        }),
         "telemetry": {"total_ms": (monotonic()-started)*1000, "stages": senior.result.get("stage_telemetry", {})},
         "workspace_intelligence": {
             "workspace": context.workspace,
