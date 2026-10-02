@@ -11,15 +11,18 @@ from .graph_store import KnowledgeGraphStore
 class Neo4jKnowledgeGraphStore(KnowledgeGraphStore):
     """Concrete Neo4j adapter behind the provider-neutral KnowledgeGraphStore boundary."""
 
-    def __init__(self, driver, *, database: str | None = None) -> None:
+    def __init__(self, driver, *, database: str | None = None, read_only: bool = False) -> None:
         self.driver = driver
         self.database = database
-        self._ensure_constraints()
+        self.read_only = read_only
+        if not read_only:
+            self._ensure_constraints()
 
     def _session(self):
+        kwargs = {"default_access_mode": "READ"} if self.read_only else {}
         if self.database:
-            return self.driver.session(database=self.database)
-        return self.driver.session()
+            kwargs["database"] = self.database
+        return self.driver.session(**kwargs)
 
     def _ensure_constraints(self) -> None:
         with self._session() as session:
@@ -29,6 +32,8 @@ class Neo4jKnowledgeGraphStore(KnowledgeGraphStore):
             )
 
     def upsert_entity(self, entity: GraphEntity) -> None:
+        if self.read_only:
+            raise RuntimeError("read-only Neo4j adapter cannot mutate graph")
         payload = _entity_payload(entity)
         with self._session() as session:
             session.run(
@@ -48,6 +53,8 @@ class Neo4jKnowledgeGraphStore(KnowledgeGraphStore):
             )
 
     def upsert_relation(self, relation: GraphRelation) -> None:
+        if self.read_only:
+            raise RuntimeError("read-only Neo4j adapter cannot mutate graph")
         relation_type = relation.relation.value.upper()
         if not relation_type.replace("_", "").isalnum():
             raise ValueError("invalid relation type")
@@ -220,6 +227,8 @@ class Neo4jKnowledgeGraphStore(KnowledgeGraphStore):
         return output
 
     def delete_entity(self, entity_id: str) -> None:
+        if self.read_only:
+            raise RuntimeError("read-only Neo4j adapter cannot mutate graph")
         with self._session() as session:
             session.run(
                 "MATCH (n:B3Entity {entity_id: $entity_id}) DETACH DELETE n",
@@ -227,6 +236,8 @@ class Neo4jKnowledgeGraphStore(KnowledgeGraphStore):
             )
 
     def delete_relation(self, relation: GraphRelation) -> None:
+        if self.read_only:
+            raise RuntimeError("read-only Neo4j adapter cannot mutate graph")
         relation_type = relation.relation.value.upper()
         with self._session() as session:
             session.run(

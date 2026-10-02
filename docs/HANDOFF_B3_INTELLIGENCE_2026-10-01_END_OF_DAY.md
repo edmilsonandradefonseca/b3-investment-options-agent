@@ -1,3 +1,15 @@
+**Functional delivery plan — 02/10 (latest priority):**
+Read `docs/DECISION_WORKSPACES_DELIVERY_PLAN_2026-10-02.md` before next code.
+The user requires inside/outside-portfolio ranking, PUT risk/return comparison
+and financed sell-to-buy alternatives (ASAI3/Embraer). UC-07/08/09 enrich these
+flows; absent personal history must not block otherwise defensible current
+analysis/ranking. AC-01…AC-25 are acceptance cases, not replacements for UC IDs.
+This block implements existing B3 research before optional gap collection and
+shared source/date presentation; full economic ranking remains open. Next block
+is objective/constraint-aware economic comparison using existing contracts.
+Do not restart completed storage inventories or prioritize new learning storage
+over closing the decision workflows. Preserve UNKNOWN, PIT and V4.3.
+
 **Registered storage gate complete — 02/10:**
 Ubuntu installed `e816ef7`; registered-dataset metadata READ_OK, untruncated.
 The registry declares only `market_data`, a Parquet directory partition for

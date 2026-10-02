@@ -9,6 +9,7 @@ from typing import Any
 from time import monotonic
 from b3_agent.intelligence.personal_history import PersonalHistoryService
 from b3_agent.intelligence.decision_history import build_decision_history
+from b3_agent.intelligence.stored_research import StoredResearchContextService
 
 from b3_agent.config import settings
 from b3_agent.intelligence.observability import local_ticker_intelligence
@@ -278,6 +279,7 @@ class WorkspaceIntelligenceContextService:
         joao_memory_client: JoaoMemoryContextClient | None = None,
         joao_service: JoaoResolvePerspectiveService | None = None,
         opportunity_service: LiveOpportunityService | None = None,
+        stored_research_service: StoredResearchContextService | None = None,
     ) -> None:
         self.current_quote_provider = current_quote_provider or OplabAdapter()
         self.news_provider = news_provider or SearxngNewsAdapter(
@@ -297,6 +299,7 @@ class WorkspaceIntelligenceContextService:
         )
         self.joao_service = joao_service
         self.opportunity_service = opportunity_service or LiveOpportunityService()
+        self.stored_research_service = stored_research_service or StoredResearchContextService()
 
     def build(
         self,
@@ -309,6 +312,7 @@ class WorkspaceIntelligenceContextService:
         include_joao_perspective: bool = True,
         history_as_of: datetime | str | None = None,
         history_since: str | None = None,
+        research_mode: str = "stored_first",
     ) -> WorkspaceIntelligenceContext:
         started = monotonic()
         normalized_workspace = " ".join(workspace.casefold().split())
@@ -324,7 +328,19 @@ class WorkspaceIntelligenceContextService:
                 if ticker and ticker.strip()
             )
         )
+        if research_mode not in {"stored_first", "stored_only", "refresh"}:
+            raise ValueError("research_mode must be stored_first, stored_only or refresh")
+        if len(normalized_tickers) > 20 or not 1 <= news_limit <= 20:
+            raise ValueError("workspace ticker/news limits must be between 1 and 20")
         as_of = datetime.now(timezone.utc)
+        research_as_of = history_as_of
+        if isinstance(research_as_of, str):
+            research_as_of = datetime.fromisoformat(research_as_of.replace("Z", "+00:00"))
+        research_as_of = research_as_of or as_of
+        if not isinstance(research_as_of, datetime) or research_as_of.tzinfo is None:
+            raise ValueError("research cutoff must be timezone-aware")
+        external_research_allowed = research_mode != "stored_only" and history_as_of is None
+        stored_research: dict[str, Any] = {}
         limitations: list[str] = []
         source_refs: list[str] = []
 
@@ -387,55 +403,77 @@ class WorkspaceIntelligenceContextService:
             ticker_query = (
                 f"{ticker} B3 resultados fato relevante dividendos mercado setor"
             )
-            ticker_events: list[dict[str, Any]] = []
+            stored = self.stored_research_service.build(ticker, as_of=research_as_of, limit=news_limit)
+            stored_research[ticker] = stored
+            source_refs.extend(stored.get("source_refs", []))
+            ticker_events = list(stored.get("events", []))
             ticker_research_errors: list[str] = []
-            try:
-                records = self.news_provider.search(
-                    ticker,
-                    query=ticker_query,
-                    limit=news_limit,
-                )
-                # Interactive collection happens after the workspace request starts.
-                # Use a post-fetch cutoff so evidence ingested milliseconds after the
-                # initial workspace timestamp is not incorrectly classified as future.
-                # Historical/PIT replay paths still pass their explicit historical
-                # as_of directly to ResearchEventService.
-                dated_records = tuple(
-                    item for item in records if item.published_at is not None
-                )
-                research = ResearchEventService().build(
-                    dated_records,
-                    as_of=datetime.now(timezone.utc),
-                )
-                ticker_events = [asdict(item) for item in research.events]
-                source_refs.extend(research.source_refs)
-            except (OSError, RuntimeError, ValueError) as exc:
-                ticker_research_errors.append(f"searxng={exc}")
-
-            if not ticker_events:
+            collect_research = external_research_allowed and (research_mode == "refresh" or not ticker_events)
+            if collect_research:
+                ticker_events = []
                 try:
-                    fallback_records = self.fallback_news_provider.search(
+                    records = self.news_provider.search(
                         ticker,
-                        query=f"{ticker_query} when:2d",
+                        query=ticker_query,
                         limit=news_limit,
                     )
-                    fallback_dated = tuple(
-                        item
-                        for item in fallback_records
-                        if item.published_at is not None
+                    # Interactive collection happens after the workspace request starts.
+                    # Use a post-fetch cutoff so evidence ingested milliseconds after the
+                    # initial workspace timestamp is not incorrectly classified as future.
+                    # Historical/PIT replay paths still pass their explicit historical
+                    # as_of directly to ResearchEventService.
+                    dated_records = tuple(
+                        item for item in records if item.published_at is not None
                     )
-                    fallback_research = ResearchEventService().build(
-                        fallback_dated,
+                    research = ResearchEventService().build(
+                        dated_records,
                         as_of=datetime.now(timezone.utc),
                     )
-                    ticker_events = [
-                        asdict(item) for item in fallback_research.events
-                    ]
-                    source_refs.extend(fallback_research.source_refs)
+                    ticker_events = [asdict(item) for item in research.events]
+                    source_refs.extend(research.source_refs)
                 except (OSError, RuntimeError, ValueError) as exc:
-                    ticker_research_errors.append(
-                        f"google_news_rss={exc}"
-                    )
+                    ticker_research_errors.append(f"searxng={exc}")
+
+                if not ticker_events:
+                    try:
+                        fallback_records = self.fallback_news_provider.search(
+                            ticker,
+                            query=f"{ticker_query} when:2d",
+                            limit=news_limit,
+                        )
+                        fallback_dated = tuple(
+                            item
+                            for item in fallback_records
+                            if item.published_at is not None
+                        )
+                        fallback_research = ResearchEventService().build(
+                            fallback_dated,
+                            as_of=datetime.now(timezone.utc),
+                        )
+                        ticker_events = [
+                            asdict(item) for item in fallback_research.events
+                        ]
+                        source_refs.extend(fallback_research.source_refs)
+                    except (OSError, RuntimeError, ValueError) as exc:
+                        ticker_research_errors.append(
+                            f"google_news_rss={exc}"
+                        )
+
+                # Preserve stored evidence if a refresh yields no admissible events.
+                fetched = ticker_events
+                by_ref = {item["source_ref"]: item for item in stored.get("events", [])}
+                for item in fetched:
+                    by_ref[item["source_ref"]] = {**item, "retrieved_from": ["external_research"]}
+                ticker_events = sorted(by_ref.values(), key=lambda item: str(item["published_at"]), reverse=True)[:news_limit]
+            market_entry["research_acquisition"] = {
+                "mode": research_mode, "as_of": research_as_of.isoformat(),
+                "stored_event_count": len(stored.get("events", [])),
+                "external_search_requested": collect_research,
+                "reason": "REFRESH_REQUESTED" if collect_research and research_mode == "refresh" else
+                          "NO_RECENT_STORED_EVENTS" if collect_research else
+                          "STORED_EVENTS_REUSED" if ticker_events else "EXTERNAL_RESEARCH_DISABLED",
+                "coverage": "BOUNDED_RESEARCH_ONLY_NOT_EXHAUSTIVE",
+            }
 
             market_entry["research_events"] = ticker_events
             if not ticker_events and ticker_research_errors:
@@ -479,121 +517,139 @@ class WorkspaceIntelligenceContextService:
         market_overview_research: list[dict[str, Any]] = []
         market_overview_diagnostics: list[dict[str, Any]] = []
         if normalized_workspace in {"market intelligence", "opportunities"}:
-            overview_queries = (
-                "Ibovespa B3 Brasil mercado hoje juros Selic dólar inflação commodities fluxo estrangeiro",
-                "Ibovespa hoje bolsa brasileira dólar juros mercado",
-                "B3 fluxo estrangeiro bolsa Brasil mercado hoje",
-            )
-            seen_refs: set[str] = set()
-            for query in overview_queries:
-                try:
-                    overview_records = self.news_provider.search(
-                        "IBOV",
-                        query=query,
-                        limit=news_limit,
-                    )
-                    diagnostics = getattr(
-                        self.news_provider,
-                        "last_diagnostics",
-                        None,
-                    )
-                    if diagnostics is not None:
-                        market_overview_diagnostics.append({
-                            "query": diagnostics.query,
-                            "primary_raw_result_count": diagnostics.primary_raw_result_count,
-                            "fallback_raw_result_count": diagnostics.fallback_raw_result_count,
-                            "normalized_result_count": diagnostics.normalized_result_count,
-                            "fallback_used": diagnostics.fallback_used,
-                            "fallback_strategy": diagnostics.fallback_strategy,
-                            "unresponsive_engines": [
-                                {"engine": name, "reason": reason}
-                                for name, reason in diagnostics.unresponsive_engines
-                            ],
-                        })
-                    dated_overview_records = tuple(
-                        item
-                        for item in overview_records
-                        if item.published_at is not None
-                    )
-                    if diagnostics is not None:
-                        market_overview_diagnostics[-1][
-                            "dated_result_count"
-                        ] = len(dated_overview_records)
-                        market_overview_diagnostics[-1][
-                            "undated_filtered_count"
-                        ] = (
-                            len(overview_records)
-                            - len(dated_overview_records)
+            stored_overview = self.stored_research_service.build("IBOV", as_of=research_as_of, limit=news_limit)
+            stored_research["IBOV"] = stored_overview
+            market_overview_research = list(stored_overview.get("events", []))
+            source_refs.extend(stored_overview.get("source_refs", []))
+            collect_overview = external_research_allowed and (research_mode == "refresh" or not market_overview_research)
+            market_overview_diagnostics.append({
+                "source": "stored_b3_research", "stored_event_count": len(market_overview_research),
+                "external_search_requested": collect_overview, "mode": research_mode,
+            })
+            if collect_overview:
+                market_overview_research = []
+                overview_queries = (
+                    "Ibovespa B3 Brasil mercado hoje juros Selic dólar inflação commodities fluxo estrangeiro",
+                    "Ibovespa hoje bolsa brasileira dólar juros mercado",
+                    "B3 fluxo estrangeiro bolsa Brasil mercado hoje",
+                )
+                seen_refs: set[str] = set()
+                for query in overview_queries:
+                    try:
+                        overview_records = self.news_provider.search(
+                            "IBOV",
+                            query=query,
+                            limit=news_limit,
                         )
-                    overview = ResearchEventService().build(
-                        dated_overview_records,
-                        as_of=datetime.now(timezone.utc),
+                        diagnostics = getattr(
+                            self.news_provider,
+                            "last_diagnostics",
+                            None,
+                        )
+                        if diagnostics is not None:
+                            market_overview_diagnostics.append({
+                                "query": diagnostics.query,
+                                "primary_raw_result_count": diagnostics.primary_raw_result_count,
+                                "fallback_raw_result_count": diagnostics.fallback_raw_result_count,
+                                "normalized_result_count": diagnostics.normalized_result_count,
+                                "fallback_used": diagnostics.fallback_used,
+                                "fallback_strategy": diagnostics.fallback_strategy,
+                                "unresponsive_engines": [
+                                    {"engine": name, "reason": reason}
+                                    for name, reason in diagnostics.unresponsive_engines
+                                ],
+                            })
+                        dated_overview_records = tuple(
+                            item
+                            for item in overview_records
+                            if item.published_at is not None
+                        )
+                        if diagnostics is not None:
+                            market_overview_diagnostics[-1][
+                                "dated_result_count"
+                            ] = len(dated_overview_records)
+                            market_overview_diagnostics[-1][
+                                "undated_filtered_count"
+                            ] = (
+                                len(overview_records)
+                                - len(dated_overview_records)
+                            )
+                        overview = ResearchEventService().build(
+                            dated_overview_records,
+                            as_of=datetime.now(timezone.utc),
+                        )
+                        for item in overview.events:
+                            if item.source_ref in seen_refs:
+                                continue
+                            seen_refs.add(item.source_ref)
+                            market_overview_research.append(asdict(item))
+                        source_refs.extend(overview.source_refs)
+                        if len(market_overview_research) >= news_limit:
+                            break
+                    except (OSError, RuntimeError, ValueError) as exc:
+                        market_overview_diagnostics.append({
+                            "query": query,
+                            "error": str(exc),
+                        })
+                market_overview_research = market_overview_research[:news_limit]
+                if not market_overview_research:
+                    fallback_query = (
+                        "Ibovespa B3 Brasil mercado juros Selic dólar inflação "
+                        "commodities fluxo estrangeiro when:1d"
                     )
-                    for item in overview.events:
-                        if item.source_ref in seen_refs:
-                            continue
-                        seen_refs.add(item.source_ref)
-                        market_overview_research.append(asdict(item))
-                    source_refs.extend(overview.source_refs)
-                    if len(market_overview_research) >= news_limit:
-                        break
-                except (OSError, RuntimeError, ValueError) as exc:
-                    market_overview_diagnostics.append({
-                        "query": query,
-                        "error": str(exc),
-                    })
-            market_overview_research = market_overview_research[:news_limit]
-            if not market_overview_research:
-                fallback_query = (
-                    "Ibovespa B3 Brasil mercado juros Selic dólar inflação "
-                    "commodities fluxo estrangeiro when:1d"
-                )
-                try:
-                    fallback_records = self.fallback_news_provider.search(
-                        "IBOV",
-                        query=fallback_query,
-                        limit=news_limit,
-                    )
-                    fallback_dated = tuple(
-                        item
-                        for item in fallback_records
-                        if item.published_at is not None
-                    )
-                    fallback_snapshot = ResearchEventService().build(
-                        fallback_dated,
-                        as_of=datetime.now(timezone.utc),
-                    )
-                    market_overview_research = [
-                        asdict(item)
-                        for item in fallback_snapshot.events[:news_limit]
-                    ]
-                    source_refs.extend(fallback_snapshot.source_refs)
-                    market_overview_diagnostics.append({
-                        "query": fallback_query,
-                        "source": self.fallback_news_provider.name,
-                        "normalized_result_count": len(
-                            market_overview_research
-                        ),
-                        "dated_result_count": len(fallback_dated),
-                        "undated_filtered_count": (
-                            len(fallback_records) - len(fallback_dated)
-                        ),
-                        "fallback_used": True,
-                        "fallback_strategy": "google_news_rss",
-                    })
-                except (OSError, RuntimeError, ValueError) as exc:
-                    market_overview_diagnostics.append({
-                        "query": fallback_query,
-                        "source": "google_news_rss",
-                        "error": str(exc),
-                    })
+                    try:
+                        fallback_records = self.fallback_news_provider.search(
+                            "IBOV",
+                            query=fallback_query,
+                            limit=news_limit,
+                        )
+                        fallback_dated = tuple(
+                            item
+                            for item in fallback_records
+                            if item.published_at is not None
+                        )
+                        fallback_snapshot = ResearchEventService().build(
+                            fallback_dated,
+                            as_of=datetime.now(timezone.utc),
+                        )
+                        market_overview_research = [
+                            asdict(item)
+                            for item in fallback_snapshot.events[:news_limit]
+                        ]
+                        source_refs.extend(fallback_snapshot.source_refs)
+                        market_overview_diagnostics.append({
+                            "query": fallback_query,
+                            "source": self.fallback_news_provider.name,
+                            "normalized_result_count": len(
+                                market_overview_research
+                            ),
+                            "dated_result_count": len(fallback_dated),
+                            "undated_filtered_count": (
+                                len(fallback_records) - len(fallback_dated)
+                            ),
+                            "fallback_used": True,
+                            "fallback_strategy": "google_news_rss",
+                        })
+                    except (OSError, RuntimeError, ValueError) as exc:
+                        market_overview_diagnostics.append({
+                            "query": fallback_query,
+                            "source": "google_news_rss",
+                            "error": str(exc),
+                        })
 
+                if not market_overview_research:
+                    limitations.append(
+                        "Broad-market research returned zero normalized events from "
+                        "SearXNG and Google News RSS; macro and asset-specific evidence "
+                        "remain available."
+                    )
+
+            overview_by_ref = {item["source_ref"]: item for item in stored_overview.get("events", [])}
+            for item in market_overview_research:
+                overview_by_ref[item["source_ref"]] = item
+            market_overview_research = sorted(overview_by_ref.values(), key=lambda item: str(item["published_at"]), reverse=True)[:news_limit]
             if not market_overview_research:
-                limitations.append(
-                    "Broad-market research returned zero normalized events from "
-                    "SearXNG and Google News RSS; macro and asset-specific evidence "
-                    "remain available."
-                )
+                limitations.append("No admissible broad-market research at the requested cutoff/mode; missing events remain UNKNOWN.")
 
         macro: dict[str, Any] = {}
         for indicator in ("SELIC", "CDI", "IPCA"):
@@ -656,6 +712,7 @@ class WorkspaceIntelligenceContextService:
 
         deterministic_context: dict[str, Any] = {
             "workspace": workspace,
+            "stored_research": stored_research,
             "personal_history": personal_history,
             "decision_history": build_decision_history(
                 history_service, result=workspace_result, tickers=normalized_tickers,

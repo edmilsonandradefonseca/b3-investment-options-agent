@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import pytest
 
 from b3_agent.intelligence import workspace_context
 from b3_agent.intelligence.workspace_context import JoaoMemoryContextClient, JoaoResolvePerspectiveService, WorkspaceIntelligenceContextService
@@ -8,6 +9,14 @@ from b3_agent.strategy_live import AssetEvidencePack
 from b3_agent.schemas.macro import MacroObservation
 from b3_agent.schemas.market import StockMarketData
 from b3_agent.schemas.news import NewsEvidence
+
+
+@pytest.fixture(autouse=True)
+def no_production_research_connections(monkeypatch):
+    # Existing workspace tests isolate their provider inputs; memory is tested separately.
+    monkeypatch.setattr(workspace_context.StoredResearchContextService, "build",
+        lambda self, ticker, **kwargs: {"ticker": ticker, "events": [], "relations": [],
+                                       "source_refs": [], "backends": {}, "excluded": {}})
 
 
 NOW = datetime(2026, 10, 1, 16, 0, tzinfo=timezone.utc)

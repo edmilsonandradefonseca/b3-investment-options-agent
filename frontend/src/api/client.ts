@@ -142,6 +142,10 @@ export const b3Api = {
     ),
   liveAnalysis: (ticker: string) =>
     requestJson<LiveAnalysisResponse>(`/analysis/live/${encodeURIComponent(ticker.trim().toUpperCase())}`),
+  storedResearch: (ticker: string, limit = 8) =>
+    requestJson<ResearchNewsResponse>(
+      `/intelligence/research-context?ticker=${encodeURIComponent(ticker.trim().toUpperCase())}&limit=${limit}`,
+    ),
   researchNews: (ticker: string, limit = 20) =>
     requestJson<ResearchNewsResponse>(
       `/research/news/${encodeURIComponent(ticker.trim().toUpperCase())}?limit=${encodeURIComponent(limit)}`,

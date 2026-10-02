@@ -200,7 +200,7 @@ export type LiveAnalysisResponse = {
 export type ResearchNewsResponse = {
   ticker: string;
   as_of: string;
-  excluded_future_count: number;
+  excluded_future_count?: number;
   source_refs: string[];
   events: Array<Record<string, unknown>>;
 };

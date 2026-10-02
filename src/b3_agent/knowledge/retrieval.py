@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from .embeddings import EmbeddingProvider
 from .obsidian import ObsidianKnowledgeStore
 from .qdrant_store import QdrantVectorStore
+from .vector_store import MetadataFilter, VectorSearchResult
 
 
 @dataclass(frozen=True)
@@ -24,20 +25,24 @@ class VectorEvidenceRetriever:
         self.store = store
         self.embeddings = embeddings
 
-    def retrieve(self, query: str, *, top_k: int = 5) -> tuple[RetrievedEvidence, ...]:
+    def retrieve_results(
+        self, query: str, *, top_k: int = 5,
+        metadata_filter: MetadataFilter | None = None,
+    ) -> tuple[VectorSearchResult, ...]:
+        """Retain existing evidence metadata for qualified workspace reuse."""
         if not query.strip():
             raise ValueError("query must not be empty")
         if top_k < 1:
             raise ValueError("top_k must be positive")
-
         embedding = self.embeddings.embed((query.strip(),))[0]
         if self.store.hybrid:
-            results = self.store.hybrid_search(
-                query.strip(), embedding, top_k=top_k, prefetch_k=max(top_k * 4, top_k)
+            return self.store.hybrid_search(
+                query.strip(), embedding, top_k=top_k,
+                prefetch_k=max(top_k * 4, top_k), metadata_filter=metadata_filter,
             )
-        else:
-            results = self.store.search(embedding, top_k=top_k)
+        return self.store.search(embedding, top_k=top_k, metadata_filter=metadata_filter)
 
+    def retrieve(self, query: str, *, top_k: int = 5) -> tuple[RetrievedEvidence, ...]:
         return tuple(
             RetrievedEvidence(
                 source_ref=str(item.metadata.get("source") or item.evidence_id),
@@ -45,7 +50,7 @@ class VectorEvidenceRetriever:
                 snippet=item.content[:800],
                 score=float(item.score),
             )
-            for item in results
+            for item in self.retrieve_results(query, top_k=top_k)
         )
 
 

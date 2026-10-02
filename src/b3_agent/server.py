@@ -165,6 +165,7 @@ def _workspace_tickers(request: OrchestratorRequest) -> tuple[str, ...]:
             for item in comparison
             if str(item).strip()
         )
+    values.extend(re.findall(r"(?<![A-Z0-9])([A-Z]{4}\d{1,2})(?![A-Z0-9])", request.task.upper()))
     return tuple(dict.fromkeys(values))
 
 
@@ -184,6 +185,9 @@ def _workspace_intelligence_response(
     started = monotonic()
     workspace = _workspace_name(request)
     deterministic_only = request.context.get("analysis_mode") == "deterministic"
+    research_mode = request.context.get("research_mode", "stored_first")
+    if research_mode not in {"stored_first", "stored_only", "refresh"}:
+        raise HTTPException(status_code=422, detail="Invalid research_mode")
     context = WorkspaceIntelligenceContextService().build(
         workspace=workspace,
         tickers=_workspace_tickers(request),
@@ -193,6 +197,7 @@ def _workspace_intelligence_response(
             else None
         ),
         include_joao=not deterministic_only,
+        research_mode=research_mode,
         **({"history_as_of": request.context["as_of"]} if request.context.get("as_of") is not None else {}),
         **({"history_since": request.context["history_since"]} if request.context.get("history_since") is not None else {}),
         include_joao_perspective=(not deterministic_only and os.getenv("B3_JOAO_SYNC_PERSPECTIVE", "true").lower() == "true"),
@@ -205,6 +210,8 @@ def _workspace_intelligence_response(
             result={
                 **(deterministic_response.result if deterministic_response else {}),
                 "deterministic_context": context_payload.get("deterministic_context", {}),
+                "research_context": context_payload.get("deterministic_context", {}).get("market_analysis", {}),
+                "stored_research": context_payload.get("deterministic_context", {}).get("stored_research", {}),
                 "personal_history": context_payload.get("deterministic_context", {}).get("personal_history", {}),
                 "decision_history": context_payload.get("deterministic_context", {}).get("decision_history", {}),
                 "canonical_experience_context": {
@@ -270,6 +277,8 @@ def _workspace_intelligence_response(
             else {}
         ),
         "personal_history": context_payload.get("deterministic_context", {}).get("personal_history", {}),
+        "research_context": market_context,
+        "stored_research": context_payload.get("deterministic_context", {}).get("stored_research", {}),
         "decision_history": context_payload.get("deterministic_context", {}).get("decision_history", {}),
         "canonical_experience_context": senior.result.get("canonical_experience_context", {
             "status": "CANONICAL_LOADER_NOT_CONFIGURED", "learnings": [],
@@ -461,6 +470,17 @@ def personal_history_context(ticker: str | None = None, as_of: datetime | None =
         return PersonalHistoryService(settings.data_dir).build(ticker=ticker, as_of=as_of, since=since)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/intelligence/research-context")
+def stored_research_context(ticker: str, as_of: str | None = None, limit: int = 8):
+    """Read existing B3 research only; no web search, market fetch or senior model."""
+    from b3_agent.intelligence.stored_research import StoredResearchContextService
+    try:
+        cutoff = datetime.fromisoformat(as_of.replace("Z", "+00:00")) if as_of else datetime.now(timezone.utc)
+        return StoredResearchContextService().build(ticker, as_of=cutoff, limit=limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.get("/history/decision-context")
