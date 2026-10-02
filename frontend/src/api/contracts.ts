@@ -184,6 +184,8 @@ export type LiveAnalysisResponse = {
   source_refs: string[];
   market: {
     history_count: number;
+    price_history?: StockMarketData[];
+    quant?: Record<string, unknown> | null;
     current_quote: StockMarketData | null;
     history_latest: StockMarketData;
     latest: StockMarketData;

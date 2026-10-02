@@ -38,6 +38,7 @@ from b3_agent.storage.sqlite import SQLiteStore
 from b3_agent.orchestration import OrchestratorRequest, OrchestratorResponse, b3_orchestrator, configure_default_workflow
 from b3_agent.orchestration.fast_dispatch import FastRouteDispatcher
 from b3_agent.orchestration.live_providers import LiveProviderService
+from b3_agent.quant_engine import compute_quant_features
 from b3_agent.providers.oplab.adapter import OplabAdapter
 from b3_agent.providers.oplab.options import OplabOptionsAdapter
 from b3_agent.providers.searxng_news import SearxngNewsAdapter
@@ -839,22 +840,38 @@ def live_analysis(ticker: str) -> dict[str, Any]:
     """Return normalized live market/options analytics for one B3 underlying."""
     try:
         snapshot = LiveProviderService().load(ticker)
-        history_latest = max(
-            snapshot.market_records,
+        cutoff = snapshot.as_of
+        if cutoff.tzinfo is None or cutoff.utcoffset() is None:
+            raise ValueError("live snapshot as_of must be timezone-aware")
+
+        def available_by_cutoff(record: Any) -> bool:
+            observed = record.observation_timestamp
+            if observed.tzinfo is None or observed.utcoffset() is None:
+                observed = observed.replace(tzinfo=timezone.utc)
+            return observed <= cutoff and record.is_available_at(cutoff)
+
+        eligible_history = sorted(
+            (record for record in snapshot.market_records if available_by_cutoff(record)),
             key=lambda item: item.observation_timestamp,
         )
-        display_latest = snapshot.current_stock_quote or history_latest
+        if not eligible_history:
+            raise ValueError(f"no point-in-time market history available for {snapshot.ticker}")
+        history_latest = eligible_history[-1]
+        current_quote = snapshot.current_stock_quote
+        if current_quote is not None and not available_by_cutoff(current_quote):
+            current_quote = None
+        display_latest = current_quote or history_latest
+        bounded_history = eligible_history[-520:]
+        quant = compute_quant_features(eligible_history, as_of=cutoff)
         return {
             "ticker": snapshot.ticker,
-            "as_of": snapshot.as_of.isoformat(),
+            "as_of": cutoff.isoformat(),
             "source_refs": list(snapshot.source_refs),
             "market": {
-                "history_count": len(snapshot.market_records),
-                "current_quote": (
-                    asdict(snapshot.current_stock_quote)
-                    if snapshot.current_stock_quote is not None
-                    else None
-                ),
+                "history_count": len(eligible_history),
+                "price_history": [asdict(item) for item in bounded_history],
+                "quant": asdict(quant),
+                "current_quote": asdict(current_quote) if current_quote is not None else None,
                 "history_latest": asdict(history_latest),
                 "latest": asdict(display_latest),
             },

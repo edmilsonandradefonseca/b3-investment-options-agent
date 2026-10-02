@@ -360,3 +360,69 @@ def test_opportunities_workspace_runs_intelligence_even_without_fast_route(monke
         "No canonical stock valuation supplied."
     ]
     assert body["result"]["asset_evidence"]["WEGE3"]["market"]["current_quote"]["source"] == "oplab"
+
+
+def test_live_analysis_returns_pit_history_and_backend_indicators(monkeypatch) -> None:
+    from datetime import datetime, timedelta, timezone
+    from b3_agent.options.analysis import OptionsAnalysis
+    from b3_agent.schemas.market import StockMarketData
+
+    as_of = datetime(2026, 10, 2, 12, tzinfo=timezone.utc)
+    history = tuple(
+        StockMarketData(
+            instrument_id="PETR4",
+            ticker="PETR4",
+            observation_timestamp=as_of - timedelta(days=40 - index),
+            available_timestamp=as_of - timedelta(days=40 - index),
+            source="test-history",
+            ingested_at=as_of - timedelta(days=40 - index),
+            source_record_id=f"petr4:{index}",
+            open=20 + index,
+            high=21 + index,
+            low=19 + index,
+            close=20 + index,
+            volume=1000,
+        )
+        for index in range(40)
+    )
+    future = StockMarketData(
+        instrument_id="PETR4",
+        ticker="PETR4",
+        observation_timestamp=as_of + timedelta(days=1),
+        available_timestamp=as_of + timedelta(days=1),
+        source="test-history",
+        ingested_at=as_of + timedelta(days=1),
+        source_record_id="petr4:future",
+        open=999,
+        high=999,
+        low=999,
+        close=999,
+        volume=1000,
+    )
+    snapshot = type("Snapshot", (), {
+        "ticker": "PETR4",
+        "as_of": as_of,
+        "market_records": history + (future,),
+        "current_stock_quote": None,
+        "option_contracts": (),
+        "option_quotes": (),
+        "options_analysis": OptionsAnalysis(),
+        "source_refs": ("test-history",),
+    })()
+
+    class FakeLiveProviderService:
+        def load(self, ticker):
+            assert ticker == "PETR4"
+            return snapshot
+
+    monkeypatch.setattr(server, "LiveProviderService", FakeLiveProviderService)
+    response = client.get("/analysis/live/PETR4")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["market"]["history_count"] == 40
+    assert len(body["market"]["price_history"]) == 40
+    assert body["market"]["price_history"][-1]["close"] == 59
+    assert body["market"]["quant"]["data_points"] == 40
+    assert body["market"]["quant"]["rsi_14"] == 100
+    assert body["market"]["latest"]["source_record_id"] == "petr4:39"
