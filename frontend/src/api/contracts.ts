@@ -199,6 +199,31 @@ export type LiveAnalysisResponse = {
   };
 };
 
+export type FundamentalMetric = {
+  ticker: string;
+  metric: string;
+  value: number;
+  unit: string | null;
+  source: string;
+  source_record_id: string | null;
+  observation_timestamp: string;
+  available_timestamp: string;
+  report_date: string | null;
+  period_type: string | null;
+  quality_status: string;
+  quality_flags: string[];
+};
+
+export type FundamentalsResponse = {
+  ticker: string;
+  as_of: string;
+  status: "AVAILABLE" | "NO_DATA";
+  metrics: FundamentalMetric[];
+  source_refs: string[];
+  excluded_future_count: number;
+  limitations: string[];
+};
+
 export type ResearchNewsResponse = {
   ticker: string;
   as_of: string;
