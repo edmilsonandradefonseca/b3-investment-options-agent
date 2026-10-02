@@ -213,6 +213,7 @@ class StrategyEvidenceService:
                     if current_quote is not None
                     else None
                 ),
+                "current_quote_reuse": getattr(self.current_quote_provider, "last_reuse_telemetry", {}),
                 "history_count": len(market_records),
                 "history_latest": asdict(latest),
                 "previous_completed_close": (

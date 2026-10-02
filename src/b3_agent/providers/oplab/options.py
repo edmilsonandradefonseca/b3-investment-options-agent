@@ -1,16 +1,28 @@
 from datetime import datetime, timezone
 import os
+import math
+from threading import local
 import urllib.request
 
 from b3_agent.providers.http_retry import request_json
 
 from b3_agent.schemas.option import OptionContract, OptionQuote
+from b3_agent.intelligence.reuse import ContextReuse, fingerprint
+
+_CURRENT_CHAINS = ContextReuse(capacity=64, ttl_seconds=5)
 
 
 class OplabOptionsAdapter:
     """Adapter for OPLAB current option-chain data."""
 
     BASE_URL = "https://api.oplab.com.br/v3"
+
+    def __init__(self):
+        self._acquisition = local()
+
+    @property
+    def last_reuse_telemetry(self):
+        return getattr(self._acquisition, "telemetry", {})
 
     @property
     def name(self) -> str:
@@ -25,6 +37,13 @@ class OplabOptionsAdapter:
         if not token:
             raise RuntimeError("OPLAB_API_TOKEN environment variable is not set")
 
+        key = (fingerprint(["oplab-chain-current-v1", self.BASE_URL, ticker, token]), urllib.request.urlopen)
+        (payload, acquired_at), telemetry = _CURRENT_CHAINS.get_or_build(key, lambda: self._fetch_payload(ticker, token))
+        self._acquisition.acquired_at = acquired_at
+        self._acquisition.telemetry = {**telemetry, "source": self.name, "ticker": ticker, "ttl_seconds": 5}
+        return payload
+
+    def _fetch_payload(self, ticker: str, token: str):
         url = f"{self.BASE_URL}/market/options/{ticker}"
         request = urllib.request.Request(
             url,
@@ -47,7 +66,11 @@ class OplabOptionsAdapter:
             raise ValueError(
                 f"oplab returned an unexpected options response for {ticker}"
             )
-        return payload
+        acquired_at = datetime.now(timezone.utc)
+        # Validate the complete provider snapshot before admitting it to reuse.
+        self._parse_options(ticker, payload)
+        self._parse_quotes(ticker, acquired_at, payload, acquired_at)
+        return payload, acquired_at
 
     def get_options(self, ticker: str, as_of: datetime) -> list[OptionContract]:
         """Retrieve the current option chain for an underlying."""
@@ -58,7 +81,7 @@ class OplabOptionsAdapter:
         """Retrieve contracts and quotes from one consistent provider response."""
         ticker = ticker.upper().strip()
         payload = self._get_payload(ticker)
-        ingested_at = datetime.now(timezone.utc)
+        ingested_at = getattr(self._acquisition, "acquired_at", None) or datetime.now(timezone.utc)
         return (
             self._parse_options(ticker, payload),
             self._parse_quotes(ticker, as_of, payload, ingested_at),
@@ -88,6 +111,9 @@ class OplabOptionsAdapter:
             expiration_date = datetime.fromisoformat(
                 str(item["due_date"]).replace("Z", "+00:00")
             ).date()
+            strike = float(item["strike"])
+            if not math.isfinite(strike) or strike <= 0:
+                raise ValueError("oplab option contract contains invalid strike")
             option_id = str(item["symbol"])
             records.append(
                 OptionContract(
@@ -96,7 +122,7 @@ class OplabOptionsAdapter:
                     underlying_ticker=ticker,
                     option_ticker=option_id,
                     option_type=option_type,
-                    strike=float(item["strike"]),
+                    strike=strike,
                     expiration_date=expiration_date,
                     exercise_style=item.get("maturity_type"),
                     contract_multiplier=float(item.get("contract_size") or 1),
@@ -109,7 +135,7 @@ class OplabOptionsAdapter:
         """Normalize current option quotes from the OPLAB option chain."""
         ticker = ticker.upper().strip()
         payload = self._get_payload(ticker)
-        ingested_at = datetime.now(timezone.utc)
+        ingested_at = getattr(self._acquisition, "acquired_at", None) or datetime.now(timezone.utc)
         return self._parse_quotes(ticker, as_of, payload, ingested_at)
 
     def get_current_option_quote(
@@ -152,7 +178,10 @@ class OplabOptionsAdapter:
                 for key in keys:
                     value = item.get(key)
                     if value is not None:
-                        return float(value)
+                        parsed = float(value)
+                        if not math.isfinite(parsed):
+                            raise ValueError("oplab option quote contains non-finite numeric field")
+                        return parsed
                 return None
 
             def positive_number(*keys: str) -> float | None:
@@ -167,7 +196,7 @@ class OplabOptionsAdapter:
                 mid = (bid + ask) / 2.0
 
             provider_time = item.get("time")
-            observation_timestamp = as_of
+            observation_timestamp = ingested_at
             if provider_time is not None:
                 observation_timestamp = datetime.fromtimestamp(
                     float(provider_time) / 1000.0,
@@ -180,11 +209,12 @@ class OplabOptionsAdapter:
                     ticker=ticker,
                     observation_timestamp=observation_timestamp,
                     available_timestamp=ingested_at,
+                    quality_flags=("provider_timestamp_missing",) if provider_time is None else (),
                     source=self.name,
                     ingested_at=ingested_at,
                     source_record_id=(
                         f"{ticker}:{option_id}:"
-                        f"{int(float(provider_time)) if provider_time is not None else as_of.isoformat()}"
+                        f"{int(float(provider_time)) if provider_time is not None else ingested_at.isoformat()}"
                     ),
                     option_id=str(option_id),
                     bid=bid,

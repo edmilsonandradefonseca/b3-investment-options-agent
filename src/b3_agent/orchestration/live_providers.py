@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 from b3_agent.config import settings
@@ -25,6 +25,7 @@ class LiveProviderSnapshot:
     option_quotes: tuple[OptionQuote, ...]
     options_analysis: OptionsAnalysis
     source_refs: tuple[str, ...]
+    reuse_telemetry: dict = field(default_factory=dict)
 
 
 class LiveProviderService:
@@ -152,4 +153,8 @@ class LiveProviderService:
             option_quotes=quotes,
             options_analysis=analysis,
             source_refs=source_refs,
+            reuse_telemetry={
+                "stock_quote": getattr(self.current_market_provider, "last_reuse_telemetry", {}),
+                "option_chain": getattr(self.options_provider, "last_reuse_telemetry", {}),
+            },
         )

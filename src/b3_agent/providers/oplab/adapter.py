@@ -1,15 +1,27 @@
-﻿from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone
 import json
 import os
+import math
+from threading import local
 import urllib.request
 
 from b3_agent.schemas.market import StockMarketData
+from b3_agent.intelligence.reuse import ContextReuse, fingerprint
+
+_CURRENT_QUOTES = ContextReuse(capacity=128, ttl_seconds=5)
 
 
 class OplabAdapter:
     """Adapter for OPLAB stock market data."""
 
     BASE_URL = "https://api.oplab.com.br/v3"
+
+    def __init__(self):
+        self._acquisition = local()
+
+    @property
+    def last_reuse_telemetry(self):
+        return getattr(self._acquisition, "telemetry", {})
 
     @property
     def name(self) -> str:
@@ -30,6 +42,12 @@ class OplabAdapter:
         if not token:
             raise RuntimeError("OPLAB_API_TOKEN environment variable is not set")
 
+        key = (fingerprint(["oplab-stock-current-v1", self.BASE_URL, ticker, token]), urllib.request.urlopen)
+        quote, telemetry = _CURRENT_QUOTES.get_or_build(key, lambda: self._fetch_current_quote(ticker, token))
+        self._acquisition.telemetry = {**telemetry, "source": self.name, "ticker": ticker, "ttl_seconds": 5}
+        return quote
+
+    def _fetch_current_quote(self, ticker: str, token: str) -> StockMarketData:
         url = f"{self.BASE_URL}/market/stocks/{ticker}"
         request = urllib.request.Request(
             url,
@@ -65,6 +83,9 @@ class OplabAdapter:
                 f"{', '.join(missing)}"
             )
 
+        if any(not math.isfinite(float(value)) or float(value) < 0 for value in required_fields.values()):
+            raise ValueError("oplab stock quote contains invalid numeric fields")
+
         ingested_at = datetime.now(timezone.utc)
         observation_timestamp = (
             datetime.fromtimestamp(
@@ -87,7 +108,7 @@ class OplabAdapter:
                 f"{payload.get('time', int(ingested_at.timestamp() * 1000))}"
             ),
             quality_status="VALID",
-            quality_flags=("current_quote",),
+            quality_flags=("current_quote",) + (("provider_timestamp_missing",) if payload.get("time") is None else ()),
             open=float(payload["open"]),
             high=float(payload["high"]),
             low=float(payload["low"]),

@@ -715,12 +715,14 @@ def runtime_status() -> dict[str, Any]:
 def current_market_quote(ticker: str) -> dict[str, Any]:
     """Return the current OPLAB stock quote, separate from history."""
     try:
-        quote = OplabAdapter().get_current_quote(ticker)
+        provider = OplabAdapter()
+        quote = provider.get_current_quote(ticker)
         return {
             "ticker": quote.ticker,
             "as_of": quote.observation_timestamp.isoformat(),
             "source": quote.source,
             "quote": asdict(quote),
+            "reuse_telemetry": getattr(provider, "last_reuse_telemetry", {}),
         }
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -742,7 +744,8 @@ def current_option_quotes(
         raise HTTPException(status_code=400, detail="option_type must be PUT or CALL")
     try:
         as_of = datetime.now(timezone.utc)
-        contracts, quotes = OplabOptionsAdapter().get_snapshot(ticker, as_of)
+        provider = OplabOptionsAdapter()
+        contracts, quotes = provider.get_snapshot(ticker, as_of)
         quote_by_id = {item.option_id: item for item in quotes}
         rows = []
         for contract in contracts:
@@ -761,6 +764,7 @@ def current_option_quotes(
             rows.append({
                 "contract": asdict(contract),
                 "quote": asdict(quote),
+            "reuse_telemetry": getattr(provider, "last_reuse_telemetry", {}),
             })
         rows.sort(
             key=lambda row: (
@@ -776,6 +780,7 @@ def current_option_quotes(
             "option_type": normalized_type,
             "count": min(len(rows), limit),
             "options": rows[:limit],
+            "reuse_telemetry": getattr(provider, "last_reuse_telemetry", {}),
         }
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

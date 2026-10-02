@@ -41,7 +41,8 @@ def test_oplab_get_option_quotes_maps_market_fields():
     quote = quotes[0]
     assert quote.option_id == "ITUBI184"
     assert quote.source == "oplab"
-    assert quote.observation_timestamp == observed_at
+    assert quote.observation_timestamp == quote.ingested_at
+    assert "provider_timestamp_missing" in quote.quality_flags
     assert quote.last == 0.55
     assert quote.mid == 0.54
     assert quote.bid == 0.53
