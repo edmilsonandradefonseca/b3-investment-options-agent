@@ -39,6 +39,7 @@ from b3_agent.orchestration import OrchestratorRequest, OrchestratorResponse, b3
 from b3_agent.orchestration.fast_dispatch import FastRouteDispatcher
 from b3_agent.orchestration.live_providers import LiveProviderService
 from b3_agent.quant_engine import compute_quant_features
+from b3_agent.providers.brapi.fundamentals import BrapiFundamentalsAdapter
 from b3_agent.providers.oplab.adapter import OplabAdapter
 from b3_agent.providers.oplab.options import OplabOptionsAdapter
 from b3_agent.providers.searxng_news import SearxngNewsAdapter
@@ -886,6 +887,45 @@ def live_analysis(ticker: str) -> dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except (RuntimeError, OSError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/fundamentals/{ticker}")
+def current_fundamentals(ticker: str) -> dict[str, Any]:
+    """Return source-labeled current BRAPI fundamentals with explicit PIT limits."""
+    normalized = ticker.upper().strip()
+    if re.fullmatch(r"[A-Z]{4}\\d{1,2}", normalized) is None:
+        raise HTTPException(status_code=400, detail="invalid B3 ticker")
+    as_of = datetime.now(timezone.utc)
+    try:
+        adapter = BrapiFundamentalsAdapter()
+        records = adapter.get_financial_data(normalized)
+        eligible = []
+        excluded_future_count = 0
+        for record in records:
+            observed = record.observation_timestamp
+            if observed.tzinfo is None or observed.utcoffset() is None:
+                observed = observed.replace(tzinfo=timezone.utc)
+            if observed > as_of or not record.is_available_at(as_of):
+                excluded_future_count += 1
+                continue
+            eligible.append(record)
+        return {
+            "ticker": normalized,
+            "as_of": as_of.isoformat(),
+            "status": "AVAILABLE" if eligible else "NO_DATA",
+            "metrics": [asdict(record) for record in eligible],
+            "source_refs": list(dict.fromkeys(
+                f"{record.source}:{record.source_record_id or record.metric}"
+                for record in eligible
+            )),
+            "excluded_future_count": excluded_future_count,
+            "limitations": [
+                "Current BRAPI fundamentals only; ingestion availability does not establish historical availability.",
+                "Verified broker price-target data is not configured; target price remains UNKNOWN.",
+            ],
+        }
+    except (OSError, RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
