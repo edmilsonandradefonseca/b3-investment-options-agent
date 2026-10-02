@@ -1,0 +1,40 @@
+name: B3 deterministic workspace differential (Ubuntu)
+
+on:
+  push:
+    branches:
+      - feature/react-functional-v43-integration
+    paths:
+      - .github/workflows/b3-workspace-deterministic.yml
+      - scripts/validate_workspace_deterministic_outputs.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: b3-workspace-deterministic-ubuntu
+  cancel-in-progress: false
+
+jobs:
+  deterministic-workspaces:
+    name: Deterministic PETR4 / VALE3 / ITUB4 × BBDC4
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 8
+    steps:
+      - name: Checkout tested branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Identify deployed runtime checkout
+        run: |
+          git -C /opt/b3-investment-options-agent rev-parse HEAD
+
+      - name: Compare deterministic paths and screen data endpoints
+        env:
+          B3_BASE_URL: http://127.0.0.1:8000
+        run: |
+          python3 scripts/validate_workspace_deterministic_outputs.py \
+            --base-url "$B3_BASE_URL" \
+            --timeout-seconds 75
