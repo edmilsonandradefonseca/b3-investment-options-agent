@@ -7,6 +7,7 @@ from b3_agent.agents.synthesis import SynthesisAgent
 from b3_agent.knowledge.obsidian import ObsidianKnowledgeStore
 from b3_agent.knowledge.retrieval import ObsidianRetriever
 from b3_agent.orchestration.workflow import build_workflow
+from b3_agent.orchestration import runtime
 
 
 class FakeLLM:
@@ -131,3 +132,10 @@ def test_workspace_intelligence_uses_one_senior_call_and_preserves_facts(tmp_pat
     assert [call["schema_name"] for call in llm.calls] == ["investment_decision"]
     assert "canonical-fact-123" in llm.calls[0]["input_text"]
     assert "market_analysis" in llm.calls[0]["input_text"]
+
+
+def test_workspace_single_synthesis_is_enabled_by_default_and_can_be_disabled(monkeypatch):
+    monkeypatch.delenv("B3_WORKSPACE_SINGLE_SYNTHESIS", raising=False)
+    assert runtime._workspace_single_synthesis_enabled() is True
+    monkeypatch.setenv("B3_WORKSPACE_SINGLE_SYNTHESIS", "false")
+    assert runtime._workspace_single_synthesis_enabled() is False
