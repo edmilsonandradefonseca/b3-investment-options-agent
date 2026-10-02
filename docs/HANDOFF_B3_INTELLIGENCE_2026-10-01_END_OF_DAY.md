@@ -314,3 +314,8 @@ e comparação financiada transversal Strategy Lab também permanecem abertos.
 Não repetir inspeções já aceitas de histórico, SQLite, registry ou OPLAB. Ver
 `docs/UC070809_PRODUCTION_GAP_ANALYSIS_2026-10-02.md` para matriz de implementação,
 evidência e gates. Nenhum novo comando Ubuntu até esta correção obter CI verde.
+
+
+**Market Intelligence chart/research block — 02/10:** Commit `b7168a9`, CI #1292 SUCCESS. The user screenshot showed PETR4 quote and 85 backend history rows, while API/UI exposed only the count; integrated OpenClaw was still pending and news was below the fold as raw JSON. `/analysis/live/{ticker}` now returns bounded historical bars and `quant_engine` features only for observations available by snapshot `as_of`. React draws the returned close series, displays backend RSI/SMA/volatility/MACD/drawdown and labels partial coverage; calculations remain out of React. Market asset inspection reuses stored Qdrant/Neo4j research first and requests external news only for an empty stored result or explicit refresh. News with dates/source and links renders before senior synthesis. A test excludes future observation/availability rows. No price targets or fundamentals were invented; those are still absent until verified providers supply them.
+
+Ubuntu acceptance is next: pull this code, restart `b3-runtime.service`, validate `/health` and `/analysis/live/PETR4`, then visually inspect PETR4 in Market Intelligence for chart, indicators, source/as_of, coverage warning, news and independent synthesis status. Preserve V4.3, PIT filtering, deterministic quantitative authority and UNKNOWN. Opportunities cross-universe economic ranking, funded sell-to-buy, and full UC-07/08/09 learning remain open and must not be described as solved by this block.

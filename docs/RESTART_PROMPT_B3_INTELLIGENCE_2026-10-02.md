@@ -1,4 +1,4 @@
-**Current checkpoint — 02/10:** GitHub branch HEAD is `b2fb05e3b12d6015a9ad04983d42f42c7d819846`, PR #66 remains open/draft, final CI #1287 SUCCESS (796 Python tests and React build). B1/B2/B3A are published; Ubuntu acceptance for these UC-04 increments remains pending. Read `docs/UC04_PUT_CHAIN_COMPARISON_BLOCK_2026-10-02.md` before validation. B3A's final fixes preserve exact route recognition and requested `as_of` constraints.
+**Current checkpoint — 02/10:** branch `feature/react-functional-v43-integration` HEAD `b7168a90f93e4b2bed785a823536cf28c03ce796`; PR #66 open/draft; CI #1292 SUCCESS (Python regression and React build). Ubuntu acceptance for this market-history display block is pending. The code installed on Ubuntu after `8a6d241` is not confirmed by the supplied screenshots; do not infer successful production response.
 
 **Functional delivery plan — 02/10 (latest priority):**
 Read `docs/DECISION_WORKSPACES_DELIVERY_PLAN_2026-10-02.md` before next code.
@@ -152,3 +152,8 @@ precedent. Opportunities continua sem ranking econômico live transversal; o
 Strategy Lab implementa cenários explícitos, mas ainda não a troca financiada
 de ativos nem política completa de restrições. Preservar UNKNOWN e não criar
 ledger substituto.
+
+
+**Market Intelligence chart/research block — 02/10:** Commit `b7168a9`, CI #1292 SUCCESS. The user screenshot showed PETR4 quote and 85 backend history rows, while API/UI exposed only the count; integrated OpenClaw was still pending and news was below the fold as raw JSON. `/analysis/live/{ticker}` now returns bounded historical bars and `quant_engine` features only for observations available by snapshot `as_of`. React draws the returned close series, displays backend RSI/SMA/volatility/MACD/drawdown and labels partial coverage; calculations remain out of React. Market asset inspection reuses stored Qdrant/Neo4j research first and requests external news only for an empty stored result or explicit refresh. News with dates/source and links renders before senior synthesis. A test excludes future observation/availability rows. No price targets or fundamentals were invented; those are still absent until verified providers supply them.
+
+Ubuntu acceptance is next: pull this code, restart `b3-runtime.service`, validate `/health` and `/analysis/live/PETR4`, then visually inspect PETR4 in Market Intelligence for chart, indicators, source/as_of, coverage warning, news and independent synthesis status. Preserve V4.3, PIT filtering, deterministic quantitative authority and UNKNOWN. Opportunities cross-universe economic ranking, funded sell-to-buy, and full UC-07/08/09 learning remain open and must not be described as solved by this block.

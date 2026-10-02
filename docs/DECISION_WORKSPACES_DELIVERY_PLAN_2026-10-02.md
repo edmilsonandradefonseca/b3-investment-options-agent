@@ -261,3 +261,10 @@ e Strategy Lab ITUB4 × WEGE3. UC-07/08/09 econômicos permanecem em andamento.
 ### Checkpoint CI deste bloco
 
 Commit `1be3283`; CI [#1289 SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37051911828), com suíte Python e build frontend. O gate Ubuntu é a próxima validação: conferir o exemplo PCARJ40 52.000 × R$ 0,02, preço R$ 0,02 / total R$ 1.040, e repetir Opportunities ITUB4 e Strategy Lab ITUB4 × WEGE3. Em seguida continuar o plano econômico UC-03/04/12; esta correção de transporte/UI não fecha esse trabalho.
+
+
+## Market Intelligence presentation block — 02/10
+
+Commit `b7168a9`; CI #1292 passed Python regression and React build. The live analysis API now exposes up to 520 bars whose observation and availability timestamps are no later than snapshot `as_of`, plus existing backend quant features. The Market Intelligence page draws this series, displays deterministic RSI/SMA/annualized volatility/MACD/drawdown and warns when selected horizon exceeds returned history coverage. Stored research remains first; complementary external news is requested only when stored research is empty, or on explicit refresh. The UI exposes date/source/link and displays these results before senior synthesis finishes. This closes the chart/indicator/news presentation gap seen in the PETR4 screenshot; it does not supply institution target prices, fundamentals, economic ranking, calibrated probabilities, or validated UC-07/08/09 outcomes. All remain open and UNKNOWN where evidence is absent.
+
+Ubuntu acceptance: install/restart the CI-green commit and verify the PETR4 route and screen. Then continue the planned deterministic Opportunities universe/economic rank and financed sell-to-buy workflow with out-of-portfolio candidates; do not use personal observations as ranking factors until outcome evidence is eligible.
