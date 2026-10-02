@@ -24,8 +24,21 @@ export default function OptionsWorkspace({positions, operations, ledgerAvailable
   const opening = (p: PortfolioPosition) => {
     const rows = operations.filter(o => o.option_ticker === p.ticker && (!o.trade_date || !p.expiration_date || o.trade_date <= p.expiration_date));
     const direction = p.quantity < 0 ? 'SELL' : 'BUY';
-    if (!rows.length || rows.some(o => o.side !== direction || o.cash_flow == null || o.execution_price == null) || Math.abs(rows.reduce((sum, o) => sum + (o.side === 'BUY' ? o.quantity : -o.quantity), 0) - p.quantity) > 0.001) return null;
-    return Math.abs(rows.reduce((sum, o) => sum + (o.cash_flow || 0), 0));
+    const notesMatchPosition = rows.length > 0
+      && rows.every(o => o.side === direction && o.cash_flow != null && o.execution_price != null)
+      && Math.abs(rows.reduce((sum, o) => sum + (o.side === 'BUY' ? o.quantity : -o.quantity), 0) - p.quantity) <= 0.001;
+    if (!notesMatchPosition) return {
+      total: null,
+      price: p.average_cost,
+      priceSource: p.average_cost == null ? null : p.source_ref,
+    };
+    const noteQuantity = rows.reduce((sum, o) => sum + o.quantity, 0);
+    const notePrice = rows.reduce((sum, o) => sum + o.execution_price! * o.quantity, 0) / noteQuantity;
+    return {
+      total: Math.abs(rows.reduce((sum, o) => sum + (o.cash_flow || 0), 0)),
+      price: p.average_cost ?? notePrice,
+      priceSource: p.average_cost == null ? 'BTG: notas conciliadas' : p.source_ref,
+    };
   };
   const recent = [...visible].reverse();
   return <div className="options-workspace">
@@ -39,7 +52,7 @@ export default function OptionsWorkspace({positions, operations, ledgerAvailable
     <section className="panel"><h2>Fluxo das notas de corretagem por mês</h2><p className="muted">Entradas e saídas brutas nas operações selecionadas. Resultado realizado exige conciliação de abertura, fechamento, exercício e custos.</p>
       <div className="option-bars">{months.map(m => {const sum = selected.filter(o => o.trade_date?.startsWith(m)).reduce((n, o) => n + (o.cash_flow || 0), 0);return <button title={`${m}: ${money(sum)}`} className={selectedMonth === m ? 'option-month active' : 'option-month'} key={m} onClick={() => setSelectedMonth(selectedMonth === m ? '' : m)}><span>{money(sum)}</span><i style={{height: `${Math.max(5, Math.min(120, Math.abs(sum)/maximum*105))}px`, background: sum >= 0 ? '#22c98a' : '#f46f7b'}}/><b>{m.slice(5)}/{m.slice(2, 4)}</b></button>})}</div>
       {!months.length && <p className="muted">{ledgerAvailable ? 'Nenhuma nota encontrada para os filtros.' : 'Ainda não há operações de notas disponíveis neste backend.'}</p>}</section>
-    <section className="panel"><h2>Posições em aberto ({open.length})</h2><div className="table-wrap"><table><thead><tr>{['Ativo','Contrato','Tipo','Lado','Quantidade','Strike','Vencimento','Prêmio de abertura (notas)','Preço atual','Custo para encerrar','Resultado se encerrada agora'].map(v => <th key={v}>{v}</th>)}</tr></thead><tbody>{open.map(p => {const paid = opening(p); const close = p.market_value == null ? null : Math.abs(p.market_value); const pnl = paid == null || close == null ? null : (p.quantity < 0 ? paid - close : close - paid);return <tr key={p.position_id} onClick={() => onSelect(p.ticker)}><td>{p.underlying_ticker || '—'}</td><td>{p.ticker}</td><td>{p.option_type}</td><td>{p.quantity < 0 ? 'Vendida' : 'Comprada'}</td><td>{Math.abs(p.quantity)}</td><td>{money(p.strike)}</td><td>{p.expiration_date || '—'}</td><td>{money(paid)}</td><td>{money(p.market_price)}</td><td>{p.quantity < 0 ? money(close) : '—'}</td><td>{pnl == null ? 'Sem conciliação' : money(pnl)}</td></tr>})}</tbody></table></div></section>
+    <section className="panel"><h2>Posições em aberto ({open.length})</h2><div className="table-wrap"><table><thead><tr>{['Ativo','Contrato','Tipo','Lado','Quantidade','Strike','Vencimento','Preço de aquisição/venda','Preço atual','Valor total de abertura (notas)','Custo para encerrar','Resultado se encerrada agora'].map(v => <th key={v}>{v}</th>)}</tr></thead><tbody>{open.map(p => {const opened = opening(p); const close = p.market_value == null ? null : Math.abs(p.market_value); const pnl = opened?.total == null || close == null ? null : (p.quantity < 0 ? opened.total - close : close - opened.total);return <tr key={p.position_id} onClick={() => onSelect(p.ticker)}><td>{p.underlying_ticker || '—'}</td><td>{p.ticker}</td><td>{p.option_type}</td><td>{p.quantity < 0 ? 'Vendida' : 'Comprada'}</td><td>{Math.abs(p.quantity)}</td><td>{money(p.strike)}</td><td>{p.expiration_date || '—'}</td><td title={opened?.priceSource || 'Sem preço de aquisição/venda canônico ou notas conciliadas'}>{money(opened?.price)}</td><td>{money(p.market_price)}</td><td>{money(opened?.total)}</td><td>{p.quantity < 0 ? money(close) : '—'}</td><td>{pnl == null ? 'Sem conciliação' : money(pnl)}</td></tr>})}</tbody></table></div></section>
     <section className="panel"><h2>Histórico de operações das notas ({recent.length})</h2><div className="table-wrap"><table><thead><tr>{['Data','Ativo','Contrato','Operação','Quantidade','Preço unitário','Valor recebido / pago','Nota BTG'].map(v => <th key={v}>{v}</th>)}</tr></thead><tbody>{recent.map(o => <tr key={o.transaction_id} title={o.source_ref} onClick={() => onSelect(o.option_ticker)}><td>{o.trade_date || '—'}</td><td>{underlying(o.option_ticker)}</td><td>{o.option_ticker}</td><td>{o.side === 'SELL' ? 'Venda' : 'Compra'}</td><td>{o.quantity}</td><td>{money(o.execution_price)}</td><td>{money(o.cash_flow)}</td><td>{o.note_number || '—'}</td></tr>)}</tbody></table></div></section>
   </div>;
 }

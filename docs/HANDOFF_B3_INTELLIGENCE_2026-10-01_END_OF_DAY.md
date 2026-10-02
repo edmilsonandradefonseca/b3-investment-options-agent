@@ -268,3 +268,21 @@ Commit funcional final `b2fb05e`; CI #1287 SUCCESS: 796 Python tests e build
 React. O sandbox não tem pytest nem dependências Python do projeto; os testes
 foram executados pelo CI. Ubuntu permanece pendente. B1/B2/B3A devem ser
 instalados juntos para o primeiro aceite real do Strategy Lab.
+
+
+### Correção de preço de abertura em Options e transporte OpenClaw
+
+Relatos do usuário em 02/10: a tabela Posições em aberto não mostrava o preço
+unitário de aquisição/venda ao lado do preço atual; Opportunities (ITUB4) e
+Strategy Lab (ITUB4 × WEGE3) falharam com `OSError [Errno 7] Argument list too
+long` em `investment_synthesis`.
+
+O prompt integral agora segue por stdin via `openclaw agent --message-file -`,
+sem truncar fatos determinísticos, evidências ou UNKNOWN. Options exibe preço
+unitário antes do preço atual e mantém o total das notas em coluna separada.
+`Position.average_cost` tem precedência; na sua ausência, notas só atribuem
+preço quando contrato, lado e quantidade conciliam exatamente. A nota PCARJ40,
+C, 52.000 a R$ 0,02, total R$ 1.040,00, é o exemplo de aceite.
+
+Sem custo canônico ou conciliação, preço permanece indisponível. Ver
+`docs/OPENCLAW_STDIN_AND_OPTION_ENTRY_PRICE_BLOCK_2026-10-02.md`.

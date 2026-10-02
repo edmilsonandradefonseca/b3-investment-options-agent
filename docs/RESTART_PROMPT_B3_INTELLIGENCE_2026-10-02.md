@@ -121,3 +121,14 @@ Trate OPLAB como gate externo aberto, sem bloquear trabalho independente de dado
 O padrão de análise deve servir PUT, covered CALL, ações BUY/HOLD/REDUCE/SELL, close/hold/roll e comparação de estratégias. Inclua fontes/as-of, spread/volume/OI, IV/Greeks quando presentes, DTE/moneyness, prêmio/preço efetivo, regime/eventos, carteira/capital/stress, operações pessoais similares, learnings com sample size/confidence, evidência contrária e limitações. Para VALE3 uma semana versus um mês ou escolha de strike, explicite objetivo/restrições; annualized premium e delta sozinhos não autorizam melhor strike ou probabilidade de assignment.
 
 Publique mudanças coerentes na branch/PR, confirme CI verde e dê atualizações objetivas com commits. Só peça um comando de validação real no Ubuntu quando houver um bloco completo publicado e pronto. Não se limite a propor um plano: execute o trabalho autorizado até fechar o bloco e registre suas limitações.
+
+
+**Novo bloco — preço Options + limite de argv OpenClaw (02/10):** o usuário
+reportou que a coluna de preço de aquisição/venda não aparecia em Posições em
+aberto e que `investment_synthesis` excedia o tamanho de argv em Opportunities
+e Strategy Lab. Consulte
+`docs/OPENCLAW_STDIN_AND_OPTION_ENTRY_PRICE_BLOCK_2026-10-02.md`. A nota de
+corretagem contém preço unitário e valor negociado (ex.: 52.000 PCARJ40 C a
+R$ 0,02 = R$ 1.040,00). Exiba ambos separadamente; use a operação para preço de
+posição aberta só com conciliação exata de lado/quantidade do contrato. O prompt
+OpenClaw vai por stdin (`--message-file -`), sem remover ou truncar evidências.

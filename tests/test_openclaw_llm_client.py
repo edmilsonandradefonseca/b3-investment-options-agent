@@ -8,8 +8,9 @@ from b3_agent.llm.client import OpenClawStructuredClient
 def test_openclaw_structured_client_invokes_isolated_agent(monkeypatch):
     seen = {}
 
-    def fake_run(command, capture_output, text, timeout):
+    def fake_run(command, input, capture_output, text, timeout):
         seen["command"] = command
+        seen["input"] = input
         seen["timeout"] = timeout
         return SimpleNamespace(
             returncode=0,
@@ -27,7 +28,7 @@ def test_openclaw_structured_client_invokes_isolated_agent(monkeypatch):
     )
     result = client.complete_json(
         instructions="Use supplied facts only.",
-        input_text='{"ticker":"PETR4"}',
+        input_text='{"ticker":"PETR4","evidence":"' + ("x" * 256_000) + '"}',
         schema_name="test_schema",
         schema={
             "type": "object",
@@ -52,6 +53,10 @@ def test_openclaw_structured_client_invokes_isolated_agent(monkeypatch):
     assert "openai/gpt-5.6-luna" in command
     assert "--session-key" in command
     assert command[command.index("--session-key") + 1].startswith("b3-test_schema-")
+    assert command[command.index("--message-file") + 1] == "-"
+    assert len(" ".join(command)) < 1_000
+    assert len(seen["input"]) > 250_000
+    assert '"ticker":"PETR4"' in seen["input"]
 
 
 def test_openclaw_structured_client_extracts_fenced_json():

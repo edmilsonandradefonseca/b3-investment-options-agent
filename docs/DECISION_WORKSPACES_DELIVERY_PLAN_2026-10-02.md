@@ -220,3 +220,22 @@ Windows. Ausência de eventos ou backend indisponível deve permanecer explícit
 isso não constitui reprovação de ranking nem aceite dos 25 casos financeiros.
 Não repetir inventários de storage, lifecycle/history validators ou diagnóstico
 OPLAB. Nenhum aceite real completo deste bloco foi recebido ainda.
+
+
+## Correções de fluxo e preço em Options — 02/10
+
+Implementação publicada no bloco
+`docs/OPENCLAW_STDIN_AND_OPTION_ENTRY_PRICE_BLOCK_2026-10-02.md`:
+
+- OpenClaw recebe prompts longos pela entrada padrão (`--message-file -`), sem
+  colocá-los no argv ou truncar contexto determinístico.
+- Options apresenta preço unitário de aquisição/venda ao lado do preço atual,
+  derivado do `average_cost` canônico ou das notas do mesmo contrato quando
+  lado e quantidade conciliam com a posição aberta.
+- Valor total de abertura continua separado. A nota PCARJ40 (52.000 compradas
+  a R$ 0,02, débito R$ 1.040,00) define o aceite.
+
+Build frontend PASS localmente e regressão de prompt longo adicionada; pytest
+não está disponível neste sandbox. Esperar CI integral verde antes de pedir
+instalação/validação Ubuntu. Em produção validar Options, Opportunities ITUB4
+e Strategy Lab ITUB4 × WEGE3. UC-07/08/09 econômicos permanecem em andamento.

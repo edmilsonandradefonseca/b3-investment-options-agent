@@ -38,6 +38,23 @@ def test_parse_btg_brokerage_note():
     assert transactions[1].option_ticker == transactions[2].option_ticker
 
 
+def test_parse_option_purchase_keeps_unit_price_and_total_from_brokerage_note():
+    text = """
+NOTA DE CORRETAGEM
+34515456
+17/09/2026
+Q Negociação C/V Tipo Mercado Prazo Especificação do título Obs. (*) Quantidade Preço / Ajuste Valor Operação / Ajuste D/C
+1-BOVESPA C OPCAO DE COMPRA 10/26 PCARJ40 ON 52000 0,02 1.040,00 D
+"""
+    transaction = BrokerageNoteParser().parse_text(text)[0]
+
+    assert transaction.option_ticker == "PCARJ40"
+    assert transaction.side == "BUY"
+    assert transaction.quantity == 52000
+    assert transaction.execution_price == 0.02
+    assert transaction.total_amount == 1040.0
+
+
 def test_ledger_is_append_only_and_deduplicates(tmp_path):
     transactions = BrokerageNoteParser().parse_text(
         NOTE_TEXT,

@@ -122,13 +122,14 @@ class OpenClawStructuredClient:
             self.model,
             "--session-key",
             session_key,
-            "--message",
-            prompt,
+            "--message-file",
+            "-",
         ]
 
         try:
             result = subprocess.run(
                 command,
+                input=prompt,
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
