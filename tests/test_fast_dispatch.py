@@ -222,6 +222,7 @@ def test_strategy_dispatch_forwards_explicit_price_scenarios(monkeypatch):
         def compare(self, **kwargs):
             assert kwargs["scenario_horizon"] == "2026-11-20"
             assert kwargs["scenario_shocks_pct"] == [-10.0, 0.0, 10.0]
+            assert kwargs["scenario_objective"] == "MAXIMIZE_WORST_CASE_RETURN_ON_CAPITAL"
             return {
                 "as_of": "2026-10-01T15:00:00+00:00",
                 "quality_status": "VALIDATED",
@@ -244,6 +245,7 @@ def test_strategy_dispatch_forwards_explicit_price_scenarios(monkeypatch):
             "comparison_amount": 5000,
             "scenario_horizon": "2026-11-20",
             "scenario_shocks_pct": [-10, 0, 10],
+            "scenario_objective": "MAXIMIZE_WORST_CASE_RETURN_ON_CAPITAL",
         },
     )
 

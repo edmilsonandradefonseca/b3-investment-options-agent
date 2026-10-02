@@ -29,9 +29,9 @@ Não usar desconhecidos como zero, nem aceitar uma comparação sem dados essenc
 | Bloco | Entrega funcional | Aceite / estado |
 | --- | --- | --- |
 | A — Contexto e research existente | SQLite de carteira/execuções já ligado; consultar notícias Qdrant e relações de eventos Neo4j antes da busca externa, para cada ativo explícito e IBOV | Este bloco implementa a parcela **research**. Fontes/datas/origem, exclusões, busca só quando não há evento recente admissível ou refresh explícito. Não conclui toda cobertura de informação/valuation. |
-| B — Comparação econômica | Comparar ativos, strikes/vencimentos e manter/reduzir/comprar com objetivo, horizonte, tamanho, capital e cenários compatíveis | **Parcial:** B1 calcula payoffs em choques de preço explicitamente informados e horizonte comum; falta política de objetivo/restrições, opções comparáveis em cadeia e contabilidade completa de troca/custos. |
+| B — Comparação econômica | Comparar ativos, strikes/vencimentos e manter/reduzir/comprar com objetivo, horizonte, tamanho, capital e cenários compatíveis | **Parcial:** B1 calcula payoffs em choques do usuário; B2 permite ranking condicional maximin em base de capital conhecida. Faltam múltiplas opções/cadeia, restrições econômicas completas e custos/troca. |
 | C — Opportunities dentro/fora | Universo explícito de carteira + candidatos/watchlist, elegibilidade e ordenação explicável por objetivo | Continua aberto. Falta ranking econômico no live path: DEFERRED_INCOMPLETE_CONTEXT. Implementar política determinística versionada; permitir ranking sem componente de experiência quando os demais dados exigidos forem válidos; mostrar exclusões e empates/incomparabilidade. |
-| D — Market Intelligence/Copilot | Evidências compartilhadas, fundamentos, alvos com instituição/data/horizonte, eventos, riscos e investigação das comparações | Research compartilhado avança neste bloco; alvos estruturados, cobertura de lacunas por tipo e fechamento dos fluxos continuam abertos. Nenhum alvo é inferido de snippet ou consenso sem população definida. |
+| D — Market Intelligence | Evidências compartilhadas, fundamentos, alvos com instituição/data/horizonte, eventos e riscos | Research compartilhado avança neste bloco; alvos estruturados, cobertura de lacunas por tipo e fechamento dos fluxos continuam abertos. Nenhum alvo é inferido de snippet ou consenso sem população definida. |
 | E — UC-07/08/09 | Desfechos comprovados, contexto PIT, experiência persistente e precedentes comparáveis | Execuções observadas e ligação exata já funcionam; desfechos elegíveis reais = 0. Owner canônico de produção e fatos terminais/PIT ainda faltam. Não bloquear B/C/D por esses gaps; não promover Qdrant/Neo4j a owner econômico. |
 | F — Aceite ponta a ponta | Executar os casos abaixo via telas/APIs e dados reais | CI e fixtures provam comportamento, não conclusão funcional real; registrar cada aceite e dependência externa separadamente. |
 
@@ -74,6 +74,25 @@ capital, custos, riscos, fundamentos e horizonte compatível. O ticker literal
 EMBR3 dos exemplos de teste é uma fixture de identificação; não afirma identidade
 negociável atual ou cotação real. Resolver nomes/símbolos atuais é gate do fluxo.
 
+Critérios adicionais propostos na revisão de 02/10:
+
+- **AC-27 — continuidade de workspace:** iniciar a decisão em Opportunities e
+  avançar para Market Intelligence e Strategy Lab sem redigitar os ativos,
+  objetivo, horizonte, capital ou cenário disponíveis; preservar `as_of`,
+  fontes/proveniência e desconhecidos. Este fluxo ainda não está implementado.
+- **AC-28 — orquestração decisória do Copilot:** perguntar “Tenho R$80 mil;
+  compare comprar VALE3, vender PUT de VALE3 e vender PUT de RENT3 para 16/10”.
+  Identificar as três alternativas, buscar carteira/capital/evidências de ambos
+  ativos e contratos da data, normalizar horizonte/capital, mostrar cálculos,
+  cenários e probabilidades somente se houver base válida, citar fontes e
+  permitir continuar no Strategy Lab. O fluxo transversal ainda está aberto.
+
+No **AC-16**, assignment antecipado exige estilo de exercício do contrato quando
+essa informação for necessária e estiver disponível. Sem estilo/termos de
+exercício confiáveis, essa parcela deve ser `UNKNOWN`; probabilidade ITM no
+vencimento, P(touch), assignment antecipado e frequência pessoal permanecem
+métricas distintas.
+
 Golden cases VALE3/RENT3 usarão contratos realmente disponíveis no as-of do teste.
 Números dos anexos são seeds/expectativas de formato, não dados atuais confiáveis.
 Cada afirmação quantitativa: fato de fonte, cálculo determinístico ou interpretação
@@ -111,7 +130,7 @@ identificados; data/source lineage; ausência UNKNOWN; posição real para “me
   Este bloco não grava novos resultados na memória; ingestão/projeção existente
 continua responsável por persistência/atualização.
 
-## Bloco B1 implementado nesta entrega — cenários explícitos
+## Bloco B1 implementado — cenários explícitos
 
 - Strategy Lab envia até nove choques percentuais definidos pela pessoa usuária
   e uma data/horizonte comum. A política `terminal-price-scenarios-v1` calcula
@@ -136,12 +155,25 @@ choques fornecidos pelo usuário; os casos AC-15…AC-20 e AC-26 seguem abertos
 para aceite real integral. Opportunities permanece como bloco C; UC-07/08/09
 seguem informativos e inelegíveis para influenciar a ordenação.
 
-Próximo bloco: B2, explicitar objetivo/restrições e comparação justa entre
-alternativas com capital/horizonte compatíveis; em seguida bloco C para ranking
-determinístico de Opportunities dentro e fora da carteira. A prioridade segue
-sendo fechar os fluxos corrigidos pelo usuário, sem criar persistência de
-aprendizagem conveniente. UC-07/08/09 enriquecem o contexto sem travar decisões
-correntes nem alterar a ordenação até evidência elegível.
+## Bloco B2 — objetivo de cenário condicional
+
+O B2 acrescenta seleção explícita entre comparar sem ranking e maximizar o menor
+retorno sobre capital dentro dos choques escolhidos. Usa denominadores declarados
+por alternativa: valor de compra, colateral strike×multiplicador, notional das
+ações cobertas ou valor corrente conhecido da posição. A ordenação condicional
+requer P&L para todos os cenários e base de capital positiva/conhecida nos dois
+lados; empate e incomparabilidade continuam explícitos. A política não atribui
+probabilidades nem prediz o pior cenário real. Custos/tributos ainda ausentes
+limitam a conclusão econômica.
+
+Próxima ordem, atualizada pela revisão de produto: **B3** chain multi-strike e
+saídas distintas de P(ITM), P(touch), assignment (com estilo de exercício
+verificado) e frequência pessoal; **C** ranking econômico de Opportunities
+dentro/fora; **D** alvos estruturados e fundamentos faltantes em Market
+Intelligence; **E** sell-to-buy, caixa/custos e stress de carteira; **F** AC-27/28
+continuidade e orquestração do Copilot; depois gates UC-07/08/09 e golden cases
+VALE3/RENT3 ponta a ponta. Nenhum desses blocos cria persistência por conveniência.
+Histórico UC-07/08/09 continua incapaz de alterar ranking sem desfecho elegível.
 
 ## Verificação deste bloco
 

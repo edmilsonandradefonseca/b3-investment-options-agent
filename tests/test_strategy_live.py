@@ -279,6 +279,37 @@ def test_explicit_expiry_scenarios_calculate_stock_and_cash_secured_put_payoffs(
     assert abs(
         result["strategy_comparison"]["scenario_deltas"]["2026-11-20:-10%"] - 96.6
     ) < 1e-9
+    assert result["scenario_analysis"]["objective_policy"]["status"] == "NOT_REQUESTED"
+
+
+def test_explicit_objective_ranks_only_complete_scenario_returns_on_known_capital():
+    evidence = StrategyEvidenceService(
+        market_provider=FakeMarketProvider(),
+        fundamentals_provider=FakeFundamentalsProvider(),
+        current_quote_provider=FakeCurrentQuoteProvider(),
+    )
+    result = LiveStrategyComparisonService(
+        evidence_service=evidence,
+        options_provider=FakeOptionsProvider(),
+    ).compare(
+        assets=("VALE3", "WEGE3"),
+        strategies=("Comprar ação", "Vender PUT"),
+        option_ids=(None, "WEGEV500"),
+        amount=5000.0,
+        scenario_horizon="2026-11-20",
+        scenario_shocks_pct=(-10, 0, 10),
+        scenario_objective="MAXIMIZE_WORST_CASE_RETURN_ON_CAPITAL",
+        portfolio=_portfolio(),
+        as_of=datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc),
+    )
+    policy = result["scenario_analysis"]["objective_policy"]
+    alternatives = result["scenario_analysis"]["alternatives"]
+    assert policy["status"] == "CONDITIONAL_RANKING"
+    assert policy["ranked_alternative_id"] == alternatives[1]["alternative_id"]
+    assert alternatives[0]["capital_basis_brl"] == 5000.0
+    assert alternatives[1]["capital_basis_brl"] == 5000.0
+    assert policy["worst_case_return_pct_by_alternative"][alternatives[1]["alternative_id"]] > -10
+    assert policy["not_a_forecast"] is True
 
 
 def test_option_payoff_is_not_marked_at_a_non_expiry_horizon():

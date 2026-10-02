@@ -5,6 +5,13 @@ import CanonicalExperience from './CanonicalExperience';
 import type { OrchestrateResponse } from '../api/contracts';
 
 type Obj = Record<string, unknown>;
+const scenarioCapitalBasisLabels: Record<string, string> = {
+  explicit_comparison_amount: 'valor de compra informado',
+  cash_secured_strike_notional: 'colateral calculado pelo strike',
+  one_covered_contract_underlying_notional: 'valor de uma cobertura de contrato',
+  known_current_stock_position_market_value: 'valor de mercado conhecido da posição',
+  UNKNOWN: 'desconhecida',
+};
 
 const asObject = (value: unknown): Obj | null =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -53,9 +60,13 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
   const fastRoute = asObject(result.fast_route);
   const strategyComparison = asObject(result.strategy_comparison);
   const scenarioAnalysis = asObject(result.scenario_analysis);
+  const scenarioObjectivePolicy = asObject(scenarioAnalysis?.objective_policy);
   const scenarioAlternatives = asArray(scenarioAnalysis?.alternatives)
     .map(asObject)
     .filter((item): item is Obj => item !== null);
+  const scenarioWinnerId = asText(scenarioObjectivePolicy?.ranked_alternative_id);
+  const scenarioWinner = scenarioAlternatives.find(item => asText(item.alternative_id) === scenarioWinnerId);
+  const scenarioWorstReturns = asObject(scenarioObjectivePolicy?.worst_case_return_pct_by_alternative);
   const workspaceIntelligence = asObject(result.workspace_intelligence);
   const marketAgent = asObject(result.market_agent_analysis);
   const portfolioAgent = asObject(result.portfolio_agent_analysis);
@@ -318,7 +329,7 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
         })}
       </div>
       {strategyComparison && <p className="muted">
-        Comparação canônica disponível. Ranking: {asText(asObject(strategyComparison.assumptions)?.ranking) ?? 'não aplicado'}.
+        Comparação determinística disponível. O ranking econômico geral continua {asText(asObject(strategyComparison.assumptions)?.ranking) ?? 'não aplicado'}; o critério condicional de cenários aparece separadamente abaixo quando solicitado.
       </p>}
     </section>}
 
@@ -349,18 +360,24 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
       </div>
     </section>}
 
-    {scenarioAnalysis && asText(scenarioAnalysis.status) !== 'NOT_REQUESTED' && <section className="analysis-section">
+    {scenarioAnalysis && (asText(scenarioAnalysis.status) !== 'NOT_REQUESTED' || asText(scenarioObjectivePolicy?.requested_objective) !== 'COMPARE_ONLY') && <section className="analysis-section">
       <h4>Cenários determinísticos · {asText(scenarioAnalysis.status) ?? 'indisponível'}</h4>
-      <p className="muted">Horizonte: {asText(scenarioAnalysis.horizon) ?? 'Indisponível'} · Choques informados pelo usuário; sem probabilidades ou ranking.</p>
+      <p className="muted">Horizonte: {asText(scenarioAnalysis.horizon) ?? 'Indisponível'} · Choques informados pelo usuário; probabilidades permanecem indisponíveis.</p>
+      {asText(scenarioObjectivePolicy?.requested_objective) === 'MAXIMIZE_WORST_CASE_RETURN_ON_CAPITAL' && <p className="muted">Objetivo: maximizar o menor retorno sobre a base de capital informada/observada, somente dentro dos cenários fornecidos. Resultado: {asText(scenarioObjectivePolicy?.status) ?? 'indisponível'}.</p>}
+      {asText(scenarioObjectivePolicy?.status) === 'CONDITIONAL_RANKING' && <p className="state-banner limited">Sob estes cenários e bases de capital, {asText(scenarioWinner?.label) ?? scenarioWinnerId ?? 'a alternativa selecionada'} tem o maior retorno no pior cenário ({pct(numberValue(scenarioWorstReturns?.[scenarioWinnerId ?? '']) == null ? null : numberValue(scenarioWorstReturns?.[scenarioWinnerId ?? ''])! / 100) ?? 'Indisponível'}); isso não é previsão nem recomendação universal.</p>}
+      {asText(scenarioObjectivePolicy?.status) === 'TIE' && <p className="state-banner limited">As alternativas empatam pelo critério selecionado dentro dos cenários informados.</p>}
+      {asText(scenarioObjectivePolicy?.status) === 'UNAVAILABLE' && <p className="muted">Ranking condicional indisponível: {asText(scenarioObjectivePolicy?.reason) ?? 'dados insuficientes'}.</p>}
       <div className="evidence-grid">
         {scenarioAlternatives.map((item, index) => {
           const payoffs = asObject(item.pnl_by_scenario_brl);
+          const returns = asObject(item.return_by_scenario_pct);
           const terminalPrices = asObject(item.terminal_underlying_price_by_scenario);
           return <article className="evidence-card" key={asText(item.alternative_id) ?? String(index)}>
             <h5>{asText(item.label) ?? 'Alternativa'}</h5>
             {asText(item.pnl_basis) && <p className="muted">Base do P&amp;L: {asText(item.pnl_basis)}</p>}
-            <dl>{Object.entries(payoffs ?? {}).map(([scenario, value]) => <div key={scenario}>
-              <dt>{scenario}{numberValue(terminalPrices?.[scenario]) == null ? '' : ` · subjacente ${brl(numberValue(terminalPrices?.[scenario]))}`}</dt><dd>{brl(numberValue(value)) ?? 'Indisponível'}</dd>
+            <dl><div><dt>Base de capital</dt><dd>{brl(numberValue(item.capital_basis_brl)) ?? 'Indisponível'} · {scenarioCapitalBasisLabels[asText(item.capital_basis_source) ?? 'UNKNOWN'] ?? 'desconhecida'}</dd></div>
+              {Object.entries(payoffs ?? {}).map(([scenario, value]) => <div key={scenario}>
+              <dt>{scenario}{numberValue(terminalPrices?.[scenario]) == null ? '' : ` · subjacente ${brl(numberValue(terminalPrices?.[scenario]))}`}</dt><dd>{brl(numberValue(value)) ?? 'Indisponível'}{numberValue(returns?.[scenario]) == null ? '' : ` · ${pct(numberValue(returns?.[scenario])! / 100)}`}</dd>
             </div>)}</dl>
             {!Object.keys(payoffs ?? {}).length && <p className="muted">Payoff indisponível com os dados/horizonte recebidos.</p>}
           </article>;

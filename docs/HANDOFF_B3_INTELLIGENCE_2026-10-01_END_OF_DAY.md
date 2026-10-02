@@ -225,3 +225,26 @@ equações, limites e aceite Ubuntu/UI pendente. A matriz funcional está em
 restrições comparáveis; depois C, ranking de Opportunities dentro/fora da
 carteira. Completar custos/tributos e as duas pernas da rotação ASAI3→Embraer
 segue aberto.
+
+### Revisão funcional adicional e B2
+
+A revisão mais recente confirma B1 como fundação e acrescenta dois gates de
+produto, registrados na matriz: AC-27 preserva o contexto ao navegar
+Opportunities→Market Intelligence→Strategy Lab; AC-28 prova orquestração pelo
+Copilot de três alternativas com carteira/capital, duas cadeias e continuidade
+para o Strategy Lab. AC-16 também exige estilo/termos de exercício confiáveis
+para falar de assignment antecipado; sem isso, permanece `UNKNOWN`.
+
+B2 acrescenta o objetivo explícito e opcional
+`MAXIMIZE_WORST_CASE_RETURN_ON_CAPITAL`; default continua comparar sem ranking.
+O serviço compara o pior retorno sobre denominadores declarados por alternativa
+e só ordena se ambas tiverem payoff para todos os choques informados e capital
+positivo conhecido. É uma política maximin sobre cenários escolhidos pela pessoa
+usuária, sem probabilidade ou forecast. Opções multi-strike, P(ITM)/P(touch)/early
+assignment separados, Opportunities ranking, alvos estruturados, sell-to-buy,
+AC-27/28 e golden cases seguem abertos.
+
+Este workspace não tinha mais o Python 3.14 temporário para executar a suíte após
+reinicialização e não conseguiu baixar dependências pelo limite de rede. Fonte
+Python compila, React/Vite build passa; regression tests adicionados devem ser
+confirmados no CI do commit B2. Não pedir instalação Ubuntu antes do CI verde.

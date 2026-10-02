@@ -332,6 +332,7 @@ class LiveStrategyComparisonService:
         amount: float | None = None,
         scenario_horizon: date | str | None = None,
         scenario_shocks_pct: list[float] | tuple[float, ...] | None = None,
+        scenario_objective: str = "COMPARE_ONLY",
         portfolio: PortfolioContext | None = None,
         as_of: datetime | None = None,
     ) -> dict[str, Any]:
@@ -360,6 +361,12 @@ class LiveStrategyComparisonService:
             raise ValueError("scenario shocks must be finite percentages from -90 to 300")
         if len(set(shocks)) != len(shocks):
             raise ValueError("scenario shocks must be unique")
+        normalized_objective = str(scenario_objective or "COMPARE_ONLY").upper().strip()
+        if normalized_objective not in {
+            "COMPARE_ONLY",
+            "MAXIMIZE_WORST_CASE_RETURN_ON_CAPITAL",
+        }:
+            raise ValueError("unsupported explicit scenario objective")
         if shocks and horizon is None:
             raise ValueError("scenario horizon is required for explicit price scenarios")
         if horizon is not None and horizon <= (as_of.date() if as_of else datetime.now(timezone.utc).date()):
@@ -645,6 +652,33 @@ class LiveStrategyComparisonService:
                 alternative_sources.append(quote.source)
                 all_sources.append(quote.source)
 
+            current_quote_for_basis = pack.market.get("current_quote")
+            spot_for_basis = (
+                float(current_quote_for_basis.get("close"))
+                if isinstance(current_quote_for_basis, dict)
+                and isinstance(current_quote_for_basis.get("close"), (int, float))
+                and current_quote_for_basis.get("close") > 0
+                else None
+            )
+            stock_quantity_for_basis = float(pack.portfolio.get("stock_quantity") or 0.0)
+            capital_basis: float | None = None
+            if normalized_strategy == "BUY_STOCK" and amount and amount > 0:
+                capital_basis = float(amount)
+            elif normalized_strategy == "SELL_PUT":
+                capital_basis = capital_required if capital_required and capital_required > 0 else None
+            elif normalized_strategy == "SELL_CALL" and option_contract and spot_for_basis:
+                capital_basis = float(option_contract.contract_multiplier) * spot_for_basis
+            elif normalized_strategy in {"HOLD", "SELL_STOCK"} and stock_quantity_for_basis > 0 and spot_for_basis:
+                capital_basis = stock_quantity_for_basis * spot_for_basis
+            assumptions["scenario_capital_basis_brl"] = capital_basis
+            assumptions["scenario_capital_basis_source"] = (
+                "explicit_comparison_amount" if normalized_strategy == "BUY_STOCK"
+                else "cash_secured_strike_notional" if normalized_strategy == "SELL_PUT"
+                else "one_covered_contract_underlying_notional" if normalized_strategy == "SELL_CALL"
+                else "known_current_stock_position_market_value" if normalized_strategy in {"HOLD", "SELL_STOCK"}
+                else "UNKNOWN"
+            )
+
             payoff_by_scenario: dict[str, float] = {}
             if shocks and horizon is not None:
                 option_expiry = (
@@ -752,7 +786,6 @@ class LiveStrategyComparisonService:
         limitations.extend([
             "Expected return is not inferred from historical returns.",
             "Valuation is not computed without explicit, versioned assumptions.",
-            "Deterministic comparative ranking is not yet applied.",
         ])
         scenario_analysis = {
             "policy_version": "terminal-price-scenarios-v1",
@@ -762,6 +795,15 @@ class LiveStrategyComparisonService:
             "user_supplied_shocks_pct": list(shocks),
             "probabilities": None,
             "ranking": "NOT_APPLIED",
+            "objective_policy": {
+                "policy_version": "scenario-objective-v1",
+                "requested_objective": normalized_objective,
+                "status": "NOT_REQUESTED" if normalized_objective == "COMPARE_ONLY" else "UNAVAILABLE",
+                "metric": "MAXIMIZE_MINIMUM_USER_SCENARIO_RETURN_ON_CAPITAL",
+                "ranked_alternative_id": None,
+                "tie_alternative_ids": [],
+                "not_a_forecast": True,
+            },
             "basis": "deterministic_expiry_payoff_vs_decision_time_reference",
             "limitations": [
                 "Price shocks are user scenarios, not forecasts or probabilities.",
@@ -792,7 +834,15 @@ class LiveStrategyComparisonService:
                         "SELL_PUT": "current bid premium less terminal intrinsic loss for one contract",
                         "SELL_CALL": "covered-share price change plus current bid less terminal intrinsic call value",
                     }.get(item.action_type),
+                    "capital_basis_brl": _scenario_capital_basis(item),
+                    "capital_basis_source": item.assumptions.get("scenario_capital_basis_source", "UNKNOWN"),
                     "pnl_by_scenario_brl": item.payoff_by_scenario,
+                    "return_by_scenario_pct": {
+                        scenario_id: round(value / _scenario_capital_basis(item) * 100, 8)
+                        for scenario_id, value in item.payoff_by_scenario.items()
+                        if _scenario_capital_basis(item) is not None
+                        and _scenario_capital_basis(item) > 0
+                    },
                     "terminal_underlying_price_by_scenario": {
                         f"{horizon.isoformat()}:{shock:g}%": round(
                             float(as_object["close"]) * (1 + float(shock) / 100), 8
@@ -807,10 +857,59 @@ class LiveStrategyComparisonService:
             ]
             if any(not item.payoff_by_scenario for item in scenario_alternatives):
                 scenario_analysis["status"] = "PARTIAL"
+            if normalized_objective != "COMPARE_ONLY":
+                expected_scenarios = {
+                    f"{horizon.isoformat()}:{shock:g}%" for shock in shocks
+                }
+                complete = all(
+                    set(item.payoff_by_scenario) == expected_scenarios
+                    and (_scenario_capital_basis(item) or 0) > 0
+                    for item in scenario_alternatives
+                )
+                objective_policy = scenario_analysis["objective_policy"]
+                if complete:
+                    worst_returns = [
+                        min(
+                            item.payoff_by_scenario[scenario_id]
+                            / float(_scenario_capital_basis(item))
+                            for scenario_id in expected_scenarios
+                        )
+                        for item in scenario_alternatives
+                    ]
+                    difference = worst_returns[1] - worst_returns[0]
+                    objective_policy["status"] = "CONDITIONAL_RANKING" if abs(difference) > 1e-9 else "TIE"
+                    if abs(difference) > 1e-9:
+                        winner_index = 1 if difference > 0 else 0
+                        objective_policy["ranked_alternative_id"] = scenario_alternatives[winner_index].alternative_id
+                    else:
+                        objective_policy["tie_alternative_ids"] = [item.alternative_id for item in scenario_alternatives]
+                    objective_policy["worst_case_return_pct_by_alternative"] = {
+                        item.alternative_id: round(worst * 100, 8)
+                        for item, worst in zip(scenario_alternatives, worst_returns, strict=True)
+                    }
+                else:
+                    objective_policy["reason"] = (
+                        "A complete P&L for every supplied scenario and a known positive capital basis are required for both alternatives."
+                    )
+                scenario_analysis["ranking"] = objective_policy["status"]
             limitations.append(
                 "Scenario outcomes use explicit user price shocks at the stated horizon; "
                 "they are deterministic what-ifs, not expected returns or assignment probabilities."
             )
+            if normalized_objective != "COMPARE_ONLY":
+                limitations.append(
+                    "Conditional ranking maximizes the minimum return only across the user-supplied scenarios and stated capital bases; it is not a forecast or universal recommendation."
+                )
+        else:
+            if normalized_objective != "COMPARE_ONLY":
+                scenario_analysis["status"] = "UNAVAILABLE"
+            scenario_analysis["objective_policy"]["status"] = (
+                "UNAVAILABLE" if normalized_objective != "COMPARE_ONLY" else "NOT_REQUESTED"
+            )
+            if normalized_objective != "COMPARE_ONLY":
+                scenario_analysis["objective_policy"]["reason"] = "A future horizon and at least one explicit price shock are required."
+        if normalized_objective == "COMPARE_ONLY":
+            limitations.append("Deterministic ranking was not requested; alternatives remain unranked.")
         limitations = list(dict.fromkeys(limitations))
 
         return {
@@ -820,8 +919,12 @@ class LiveStrategyComparisonService:
                 f"Comparação determinística construída para "
                 f"{alternatives[0].label} versus {alternatives[1].label} "
                 "com cotações atuais OPLAB separadas do histórico, indicadores "
-                "quantitativos, fundamentos disponíveis e contexto de carteira. "
-                "Ranking não aplicado."
+                "quantitativos, fundamentos disponíveis e contexto de carteira."
+                + (
+                    " Política condicional aplicada aos cenários informados."
+                    if scenario_analysis["ranking"] == "CONDITIONAL_RANKING"
+                    else " Ranking não aplicado."
+                )
             ),
             "strategy_comparison": asdict(comparison),
             "scenario_analysis": scenario_analysis,
@@ -840,3 +943,9 @@ __all__ = [
     "LiveStrategyComparisonService",
     "StrategyEvidenceService",
 ]
+
+
+def _scenario_capital_basis(alternative: StrategyAlternative) -> float | None:
+    """Return the explicit capital denominator used only for scenario ranking."""
+    value = alternative.assumptions.get("scenario_capital_basis_brl")
+    return float(value) if isinstance(value, (int, float)) and value > 0 else None

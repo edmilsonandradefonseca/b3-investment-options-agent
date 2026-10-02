@@ -263,6 +263,9 @@ class FastRouteDispatcher:
             scenario_shocks = [float(item) for item in raw_shocks]
         else:
             raise ValueError("scenario_shocks_pct must be a list of numeric percentages")
+        scenario_objective = str(
+            context.get("scenario_objective") or "COMPARE_ONLY"
+        ).upper().strip()
         result = LiveStrategyComparisonService().compare(
             assets=(assets[0], assets[1]),
             strategies=strategies,
@@ -270,6 +273,7 @@ class FastRouteDispatcher:
             amount=amount,
             scenario_horizon=scenario_horizon,
             scenario_shocks_pct=scenario_shocks,
+            scenario_objective=scenario_objective,
             portfolio=portfolio,
         )
         sources = tuple(str(item) for item in result.pop("source_refs", ()))

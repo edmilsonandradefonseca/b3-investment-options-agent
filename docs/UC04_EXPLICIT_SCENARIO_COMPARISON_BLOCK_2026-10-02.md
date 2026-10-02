@@ -57,3 +57,39 @@ increment does not complete the objective/constraint policy, PUT-chain ranking,
 funded sell-to-buy accounting with transaction costs/taxes, or Opportunities
 ranking. Those remain subsequent blocks; AC-01…AC-26 are not accepted by these
 fixtures.
+
+## B2 — explicit scenario objective and normalized ranking
+
+The follow-up adds an opt-in objective `MAXIMIZE_WORST_CASE_RETURN_ON_CAPITAL`;
+the default remains `COMPARE_ONLY`. It ranks only when both alternatives have
+P&L for every user-entered shock and a known, positive denominator:
+
+- BUY_STOCK: the explicitly supplied comparison amount;
+- SELL_PUT: strike × contract multiplier (cash-secured collateral);
+- covered SELL_CALL: one covered contract's underlying notional;
+- HOLD/SELL_STOCK: the known current underlying position's market value.
+
+For each alternative the policy computes each provided scenario return as
+`scenario P&L / stated capital basis`, then selects the larger minimum return
+over only that user-defined scenario set. Missing P&L/base produces
+`UNAVAILABLE`; equal minima produce `TIE`; otherwise the response reports
+`CONDITIONAL_RANKING` with both alternatives' worst-case returns. This is a
+deterministic maximin rule over a chosen finite set, not a forecast, expected
+return, probability, full portfolio utility or universal recommendation. The
+base, source label, each scenario return and limitations are rendered. Costs,
+taxes, slippage, financing, capital constraints outside these denominators and
+objective trade-offs remain outside B2.
+
+Review-driven requirements were also added to the delivery matrix: AC-27
+cross-workspace continuity, AC-28 multi-alternative Copilot orchestration, and
+an AC-16 gate that leaves early-assignment risk `UNKNOWN` if contract exercise
+style/terms are unavailable. Those product flows and the option-chain / model
+probability work remain unimplemented here.
+
+For B2 verification, regression now covers default no-ranking behavior, a
+conditional maximin result for a stock-versus-PUT comparison with a common known
+R$5,000 capital basis, and dispatch of the explicit objective from Strategy Lab.
+The current managed scratch session no longer contains the Python 3.14 test
+environment and outbound package downloads are blocked; Python source compilation
+and TypeScript/Vite build pass locally. GitHub CI is the required Python test
+gate for this increment.

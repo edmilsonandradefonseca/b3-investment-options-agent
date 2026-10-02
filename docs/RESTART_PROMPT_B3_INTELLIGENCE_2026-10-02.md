@@ -3,11 +3,13 @@ Read `docs/DECISION_WORKSPACES_DELIVERY_PLAN_2026-10-02.md` before next code.
 The user requires inside/outside-portfolio ranking, PUT risk/return comparison
 and financed sell-to-buy alternatives (ASAI3/Embraer). UC-07/08/09 enrich these
 flows; absent personal history must not block otherwise defensible current
-analysis/ranking. AC-01…AC-26 are acceptance cases, not replacements for UC IDs.
+analysis/ranking. AC-01…AC-28 are acceptance cases, not replacements for UC IDs.
 `cb82c80` added source-first B3 research; the user confirmed it installed on
 Ubuntu and restarted `b3-runtime.service`. Next, B1 added user-supplied terminal
 price shocks in Strategy Lab under `terminal-price-scenarios-v1`; full
-objective/constraint-aware comparison and economic ranking remain open.
+objective/constraint-aware comparison and economic ranking remain open. The
+latest review adds AC-27 workspace continuity, AC-28 Copilot orchestration, and
+requires contract exercise style before any early-assignment estimate.
 Do not restart completed storage inventories or prioritize new learning storage
 over closing the decision workflows. Preserve UNKNOWN, PIT and V4.3.
 
