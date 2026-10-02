@@ -185,3 +185,87 @@ def test_workspace_deterministic_mode_never_calls_senior(monkeypatch):
     assert response.result['canonical_metric']==7
     assert response.result['telemetry']['llm_calls']==0
     assert response.result['personal_history']['coverage']=='UNKNOWN'
+
+
+def test_partial_repurchase_observation_never_finalizes_outcome(tmp_path, monkeypatch):
+    from b3_agent.experience.outcome_engine import OutcomeEngine
+    monkeypatch.setattr(OutcomeEngine, 'finalize', lambda *a, **k: (_ for _ in ()).throw(AssertionError('OutcomeEngine called')))
+    path = ledger(tmp_path)
+    append(path, 'sell', 'RENTP100', -100, 2, '2026-01-02')
+    append(path, 'partial', 'RENTP100', 40, 1, '2026-02-10')
+    result = PersonalHistoryService(tmp_path).build(since='2026-02-01')
+    sequence = result['observed_sequences'][0]
+    assert sequence['observed_quantity_delta'] == -60
+    assert sequence['partial_reduction_count'] == 1
+    assert sequence['gross_execution_cash_flow'] == 160
+    assert result['cash_flow_observed'] == -40
+    assert sequence['status'] == 'OBSERVED_OUTSTANDING_DELTA'
+    assert sequence['current_position_quantity'] is None
+    assert sequence['realized_pnl'] is None
+    assert sequence['assigned'] is None
+    assert not sequence['eligible_for_learning']
+    assert sequence['movements'][-1]['movement'] == 'OBSERVED_PARTIAL_REDUCTION'
+    assert result['historical_admission']['unknown_outcome_count'] == 1
+    assert result['historical_admission']['ranking_effect'] == 'NONE'
+    append(path, 'flat', 'RENTP100', 60, 1.5, '2026-03-01')
+    closed = PersonalHistoryService(tmp_path).build()['observed_sequences'][0]
+    assert closed['status'] == 'OBSERVED_NET_FLAT_SEQUENCE'
+    assert closed['gross_execution_cash_flow'] == 70
+    assert closed['economic_outcome_status'] == 'UNKNOWN'
+    assert closed['movements'][-1]['movement'] == 'OBSERVED_NET_FLAT'
+    assert closed['roll_chain_result'] is None
+
+
+def test_ambiguous_crossing_group_has_no_partially_admitted_sequence(tmp_path):
+    path = ledger(tmp_path)
+    append(path, 'sell', 'RENTP100', -100, 2, '2026-01-02')
+    append(path, 'cross', 'RENTP100', 140, 1, '2026-02-10')
+    result = PersonalHistoryService(tmp_path).build()
+    assert result['observed_sequence_count'] == 0
+    assert result['historical_admission']['eligible_outcome_count'] == 0
+    assert result['excluded']['RECONSTRUCTION_AMBIGUOUS'] == 2
+
+
+def test_observed_stock_movements_preserve_source_units(tmp_path):
+    with sqlite3.connect(tmp_path / 'b3_agent.db') as conn:
+        conn.execute('CREATE TABLE transactions (transaction_id TEXT, executed_at TEXT, action TEXT, instrument_type TEXT, ticker TEXT, quantity REAL, price REAL, broker TEXT, source_ref TEXT)')
+        conn.executemany('INSERT INTO transactions VALUES (?,?,?,?,?,?,?,?,?)', [
+            ('buy','2026-01-02T15:00:00+00:00','BUY','STOCK','PETR4',20,30,'BTG','manual:buy'),
+            ('reduce','2026-02-02T15:00:00+00:00','SELL','STOCK','PETR4',5,35,'BTG','manual:reduce'),
+        ])
+    result = PersonalHistoryService(tmp_path).build(ticker='PETR4')
+    sequence = result['observed_sequences'][0]
+    assert sequence['observed_quantity_delta'] == 15
+    assert sequence['gross_execution_cash_flow'] == -425
+    assert sequence['instrument_type'] == 'STOCK'
+    assert sequence['partial_reduction_count'] == 1
+    assert sequence['source_refs'] == ('manual:buy', 'manual:reduce')
+
+
+def test_sequence_detail_is_bounded_but_totals_include_earlier_rows(tmp_path):
+    path = ledger(tmp_path)
+    for i in range(25):
+        append(path, str(i), 'RENTP100', -1, 2, f'2026-01-{i+1:02d}')
+    result = PersonalHistoryService(tmp_path).build()
+    sequence = result['observed_sequences'][0]
+    assert len(sequence['movements']) == len(sequence['source_transaction_ids']) == 20
+    assert sequence['movement_details_omitted'] == sequence['source_transaction_details_omitted'] == 5
+    assert sequence['observed_quantity_delta'] == -25
+    assert sequence['gross_execution_cash_flow'] == 50
+    assert sequence['movements'][0]['observed_delta_before'] == -5
+
+
+def test_observed_projection_keeps_strict_availability_cutoff(tmp_path):
+    path = ledger(tmp_path)
+    append(path, 'sell', 'RENTP100', -100, 2, '2026-01-02')
+    append(path, 'buy', 'RENTP100', 100, 1, '2026-02-10')
+    with sqlite3.connect(tmp_path / 'source_manifest.sqlite3') as conn:
+        conn.execute('CREATE TABLE source_manifest (source_id TEXT, source_type TEXT, imported_at TEXT)')
+        conn.executemany('INSERT INTO source_manifest VALUES (?,?,?)', [
+            ('sell','BROKERAGE_NOTE','2026-01-03T00:00:00+00:00'),
+            ('buy','BROKERAGE_NOTE','2026-10-02T00:00:00+00:00'),
+        ])
+    result = PersonalHistoryService(tmp_path).build(as_of=NOW)
+    assert result['observed_sequences'][0]['observed_quantity_delta'] == -100
+    assert result['net_flat_sequence_count'] == 0
+    assert result['excluded']['AVAILABILITY_NOT_PROVEN_AT_AS_OF'] == 1

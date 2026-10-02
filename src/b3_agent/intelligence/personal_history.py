@@ -13,7 +13,8 @@ import sqlite3
 from time import monotonic
 from zoneinfo import ZoneInfo
 
-from b3_agent.historical_operations import HistoricalOperationsService
+from b3_agent.experience.operation_reconstruction import OperationReconstructor
+from b3_agent.intelligence.observed_lifecycle import historical_admission_context, project_observed_lifecycle
 from b3_agent.schemas.transaction import Transaction
 from b3_agent.intelligence.reuse import ContextReuse, fingerprint
 
@@ -170,6 +171,7 @@ class PersonalHistoryService:
         for item in executions:
             groups[(item["broker"], item["symbol"])].append(item)
         cycles = []
+        observed_sequences = []
         for (broker, symbol), rows in groups.items():
             # An account-less broker label is not proof of full account coverage.
             if not broker:
@@ -186,17 +188,24 @@ class PersonalHistoryService:
                 continue
             try:
                 txs = [Transaction(transaction_id=r["transaction_id"], executed_at=r["_sort_time"], action=r["side"], instrument_type=r["instrument_type"], ticker=r["symbol"], quantity=r["quantity"], price=r["price"], broker=broker, source_ref=r["source_ref"]) for r in rows]
-                reconstructed = HistoricalOperationsService().build(txs)
-                for op in reconstructed.closed_operations:
-                    ids = set(op.source_transaction_ids)
-                    members = [r for r in rows if r["transaction_id"] in ids]
+                # Projection must not finalize an Outcome from an unverified
+                # zero opening balance. Reuse reconstruction without OutcomeEngine.
+                reconstructed = OperationReconstructor().reconstruct(txs)
+                rows_by_id = {r["transaction_id"]: r for r in rows}
+                group_sequences = []
+                for op in reconstructed:
+                    members = [rows_by_id[ident] for ident in op.source_transaction_ids]
                     if not any(r["in_window"] for r in members):
                         continue
-                    cycles.append({"operation_id": op.operation_id, "symbol": symbol, "broker": broker, "status": "OBSERVED_NET_FLAT_SEQUENCE", "economic_outcome_status": "UNKNOWN", "gross_execution_cash_flow": float(sum(Decimal(str(r["cash_flow"])) for r in members)), "source_transaction_ids": list(op.source_transaction_ids), "source_refs": list(op.source_refs), "opening_balance_assumption": "ZERO_UNVERIFIED", "eligible_for_learning": False})
+                    group_sequences.append(project_observed_lifecycle(op, members))
+                observed_sequences.extend(group_sequences)
+                cycles.extend(row for row in group_sequences if row["status"] == "OBSERVED_NET_FLAT_SEQUENCE")
             except ValueError:
                 excluded["RECONSTRUCTION_AMBIGUOUS"] += len(rows)
         visible = [{k:v for k,v in r.items() if k not in {"_sort_time", "in_window"}} for r in executions if r["in_window"]]
-        fp = fingerprint(["personal-history-v1", str(self.data_dir), sources, selected, str(since), cutoff.isoformat() if strict_pit else "RETROSPECTIVE"])
+        observed_sequences.sort(key=lambda r: (r["last_trade_date"], r["operation_id"], r["broker"]))
+        cycles.sort(key=lambda r: (r["last_trade_date"], r["operation_id"], r["broker"]))
+        fp = fingerprint(["personal-history-v2", str(self.data_dir), sources, selected, str(since), cutoff.isoformat() if strict_pit else "RETROSPECTIVE"])
         return {
             "status": "LIMITED" if visible else "NO_MATCHING_EXECUTIONS",
             "authority": "existing_sqlite_execution_projection", "coverage": "UNKNOWN",
@@ -207,9 +216,12 @@ class PersonalHistoryService:
             "execution_count": len(visible), "executions": visible[-20:], "execution_details_omitted": max(0,len(visible)-20),
             "cash_flow_observed": float(sum(Decimal(str(r["cash_flow"])) for r in visible)) if visible else None,
             "net_flat_sequence_count": len(cycles), "net_flat_sequences": cycles[-10:],
+            "observed_sequence_count": len(observed_sequences), "observed_sequences": observed_sequences[-10:],
+            "observed_sequence_details_omitted": max(0, len(observed_sequences)-10),
+            "historical_admission": historical_admission_context(observed_sequences),
             "assignment_frequency": None, "expiry_frequency": None, "roll_frequency": None,
             "learning_sample_size": 0, "validated_similarity": None,
             "excluded": dict(excluded), "source_refs": sorted({r["source_ref"] for r in visible[-20:] if r["source_ref"]}),
-            "limitations": warnings + (["Input rows truncated; no complete-period statistics are available."] if any(v["truncated"] for v in sources.values()) else []),
+            "limitations": warnings + (["Input rows truncated; no complete-period statistics are available."] if any(v["truncated"] for v in sources.values()) else []) + (["Some executions cannot form ordered sequences; inspect exclusion counts."] if excluded else []),
             "telemetry": {**reuse, "total_ms": (monotonic()-started)*1000},
         }

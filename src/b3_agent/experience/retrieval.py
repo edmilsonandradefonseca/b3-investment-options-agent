@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from math import exp, log
 from collections.abc import Iterable
+from collections import Counter
 
 from b3_agent.experience.model import Experience
 from b3_agent.schemas.experience import (
@@ -16,6 +17,8 @@ from b3_agent.schemas.experience import (
 from b3_agent.schemas.feature_snapshot import FeatureSnapshot
 from b3_agent.schemas.learning import Learning, LearningScope, LearningStatus
 from b3_agent.schemas.market_regime import MarketRegime
+from b3_agent.schemas.operation import OperationStatus
+from b3_agent.schemas.outcome import OutcomeStatus
 from b3_agent.knowledge.vector_store import VectorSearchResult
 
 
@@ -82,6 +85,12 @@ class ExperienceRanker:
             raise ValueError("as_of must be timezone-aware")
         if top_k < 1:
             raise ValueError("top_k must be positive")
+        if current_snapshot.as_of > as_of or current_regime.as_of > as_of:
+            raise ValueError("current snapshot/regime must not exceed analysis as_of")
+        if current_regime.feature_snapshot_id != current_snapshot.snapshot_id:
+            raise ValueError("current regime must reference current snapshot")
+
+        excluded = Counter()
 
         semantic_by_reference: dict[str, float] = {}
         semantic_sources: dict[str, str] = {}
@@ -103,7 +112,12 @@ class ExperienceRanker:
             semantic_sources[reference] = result.evidence_id
             initial_rank_by_reference.setdefault(reference, semantic_rank)
 
-        learning_by_id = {item.learning_id: item for item in learnings}
+        learning_by_id = {}
+        for item in learnings:
+            if learning_available_for_analysis(item, as_of=as_of, subject_id=current_snapshot.subject_id):
+                learning_by_id[item.learning_id] = item
+            else:
+                excluded["INELIGIBLE_LEARNING_VERSION"] += 1
         usefulness_by_reference = dict(historical_usefulness or {})
         for reference, score in usefulness_by_reference.items():
             if not 0.0 <= score <= 1.0:
@@ -114,7 +128,8 @@ class ExperienceRanker:
         for experience in experiences:
             if experience.operation.underlying_id != current_snapshot.subject_id:
                 continue
-            if experience.entry_snapshot.as_of > as_of:
+            if not experience_available_for_analysis(experience, as_of=as_of):
+                excluded["INELIGIBLE_EXPERIENCE"] += 1
                 continue
 
             feature_score = _feature_similarity(
@@ -165,16 +180,9 @@ class ExperienceRanker:
 
             learning = learning_by_id.get(reference)
             if learning is None:
-                matches.append(
-                    ExperienceMatch(
-                        reference_id=reference,
-                        reference_type="LEARNING",
-                        relevance_score=semantic_score,
-                        semantic_score=semantic_score,
-                        fusion_score=semantic_score,
-                        initial_rank=initial_rank_by_reference.get(reference),
-                    )
-                )
+                # Qdrant is a candidate projection, never a truth store. A
+                # missing/future canonical version cannot become a Learning.
+                excluded["UNRESOLVED_SEMANTIC_CANDIDATE"] += 1
                 continue
 
             anchor = (
@@ -263,7 +271,7 @@ class ExperienceRanker:
                 else "structured-only"
             ),
             fusion_method="RRF" if semantic_by_reference else None,
-            ranker_version="experience-ranker-v2",
+            ranker_version="experience-ranker-v3-pit-admission",
             items=tuple(
                 RetrievalTraceItem(
                     reference_id=item.reference_id,
@@ -303,13 +311,14 @@ class ExperienceRanker:
                 if match.reference_id in semantic_sources
             ),
             retrieval_metadata=(
-                ("ranker", "experience-ranker-v2"),
+                ("ranker", "experience-ranker-v3-pit-admission"),
                 ("half_life_days", str(self.policy.half_life_days)),
                 ("learning_decay_policy", _learning_decay_policy_label(self.policy)),
                 ("historical_usefulness_weight", str(self.policy.historical_usefulness_weight)),
                 ("candidate_count", str(len(reranked))),
                 ("selected_count", str(len(selected))),
                 ("trace_id", trace_id),
+                *((f"excluded_{reason.lower()}", str(count)) for reason, count in sorted(excluded.items())),
             ),
             trace=trace,
         )
@@ -351,6 +360,10 @@ class ExperienceAssessmentEngine:
             learning = learning_by_id.get(match.reference_id)
             if learning is None:
                 continue
+            if not learning_available_for_analysis(learning, as_of=retrieval.as_of):
+                continue
+            if learning.subject_ids and not set(learning.subject_ids).intersection(retrieval.subject_ids):
+                continue
             if learning.status not in self.ACTIVE_STATUSES:
                 continue
             if learning.status in {
@@ -373,6 +386,44 @@ class ExperienceAssessmentEngine:
             limitations=tuple(dict.fromkeys(limitations)),
             provenance="experience_assessment_engine:v1",
         )
+
+
+def learning_available_for_analysis(learning: Learning, *, as_of: datetime, subject_id: str | None = None) -> bool:
+    """Admit only the supplied canonical version known and valid at this cutoff.
+
+    These contracts have no separate ingestion time. Version/evidence timestamps
+    are necessary gates, not proof of full-store coverage or historical ingestion.
+    Loaders must supply canonical versions with proven availability, not backdate
+    today's learning. Superseded/archived versions remain retrievable for audit.
+    """
+    if subject_id is not None and subject_id not in learning.subject_ids:
+        return False
+    timestamps = (learning.first_observed_at, learning.last_updated_at, learning.last_confirmed_at, learning.valid_from)
+    if any(stamp is not None and stamp > as_of for stamp in timestamps):
+        return False
+    if learning.valid_to is not None and as_of > learning.valid_to:
+        return False
+    return all(link.observed_at is None or link.observed_at <= as_of for link in learning.evidence_links)
+
+
+def experience_available_for_analysis(experience: Experience, *, as_of: datetime) -> bool:
+    operation, outcome = experience.operation, experience.outcome
+    if operation.status not in {OperationStatus.CLOSED, OperationStatus.ASSIGNED, OperationStatus.EXERCISED, OperationStatus.ROLLED}:
+        return False
+    if operation.closed_at is None or outcome.finalized_at < operation.closed_at:
+        return False
+    if outcome.status not in {OutcomeStatus.FINAL, OutcomeStatus.CORRECTED} or outcome.quality_status != "VALID":
+        return False
+    if experience.entry_snapshot.quality_status != "VALID":
+        return False
+    if experience.market_regime.as_of > experience.entry_snapshot.as_of:
+        return False
+    known_times = [operation.closed_at, outcome.finalized_at, experience.entry_snapshot.as_of, experience.market_regime.as_of]
+    if experience.exit_snapshot is not None:
+        if experience.exit_snapshot.quality_status != "VALID":
+            return False
+        known_times.append(experience.exit_snapshot.as_of)
+    return all(stamp <= as_of for stamp in known_times)
 
 
 def _feature_similarity(current: FeatureSnapshot, historical: FeatureSnapshot) -> float:

@@ -20,3 +20,14 @@ def test_validator_waits_for_service_readiness(monkeypatch):
     monkeypatch.setitem(scope, 'sleep', lambda _: None)
     module['wait_ready']('http://localhost:8000', 5)
     assert calls == ['http://localhost:8000/health'] * 2
+
+
+def test_validator_accepts_observations_but_rejects_fabricated_results(tmp_path):
+    import pytest
+    from b3_agent.intelligence.personal_history import PersonalHistoryService
+    module = runpy.run_path(str(Path(__file__).parents[1] / 'scripts/validate_personal_history_real.py'))
+    body = PersonalHistoryService(tmp_path).build()
+    module['validate_observed_projection'](body)
+    body['historical_admission']['eligible_outcome_count'] = 1
+    with pytest.raises(AssertionError):
+        module['validate_observed_projection'](body)

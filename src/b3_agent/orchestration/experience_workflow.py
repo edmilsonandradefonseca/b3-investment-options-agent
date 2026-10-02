@@ -10,6 +10,7 @@ from langgraph.graph import END, START, StateGraph
 from b3_agent.experience import ExperienceAssessmentEngine, ExperienceEngine, ExperienceRanker
 from b3_agent.experience.events import OutcomeFinalized
 from b3_agent.experience.model import Experience
+from b3_agent.experience.retrieval import learning_available_for_analysis
 from b3_agent.knowledge.learning_semantic import LearningSemanticIndex
 from b3_agent.knowledge.projection import MemoryProjectionBridge
 from b3_agent.learning import LearningEngine, LearningUpdateResult
@@ -66,7 +67,10 @@ class ExperienceContextService:
         top_k: int = 10,
     ) -> PreAnalysisExperienceContext:
         experiences = tuple(self.experience_loader(snapshot.subject_id, as_of))
-        learnings = tuple(self.learning_loader(snapshot.subject_id, as_of))
+        learnings = tuple(
+            item for item in self.learning_loader(snapshot.subject_id, as_of)
+            if learning_available_for_analysis(item, as_of=as_of, subject_id=snapshot.subject_id)
+        )
 
         semantic_results = ()
         if self.semantic_index is not None:
