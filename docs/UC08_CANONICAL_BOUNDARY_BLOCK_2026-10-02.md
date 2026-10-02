@@ -161,3 +161,37 @@ git pull --ff-only origin feature/react-functional-v43-integration && \
 
 No service restart is required for this schema-only script/docs addition. Do not
 repeat the completed lifecycle, exact-history or known-SQLite schema checks.
+
+
+## Real registered-dataset acceptance — 2026-10-02
+
+The user installed `e816ef7` and supplied the registered-dataset inspector output.
+Registry status READ_OK, registry_truncated false, business_rows_read false.
+The declared dataset is `market-data-brapi` / `market_data`, storage format
+Parquet, schema version 1.0, ticker partitioning, path
+`/opt/b3-runtime/data/parquet/ticker=ITUB4`. Its status is
+DIRECTORY_NOT_SCANNED and columns are empty because no directory/schema scan
+was performed. Empty columns here do not mean the Parquet schema is empty.
+
+This completes the requested registry metadata gate. The declared role and the
+existing MarketDataRepository contract identify market observations, not a
+canonical Outcome/Experience/Learning owner. Combined with the completed
+three-file SQLite schema inspection and repository adapter review, no production
+canonical domain owner is configured in the inspected scope. No claim is made
+about all unregistered files, other runtime directories or global storage absence.
+No further inventory or scan of the registered market-data directory is required
+for this conclusion.
+
+| Area | Updated state / next essential gap |
+| --- | --- |
+| Known SQLite schemas and registered dataset metadata | Real inspection complete; do not repeat |
+| Canonical commit-before-projection and replay boundary | Implemented and regression-tested; production owner adapter unconfigured |
+| Canonical PRE-ANALYSIS context and shared UI | Implemented; real eligible evidence unavailable |
+| Persistence implementation | Justify essential outcome identity, immutable entry evidence and learning version/atomic replay facts against existing owners before adding storage; do not duplicate execution transactions or source manifests |
+| Terminal outcome, coverage/opening balance, entry snapshot and regime | Missing verified real evidence; UNKNOWN and zero eligible outcomes remain |
+| UC-07/08/09 in Opportunities, Strategy Lab and Copilot | Exact observed history and unavailable canonical context wired; full economic learning/ranking not validated |
+
+This acceptance changes checkpoint documentation only. It activates no learning,
+creates no ledger and changes no deterministic ranking or V4.3 layout. The
+prior code block passed 760 Python tests and GitHub CI #1279; this documentation
+update requires no Ubuntu command or service restart.

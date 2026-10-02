@@ -1,10 +1,17 @@
-**Registered storage gate — 02/10:**
-The SQLite-only gate is now complete at installed `2104696` (all three files
-READ_OK, untruncated). No dedicated canonical domain tables in those files;
-`dataset_references` may still declare Parquet storage. Read the real schema
-section and use only the new `--registered-datasets` gate before choosing an
-adapter. Do not repeat the completed known-SQLite inventory or overload claims
-and retrieval traces as a hidden learning ledger.
+**Registered storage gate complete — 02/10:**
+Ubuntu installed `e816ef7`; registered-dataset metadata READ_OK, untruncated.
+The registry declares only `market_data`, a Parquet directory partition for
+ITUB4 (DIRECTORY_NOT_SCANNED). No business rows or Parquet columns were read.
+Read the real registered-dataset acceptance in
+`docs/UC08_CANONICAL_BOUNDARY_BLOCK_2026-10-02.md`. Together with the completed
+known-SQLite schemas and repository adapter review, this leaves production
+canonical Outcome/Experience/Learning ownership unconfigured in the inspected
+scope; it does not prove global absence of unregistered storage.
+Do not repeat inventories, scan this market-data directory or overload claims
+and retrieval traces as a hidden learning ledger. Next implementation must
+justify only essential canonical facts absent from existing owners, with atomic
+outcome replay/version handling; real terminal and entry/PIT evidence remain
+separate admission gates. Eligible outcomes remain zero.
 
 **Canonical boundary block — 02/10:** read
 `docs/UC08_CANONICAL_BOUNDARY_BLOCK_2026-10-02.md` first for commit-before-
