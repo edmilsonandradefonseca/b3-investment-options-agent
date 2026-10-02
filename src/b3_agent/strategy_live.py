@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timedelta, timezone
 import math
+import re
 from statistics import NormalDist
 from typing import Any, Protocol
 
@@ -38,6 +39,18 @@ class CurrentQuoteProvider(Protocol):
     def name(self) -> str: ...
 
     def get_current_quote(self, ticker: str): ...
+
+
+_B3_EQUITY_TICKER = re.compile(r"^[A-Z]{4}\d{1,2}$")
+
+
+def _validated_equity_ticker(value: str) -> str:
+    normalized = str(value).upper().strip()
+    if not _B3_EQUITY_TICKER.fullmatch(normalized):
+        raise ValueError(
+            f"invalid B3 equity ticker {normalized!r}; expected four letters followed by one or two digits"
+        )
+    return normalized
 
 
 @dataclass(frozen=True)
@@ -87,9 +100,7 @@ class StrategyEvidenceService:
         as_of: datetime,
         portfolio: PortfolioContext | None = None,
     ) -> AssetEvidencePack:
-        normalized = ticker.upper().strip()
-        if not normalized:
-            raise ValueError("ticker must not be empty")
+        normalized = _validated_equity_ticker(ticker)
         if as_of.tzinfo is None or as_of.utcoffset() is None:
             raise ValueError("as_of must be timezone-aware")
 
@@ -319,10 +330,8 @@ class LiveStrategyComparisonService:
         as_of: datetime | None = None,
     ) -> dict[str, Any]:
         """Compare explicit same-expiry PUTs from one live option-chain snapshot."""
-        normalized_ticker = ticker.upper().strip()
+        normalized_ticker = _validated_equity_ticker(ticker)
         normalized_ids = tuple(str(item).upper().strip() for item in option_ids)
-        if not normalized_ticker:
-            raise ValueError("PUT comparison requires an explicit underlying ticker")
         if not 2 <= len(normalized_ids) <= 20:
             raise ValueError("PUT comparison requires between 2 and 20 explicit contracts")
         if any(not item for item in normalized_ids) or len(set(normalized_ids)) != len(normalized_ids):
@@ -546,6 +555,7 @@ class LiveStrategyComparisonService:
             raise ValueError(
                 "strategy comparison requires exactly two alternatives"
             )
+        assets = tuple(_validated_equity_ticker(value) for value in assets)
         if amount is not None and amount < 0:
             raise ValueError("comparison amount must be non-negative")
 

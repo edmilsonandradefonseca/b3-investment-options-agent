@@ -56,3 +56,15 @@ After installing this commit, verify:
 This is an additive transport/UI fix. It does not change V4.3, deterministic
 investment calculations, personal-history eligibility, ranking authority or
 learning storage.
+
+## Production correction after Ubuntu use
+
+The installed CLI returned `Message file not found: -` from Opportunities,
+Market Intelligence and Copilot/B3 Agent. Therefore the stdin convention above
+is not supported by this deployed CLI despite the earlier assumption. CI #1289
+passed a test that asserted that same convention and did not execute the real
+CLI; it was not sufficient compatibility evidence. Superseding fix: pass the
+path of a private temporary file containing the complete prompt, and delete it
+after every process outcome. See
+`UC070809_PRODUCTION_GAP_ANALYSIS_2026-10-02.md` for the root cause and full
+UC-07/08/09 production matrix.

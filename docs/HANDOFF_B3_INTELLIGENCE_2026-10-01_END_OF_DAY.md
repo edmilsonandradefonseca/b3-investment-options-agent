@@ -269,7 +269,6 @@ React. O sandbox não tem pytest nem dependências Python do projeto; os testes
 foram executados pelo CI. Ubuntu permanece pendente. B1/B2/B3A devem ser
 instalados juntos para o primeiro aceite real do Strategy Lab.
 
-
 ### Correção de preço de abertura em Options e transporte OpenClaw
 
 Relatos do usuário em 02/10: a tabela Posições em aberto não mostrava o preço
@@ -287,8 +286,31 @@ C, 52.000 a R$ 0,02, total R$ 1.040,00, é o exemplo de aceite.
 Sem custo canônico ou conciliação, preço permanece indisponível. Ver
 `docs/OPENCLAW_STDIN_AND_OPTION_ENTRY_PRICE_BLOCK_2026-10-02.md`.
 
-
 Commit `1be3283` publicado na branch/PR #66; CI #1289 SUCCESS (testes Python e
 build React). Ubuntu permanece como gate de uso real para a coluna PCARJ40 e
 os fluxos Opportunities ITUB4 / Strategy Lab ITUB4 × WEGE3. A correção não
 altera o ranking determinístico nem admite execuções não conciliadas como custo.
+
+### Resultado real posterior e correção do transporte
+
+O usuário instalou o bloco e reportou `Message file not found: -` em Opportunities,
+Market Intelligence e Copilot/B3 Agent. Isso refuta a compatibilidade assumida
+para o parser OpenClaw instalado: nele `-` é um filename literal. O erro comum
+nas três telas ocorre no transporte de síntese `OpenClawStructuredClient`, não
+na recuperação de mercado/Qdrant/Neo4j. CI #1289 passou porque o teste codificava
+a mesma suposição; isso é lacuna de teste de integração que esta correção cobre.
+
+O erro independente do Strategy Lab nomeou `WWEGE3` (OPLAB sem histórico,
+BRAPI HTTP 400). Código de entrada só usa uppercase/strip e não insere W; origem
+do valor não provada. Adicionar validação antes dos providers, rejeitando
+símbolos fora do formato de ação B3 e sem auto-corrigir.
+
+UC-07/08/09 permanecem parcialmente integrados, não concluídos: 264 execuções e
+119 manifest rows lidos no aceite anterior, zero outcomes elegíveis. UC-07 é
+observação sem ciclo/posição completos; UC-08 boundary/replay e PRE-ANALYSIS
+seam existem, mas sem canonical production adapter; UC-09 research guardado é
+fonte contextual, não precedente pessoal elegível. Ranking amplo de Opportunities
+e comparação financiada transversal Strategy Lab também permanecem abertos.
+Não repetir inspeções já aceitas de histórico, SQLite, registry ou OPLAB. Ver
+`docs/UC070809_PRODUCTION_GAP_ANALYSIS_2026-10-02.md` para matriz de implementação,
+evidência e gates. Nenhum novo comando Ubuntu até esta correção obter CI verde.

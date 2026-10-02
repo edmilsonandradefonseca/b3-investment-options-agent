@@ -122,7 +122,6 @@ O padrão de análise deve servir PUT, covered CALL, ações BUY/HOLD/REDUCE/SEL
 
 Publique mudanças coerentes na branch/PR, confirme CI verde e dê atualizações objetivas com commits. Só peça um comando de validação real no Ubuntu quando houver um bloco completo publicado e pronto. Não se limite a propor um plano: execute o trabalho autorizado até fechar o bloco e registre suas limitações.
 
-
 **Novo bloco — preço Options + limite de argv OpenClaw (02/10):** o usuário
 reportou que a coluna de preço de aquisição/venda não aparecia em Posições em
 aberto e que `investment_synthesis` excedia o tamanho de argv em Opportunities
@@ -133,5 +132,23 @@ R$ 0,02 = R$ 1.040,00). Exiba ambos separadamente; use a operação para preço 
 posição aberta só com conciliação exata de lado/quantidade do contrato. O prompt
 OpenClaw vai por stdin (`--message-file -`), sem remover ou truncar evidências.
 
-
 Commit `1be3283`; CI [#1289 SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37051911828), ambos os jobs Python e React. Pedir agora um gate Ubuntu único cobrindo Options (incluindo PCARJ40), Opportunities ITUB4 e Strategy Lab ITUB4 × WEGE3. Não reabrir ranking/economia UC-07/08/09 neste gate.
+
+**Produção reportou falha no gate anterior:** `Message file not found: -` em
+Opportunities, Market Intelligence e Copilot/B3 Agent. A hipótese de que a CLI
+instalada aceitava stdin como `--message-file -` foi refutada pelo Ubuntu; o
+teste CI anterior validou a suposição incorreta. Corrigir com arquivo temporário
+privado, passagem do caminho real e limpeza garantida. Também validar ticker B3
+antes de iniciar Strategy Lab providers: o erro relatado foi para `WWEGE3`, mas
+o código de formulário/dispatcher não adiciona W e a origem exata desse valor
+continua desconhecida. Sem autocorreção de símbolo.
+
+Não solicitar ainda nova validação Ubuntu até publicar correção e CI verde. A
+análise objetiva do status de UC-07/08/09 e dos casos incompletos está em
+`docs/UC070809_PRODUCTION_GAP_ANALYSIS_2026-10-02.md`. O bloco de história é
+observacional, sem final outcomes elegíveis; canonical PRE-ANALYSIS boundary
+existe, mas não tem adapter de produção; research Qdrant/Neo4j não é personal
+precedent. Opportunities continua sem ranking econômico live transversal; o
+Strategy Lab implementa cenários explícitos, mas ainda não a troca financiada
+de ativos nem política completa de restrições. Preservar UNKNOWN e não criar
+ledger substituto.

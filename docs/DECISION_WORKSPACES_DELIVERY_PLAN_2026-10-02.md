@@ -221,6 +221,24 @@ isso não constitui reprovação de ranking nem aceite dos 25 casos financeiros.
 Não repetir inventários de storage, lifecycle/history validators ou diagnóstico
 OPLAB. Nenhum aceite real completo deste bloco foi recebido ainda.
 
+## Produção: falhas e lacunas confirmadas em 02/10
+
+Após a instalação do bloco de transporte, o usuário reportou `Message file not
+found: -` em Opportunities, Market Intelligence e Copilot. O CLI OpenClaw
+instalado trata `-` como arquivo literal; a regressão está corrigida no cliente
+compartilhado usando arquivo temporário privado, com limpeza após a chamada.
+Strategy Lab também recebeu `WWEGE3` e acionou desnecessariamente OPLAB/BRAPI;
+nenhum código inspecionado acrescenta o W. A entrada agora será validada antes
+dos providers, sem autocorreção. Ver análise detalhada e próximos gates em
+`UC070809_PRODUCTION_GAP_ANALYSIS_2026-10-02.md`.
+
+Esta falha deixa explícito que o bloco atual **não fecha os casos avançados**:
+o OpenClaw era um bloqueio operacional comum; além dele, ranking amplo de
+Opportunities, troca financiada de ativos, orquestração integral entre workspaces
+e admissão real de precedentes pessoais ainda não estão entregues. UC-07/08/09
+seguem como observações e contexto informativo até haver desfechos canônicos,
+PIT e owner de persistência real. Não usar esta análise como validação dos casos
+AC-01–AC-28.
 
 ## Correções de fluxo e preço em Options — 02/10
 
@@ -239,7 +257,6 @@ Build frontend PASS localmente e regressão de prompt longo adicionada; pytest
 não está disponível neste sandbox. Esperar CI integral verde antes de pedir
 instalação/validação Ubuntu. Em produção validar Options, Opportunities ITUB4
 e Strategy Lab ITUB4 × WEGE3. UC-07/08/09 econômicos permanecem em andamento.
-
 
 ### Checkpoint CI deste bloco
 

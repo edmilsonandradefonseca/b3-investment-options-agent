@@ -226,6 +226,35 @@ def test_live_strategy_comparison_builds_two_asset_evidence_packs_without_rankin
     assert "PETR4" not in str(result["asset_evidence"])
 
 
+def test_invalid_b3_ticker_is_rejected_before_any_provider_call():
+    calls = []
+
+    class RecordingMarketProvider(FakeMarketProvider):
+        def get_market_data(self, ticker, start, end):
+            calls.append(("market", ticker))
+            return super().get_market_data(ticker, start, end)
+
+    evidence = StrategyEvidenceService(
+        market_provider=RecordingMarketProvider(),
+        fundamentals_provider=FakeFundamentalsProvider(),
+        current_quote_provider=FakeCurrentQuoteProvider(),
+    )
+    service = LiveStrategyComparisonService(evidence_service=evidence)
+
+    try:
+        service.compare(
+            assets=("ITUB4", "WWEGE3"),
+            strategies=("Comprar ação", "Comprar ação"),
+            as_of=datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc),
+        )
+    except ValueError as exc:
+        assert "invalid B3 equity ticker 'WWEGE3'" in str(exc)
+    else:
+        raise AssertionError("invalid ticker was sent to data providers")
+
+    assert calls == []
+
+
 def test_sell_put_requires_explicit_contract():
     evidence = StrategyEvidenceService(
         market_provider=FakeMarketProvider(),
