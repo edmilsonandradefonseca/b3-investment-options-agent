@@ -100,3 +100,34 @@ def test_full_specialist_path_preserves_deterministic_analysis(tmp_path: Path):
 
     decision_input = next(call["input_text"] for call in llm.calls if call["schema_name"] == "investment_decision")
     assert '"synthesis"' in decision_input
+
+
+def test_workspace_intelligence_uses_one_senior_call_and_preserves_facts(tmp_path: Path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    llm = FakeLLM()
+    workflow = build_workflow(
+        retriever=ObsidianRetriever(ObsidianKnowledgeStore(vault)),
+        market_agent=MarketAnalysisAgent(llm),
+        portfolio_agent=PortfolioAnalysisAgent(llm),
+        options_agent=OptionsAnalysisAgent(llm),
+        synthesis_agent=SynthesisAgent(llm),
+        reasoning_agent=InvestmentReasoningAgent(llm),
+        risk_validator=RiskValidator(),
+        single_synthesis=True,
+    )
+
+    result = workflow.invoke({
+        "user_question": "Compare the supplied workspace alternatives.",
+        "ticker": "PETR4",
+        "workspace_intelligence": True,
+        "deterministic_context": {
+            "market_analysis": {"price_status": "UNKNOWN"},
+            "workspace_result": {"evidence_marker": "canonical-fact-123"},
+        },
+    })
+
+    assert result["decision_proposal"]["action"] == "NO_CHANGE"
+    assert [call["schema_name"] for call in llm.calls] == ["investment_decision"]
+    assert "canonical-fact-123" in llm.calls[0]["input_text"]
+    assert "market_analysis" in llm.calls[0]["input_text"]
