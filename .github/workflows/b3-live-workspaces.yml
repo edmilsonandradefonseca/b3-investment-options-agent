@@ -1,12 +1,6 @@
 name: B3 live workspaces (Ubuntu)
 
 on:
-  push:
-    branches:
-      - feature/react-functional-v43-integration
-    paths:
-      - .github/workflows/b3-live-workspaces.yml
-      - scripts/validate_live_workspace_outputs.py
   workflow_dispatch:
 
 permissions:
