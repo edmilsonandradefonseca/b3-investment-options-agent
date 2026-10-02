@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, datetime, timedelta, timezone
 from io import BytesIO
 from pathlib import Path
 
@@ -8,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from b3_agent import server
 from b3_agent.orchestration import OrchestratorResponse
+from b3_agent.schemas.fundamental import StockFundamental
 
 
 client = TestClient(server.app)
@@ -426,3 +428,52 @@ def test_live_analysis_returns_pit_history_and_backend_indicators(monkeypatch) -
     assert body["market"]["quant"]["data_points"] == 40
     assert body["market"]["quant"]["rsi_14"] == 100
     assert body["market"]["latest"]["source_record_id"] == "petr4:39"
+
+
+def test_current_fundamentals_exposes_source_and_excludes_future_records(monkeypatch) -> None:
+    now = datetime.now(timezone.utc)
+
+    def record(metric: str, value: float, observed: datetime) -> StockFundamental:
+        return StockFundamental(
+            instrument_id="VALE3",
+            ticker="VALE3",
+            observation_timestamp=observed,
+            available_timestamp=observed,
+            source="brapi",
+            ingested_at=observed,
+            source_record_id=f"VALE3:{metric}",
+            quality_status="WARNING",
+            quality_flags=("availability_is_ingestion_time",),
+            metric=metric,
+            value=value,
+            report_date=observed.date(),
+            period_type="TTM",
+            unit="ratio",
+        )
+
+    class FakeFundamentals:
+        def get_financial_data(self, ticker: str):
+            assert ticker == "VALE3"
+            return [
+                record("priceEarnings", 4.2, now),
+                record("futureMetric", 1.0, now + timedelta(days=1)),
+            ]
+
+    monkeypatch.setattr(server, "BrapiFundamentalsAdapter", FakeFundamentals)
+    response = client.get("/fundamentals/vale3")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ticker"] == "VALE3"
+    assert body["status"] == "AVAILABLE"
+    assert body["excluded_future_count"] == 1
+    assert [item["metric"] for item in body["metrics"]] == ["priceEarnings"]
+    assert body["metrics"][0]["quality_flags"] == ["availability_is_ingestion_time"]
+    assert body["source_refs"] == ["brapi:VALE3:priceEarnings"]
+    assert any("historical availability" in item for item in body["limitations"])
+
+
+def test_current_fundamentals_rejects_invalid_b3_symbol() -> None:
+    response = client.get("/fundamentals/WWEGE3")
+
+    assert response.status_code == 400
