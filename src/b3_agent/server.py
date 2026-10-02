@@ -894,7 +894,7 @@ def live_analysis(ticker: str) -> dict[str, Any]:
 def current_fundamentals(ticker: str) -> dict[str, Any]:
     """Return source-labeled current BRAPI fundamentals with explicit PIT limits."""
     normalized = ticker.upper().strip()
-    if re.fullmatch(r"[A-Z]{4}\\d{1,2}", normalized) is None:
+    if re.fullmatch(r"[A-Z]{4}\d{1,2}", normalized) is None:
         raise HTTPException(status_code=400, detail="invalid B3 ticker")
     as_of = datetime.now(timezone.utc)
     try:
