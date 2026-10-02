@@ -114,6 +114,11 @@ def _build_llm_client():
     )
 
 
+def _workspace_single_synthesis_enabled() -> bool:
+    """Avoid redundant LLM rounds for workspace requests unless explicitly disabled."""
+    return os.getenv("B3_WORKSPACE_SINGLE_SYNTHESIS", "true").strip().lower() == "true"
+
+
 def configure_default_workflow(
     *,
     vault_path: Path | None = None,
@@ -148,7 +153,7 @@ def configure_default_workflow(
         memory_manager=memory_manager,
         personal_history_service=PersonalHistoryService(settings.data_dir),
         experience_context_service=experience_context_service,
-        single_synthesis=os.getenv("B3_WORKSPACE_SINGLE_SYNTHESIS", "true").lower() == "true",
+        single_synthesis=_workspace_single_synthesis_enabled(),
         market_agent=MarketAnalysisAgent(llm),
         portfolio_agent=PortfolioAnalysisAgent(llm),
         options_agent=OptionsAnalysisAgent(llm),
