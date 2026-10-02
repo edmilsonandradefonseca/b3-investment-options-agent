@@ -1,8 +1,13 @@
 **Decision-history block — 02/10:** read
 `docs/UC070809_DECISION_HISTORY_BLOCK_2026-10-02.md` first for the updated
 matrix, candidate/contract evidence in Opportunities, Strategy Lab and Copilot,
-exact-symbol identity, verification and focused pending Ubuntu gate. No canonical
+exact-symbol identity, verification and completed focused Ubuntu gate. No canonical
 learning/outcome is admitted from execution observations.
+Ubuntu installed `53c5682`: exact decision projection and strict validation-time
+cutoff PASS. Runtime now reports 264 option executions and 119 manifest rows;
+XPBRJ100 has two executions, one observed sequence, zero eligible outcomes.
+Read the real acceptance section; do not repeat this completed gate or infer
+full account coverage/learning from the row counts.
 The user reports the preceding received-income feature working; do not repeat
 its completed implementation or source analysis.
 

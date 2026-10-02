@@ -81,3 +81,40 @@ exact matching and strict cutoff without changing data, and explicitly does not
 claim complete UC-07/08/09 validation. Desktop acceptance should check the new
 shared evidence section in Opportunities, Strategy Lab and Copilot. Existing
 observed-lifecycle and income import gates do not need repeating.
+
+## Real Ubuntu acceptance — 2026-10-02 10:51 America/Sao_Paulo
+
+The user supplied the actual terminal output after fast-forwarding from
+`a9b1d3e` to `53c5682`, restarting `b3-runtime.service` and running
+`scripts/validate_decision_history_real.py`.
+
+Result: **PASS EXACT DECISION HISTORY + STRICT CUTOFF**.
+
+| Observation | Retrospective | Strict known-at-time |
+| --- | --- | --- |
+| Exact symbol | XPBRJ100 | XPBRJ100 |
+| Matching executions | 2 | 2 |
+| Observed sequences | 1 | 1 |
+| Eligible outcomes | 0 | 0 |
+| Exclusions | None reported | None reported |
+
+Both reads reported `option_transactions` READ_OK / 264 rows,
+`transactions` READ_OK / 0 rows and `source_manifest` READ_OK / 119 rows,
+all untruncated. The earlier single-execution/missing-manifest runtime snapshot
+is therefore superseded for the current loaded source counts. The 264 count
+agrees with the supplied batch audit count; this output alone does not establish
+row-by-row reconciliation, complete account coverage or 119 unique notes.
+
+Strict mode uses the validation-time cutoff, not an independently tested past
+decision date. Its two admitted executions have proven availability by that
+cutoff. This is not acceptance of full historical replay, final outcomes,
+assignment/expiry/roll reconstruction, learning or calibrated similarity.
+Opening balances, economic outcomes and eligible comparable samples retain the
+documented UNKNOWN/gates. Desktop evidence rendering remains a separate gate.
+
+The focused Ubuntu gate is complete. Do not request this command again without
+a new implementation or specific regression hypothesis. Next work must use the
+current loaded stores and identify canonical terminal/PIT evidence and the
+existing Experience/Learning production wiring before admitting any outcome;
+no replacement ledger or repeated source/network discovery is authorized by
+this acceptance.
