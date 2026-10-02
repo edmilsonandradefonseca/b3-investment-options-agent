@@ -1,5 +1,11 @@
 Continue o projeto B3 Investment & Options Agent no repositório `edmilsonandradefonseca/b3-investment-options-agent`, branch `feature/react-functional-v43-integration`, PR #66.
 
+**Atualização da retomada de 02/10:** o bloco de código `bf71e654988811647d0a9a8d7c57a3b3e4938ff6`
+foi publicado; CI #1270 SUCCESS. Leia também `docs/UC070809_OBSERVED_LIFECYCLE_BLOCK_2026-10-02.md`
+antes de código: sua matriz e próximos passos atualizam a projeção UC-07 e os gates UC-08/09.
+A validação Ubuntu desse bloco ainda está pendente; não presumir que substituiu o último
+código instalado `8bc7cb9`. Não repetir sua implementação ou o diagnóstico OPLAB.
+
 Antes de alterar código, confirme branch/HEAD/PR/CI no GitHub e leia obrigatoriamente:
 
 1. `docs/HANDOFF_B3_INTELLIGENCE_2026-10-01_END_OF_DAY.md`

@@ -91,6 +91,12 @@ future/unknown/provisional P&L, duplicate samples and unresolved semantic candid
 GitHub CI must independently confirm the published HEAD. Visual desktop and Ubuntu
 production acceptance are pending; fixtures do not validate personal performance.
 
+Published code: `bf71e654988811647d0a9a8d7c57a3b3e4938ff6`.
+Independent GitHub [CI #1270 SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37001327561),
+including both Python regression and frontend-build. The documentation checkpoint
+after this code adds these results and restart pointers only. Last Ubuntu-installed
+code is still `8bc7cb9` until the user supplies the new runtime acceptance.
+
 ## One focused Ubuntu gate after CI green
 
 ```bash

@@ -1,5 +1,12 @@
 # B3 Investment & Options Agent — avanços e retomada
 
+> Atualização aditiva de 02/10/2026: código `bf71e65` publicado no mesmo PR/branch,
+> CI [#1270 SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37001327561).
+> A autoridade do registro de pausa abaixo permanece. Leia o novo bloco/matriz em
+> `docs/UC070809_OBSERVED_LIFECYCLE_BLOCK_2026-10-02.md`: movimentos observados,
+> proteção temporal e integridade de amostra nos serviços UC-08/09, sem novo ledger.
+> Ubuntu/desktop ainda não validaram este bloco; último instalado confirmado continua `8bc7cb9`.
+
 Data local da pausa: **01/10/2026, America/Sao_Paulo**, aproximadamente 21:38. No Ubuntu/GitHub, os registros em UTC já indicam 02/10. Retomada prevista: 02/10/2026 no horário local.
 
 ## Estado confirmado ao encerrar
