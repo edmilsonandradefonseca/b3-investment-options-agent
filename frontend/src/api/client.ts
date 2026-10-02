@@ -9,6 +9,7 @@ import type {
   BrokerageBatchImportResponse,
   BrokerageNoteImportResponse,
   HealthResponse,
+  FundamentalsResponse,
   LiveAnalysisResponse,
   OrchestrateRequest,
   OrchestrateResponse,
@@ -142,6 +143,8 @@ export const b3Api = {
     ),
   liveAnalysis: (ticker: string) =>
     requestJson<LiveAnalysisResponse>(`/analysis/live/${encodeURIComponent(ticker.trim().toUpperCase())}`),
+  fundamentals: (ticker: string) =>
+    requestJson<FundamentalsResponse>(`/fundamentals/${encodeURIComponent(ticker.trim().toUpperCase())}`),
   storedResearch: (ticker: string, limit = 8) =>
     requestJson<ResearchNewsResponse>(
       `/intelligence/research-context?ticker=${encodeURIComponent(ticker.trim().toUpperCase())}&limit=${limit}`,
