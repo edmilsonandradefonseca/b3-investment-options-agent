@@ -1,0 +1,37 @@
+name: B3 live workspaces (Ubuntu)
+
+on:
+  push:
+    branches:
+      - feature/react-functional-v43-integration
+    paths:
+      - .github/workflows/b3-live-workspaces.yml
+      - scripts/validate_live_workspace_outputs.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: b3-live-workspaces-ubuntu
+  cancel-in-progress: false
+
+jobs:
+  live-workspaces:
+    name: PETR4 / VALE3 / ITUB4 × BBDC4
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 25
+    steps:
+      - name: Checkout tested branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Call the colocated B3 runtime
+        env:
+          B3_BASE_URL: http://127.0.0.1:8000
+          B3_REQUEST_TIMEOUT_SECONDS: "210"
+        run: |
+          python3 scripts/validate_live_workspace_outputs.py \
+            --base-url "$B3_BASE_URL" \
+            --timeout-seconds "$B3_REQUEST_TIMEOUT_SECONDS"
