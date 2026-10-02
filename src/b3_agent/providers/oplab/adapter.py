@@ -1,10 +1,10 @@
 from datetime import date, datetime, timezone
-import json
 import os
 import math
 from threading import local
 import urllib.request
 
+from b3_agent.providers.http_retry import request_json
 from b3_agent.schemas.market import StockMarketData
 from b3_agent.intelligence.reuse import ContextReuse, fingerprint
 
@@ -58,8 +58,14 @@ class OplabAdapter:
             },
         )
 
-        with urllib.request.urlopen(request, timeout=15) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        payload = request_json(
+            request,
+            provider="oplab-stock",
+            timeout_env="B3_OPLAB_TIMEOUT_SECONDS",
+            default_timeout=15.0,
+            default_attempts=2,
+            opener=urllib.request.urlopen,
+        )
 
         if not isinstance(payload, dict):
             raise ValueError(f"oplab returned invalid stock quote for {ticker}")

@@ -72,3 +72,24 @@ def test_invalid_chain_is_not_cached(monkeypatch):
     with pytest.raises(ValueError): provider.get_snapshot('VALE3',now)
     assert provider.get_snapshot('VALE3',now)==([],[])
     assert len(calls)==2
+
+
+def test_stock_timeout_retries_without_caching_failures(monkeypatch):
+    from b3_agent.providers.http_retry import ProviderRequestError
+    import pytest
+    monkeypatch.setenv('OPLAB_API_TOKEN','stock-timeout-test')
+    monkeypatch.setenv('B3_PROVIDER_HTTP_ATTEMPTS','2')
+    monkeypatch.setenv('B3_PROVIDER_RETRY_DELAY_SECONDS','0')
+    monkeypatch.setattr(stock_module,'_CURRENT_QUOTES',ContextReuse(ttl_seconds=5))
+    calls=[]
+    def opener(*args,**kwargs):
+        calls.append(kwargs['timeout'])
+        if len(calls)<=2: raise TimeoutError('read timed out')
+        return Response({'symbol':'VALE3','open':60,'high':61,'low':59,'close':60,'volume':100})
+    monkeypatch.setattr(stock_module.urllib.request,'urlopen',opener)
+    provider=stock_module.OplabAdapter()
+    with pytest.raises(ProviderRequestError,match='after 2 attempt'):
+        provider.get_current_quote('VALE3')
+    assert provider.get_current_quote('VALE3').close==60
+    assert calls==[15.0]*3
+    assert provider.last_reuse_telemetry['cache']=='MISS'
