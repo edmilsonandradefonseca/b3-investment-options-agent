@@ -250,11 +250,26 @@ class FastRouteDispatcher:
         )
 
         portfolio = self._portfolio()
+        raw_scenario_horizon = context.get("scenario_horizon")
+        scenario_horizon = (
+            str(raw_scenario_horizon).strip()
+            if raw_scenario_horizon not in (None, "")
+            else None
+        )
+        raw_shocks = context.get("scenario_shocks_pct")
+        if raw_shocks in (None, ""):
+            scenario_shocks = None
+        elif isinstance(raw_shocks, (list, tuple)):
+            scenario_shocks = [float(item) for item in raw_shocks]
+        else:
+            raise ValueError("scenario_shocks_pct must be a list of numeric percentages")
         result = LiveStrategyComparisonService().compare(
             assets=(assets[0], assets[1]),
             strategies=strategies,
             option_ids=option_ids,
             amount=amount,
+            scenario_horizon=scenario_horizon,
+            scenario_shocks_pct=scenario_shocks,
             portfolio=portfolio,
         )
         sources = tuple(str(item) for item in result.pop("source_refs", ()))

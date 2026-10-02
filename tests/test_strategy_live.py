@@ -249,6 +249,109 @@ def test_sell_put_uses_current_oplab_bid_and_one_cash_secured_contract():
     assert result["option_evidence"]["WEGEV500"]["current_quote"]["last"] == 1.30
 
 
+def test_explicit_expiry_scenarios_calculate_stock_and_cash_secured_put_payoffs():
+    evidence = StrategyEvidenceService(
+        market_provider=FakeMarketProvider(),
+        fundamentals_provider=FakeFundamentalsProvider(),
+        current_quote_provider=FakeCurrentQuoteProvider(),
+    )
+    result = LiveStrategyComparisonService(
+        evidence_service=evidence,
+        options_provider=FakeOptionsProvider(),
+    ).compare(
+        assets=("VALE3", "WEGE3"),
+        strategies=("Comprar ação", "Vender PUT"),
+        option_ids=(None, "WEGEV500"),
+        amount=5000.0,
+        scenario_horizon="2026-11-20",
+        scenario_shocks_pct=(-10, 0, 10),
+        portfolio=_portfolio(),
+        as_of=datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc),
+    )
+
+    scenarios = result["scenario_analysis"]
+    assert scenarios["status"] == "COMPUTED"
+    assert scenarios["probabilities"] is None
+    left, right = scenarios["alternatives"]
+    assert left["pnl_by_scenario_brl"]["2026-11-20:-10%"] == -500.0
+    assert right["pnl_by_scenario_brl"]["2026-11-20:-10%"] == -403.4
+    assert right["pnl_by_scenario_brl"]["2026-11-20:0%"] == 94.0
+    assert abs(
+        result["strategy_comparison"]["scenario_deltas"]["2026-11-20:-10%"] - 96.6
+    ) < 1e-9
+
+
+def test_option_payoff_is_not_marked_at_a_non_expiry_horizon():
+    evidence = StrategyEvidenceService(
+        market_provider=FakeMarketProvider(),
+        fundamentals_provider=FakeFundamentalsProvider(),
+        current_quote_provider=FakeCurrentQuoteProvider(),
+    )
+    result = LiveStrategyComparisonService(
+        evidence_service=evidence,
+        options_provider=FakeOptionsProvider(),
+    ).compare(
+        assets=("VALE3", "WEGE3"),
+        strategies=("Comprar ação", "Vender PUT"),
+        option_ids=(None, "WEGEV500"),
+        amount=5000.0,
+        scenario_horizon="2026-11-06",
+        scenario_shocks_pct=(-10, 10),
+        portfolio=_portfolio(),
+        as_of=datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc),
+    )
+    assert result["scenario_analysis"]["status"] == "PARTIAL"
+    assert result["scenario_analysis"]["alternatives"][1]["pnl_by_scenario_brl"] == {}
+
+
+def test_covered_call_scenario_includes_covered_share_change_and_bid_premium():
+    evidence = StrategyEvidenceService(
+        market_provider=FakeMarketProvider(),
+        fundamentals_provider=FakeFundamentalsProvider(),
+        current_quote_provider=FakeCurrentQuoteProvider(),
+    )
+    result = LiveStrategyComparisonService(
+        evidence_service=evidence,
+        options_provider=FakeOptionsProvider(),
+    ).compare(
+        assets=("VALE3", "WEGE3"),
+        strategies=("Comprar ação", "Vender CALL coberta"),
+        option_ids=(None, "WEGEJ550"),
+        amount=5000.0,
+        scenario_horizon="2026-11-20",
+        scenario_shocks_pct=(10, 20),
+        portfolio=_covered_portfolio(),
+        as_of=datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc),
+    )
+    call_payoffs = result["scenario_analysis"]["alternatives"][1]["pnl_by_scenario_brl"]
+    assert call_payoffs["2026-11-20:10%"] == 577.4
+    assert call_payoffs["2026-11-20:20%"] == 606.0
+
+
+def test_explicit_scenario_inputs_are_bounded_and_unique():
+    evidence = StrategyEvidenceService(
+        market_provider=FakeMarketProvider(),
+        fundamentals_provider=FakeFundamentalsProvider(),
+        current_quote_provider=FakeCurrentQuoteProvider(),
+    )
+    service = LiveStrategyComparisonService(evidence_service=evidence)
+    for shocks in ((-10, -10), (float("nan"),), tuple(range(10))):
+        try:
+            service.compare(
+                assets=("VALE3", "WEGE3"),
+                strategies=("Comprar ação", "Comprar ação"),
+                amount=5000.0,
+                scenario_horizon="2026-11-20",
+                scenario_shocks_pct=shocks,
+                portfolio=_portfolio(),
+                as_of=datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc),
+            )
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"invalid scenario shocks accepted: {shocks!r}")
+
+
 def _covered_portfolio(shares: float = 100.0):
     return PortfolioContext(
         as_of=date(2026, 9, 27),

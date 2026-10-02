@@ -52,6 +52,10 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
   const capitalRisk = asObject(portfolioIntelligence?.capital_risk);
   const fastRoute = asObject(result.fast_route);
   const strategyComparison = asObject(result.strategy_comparison);
+  const scenarioAnalysis = asObject(result.scenario_analysis);
+  const scenarioAlternatives = asArray(scenarioAnalysis?.alternatives)
+    .map(asObject)
+    .filter((item): item is Obj => item !== null);
   const workspaceIntelligence = asObject(result.workspace_intelligence);
   const marketAgent = asObject(result.market_agent_analysis);
   const portfolioAgent = asObject(result.portfolio_agent_analysis);
@@ -343,6 +347,26 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
           </article>;
         })}
       </div>
+    </section>}
+
+    {scenarioAnalysis && asText(scenarioAnalysis.status) !== 'NOT_REQUESTED' && <section className="analysis-section">
+      <h4>Cenários determinísticos · {asText(scenarioAnalysis.status) ?? 'indisponível'}</h4>
+      <p className="muted">Horizonte: {asText(scenarioAnalysis.horizon) ?? 'Indisponível'} · Choques informados pelo usuário; sem probabilidades ou ranking.</p>
+      <div className="evidence-grid">
+        {scenarioAlternatives.map((item, index) => {
+          const payoffs = asObject(item.pnl_by_scenario_brl);
+          const terminalPrices = asObject(item.terminal_underlying_price_by_scenario);
+          return <article className="evidence-card" key={asText(item.alternative_id) ?? String(index)}>
+            <h5>{asText(item.label) ?? 'Alternativa'}</h5>
+            {asText(item.pnl_basis) && <p className="muted">Base do P&amp;L: {asText(item.pnl_basis)}</p>}
+            <dl>{Object.entries(payoffs ?? {}).map(([scenario, value]) => <div key={scenario}>
+              <dt>{scenario}{numberValue(terminalPrices?.[scenario]) == null ? '' : ` · subjacente ${brl(numberValue(terminalPrices?.[scenario]))}`}</dt><dd>{brl(numberValue(value)) ?? 'Indisponível'}</dd>
+            </div>)}</dl>
+            {!Object.keys(payoffs ?? {}).length && <p className="muted">Payoff indisponível com os dados/horizonte recebidos.</p>}
+          </article>;
+        })}
+      </div>
+      {asStrings(scenarioAnalysis.limitations).length > 0 && <ul>{asStrings(scenarioAnalysis.limitations).map((item, index) => <li key={index}>{item}</li>)}</ul>}
     </section>}
 
     {optionEvidenceEntries.length > 0 && <section className="analysis-section">

@@ -205,3 +205,22 @@ Categorias usadas: fully implemented / implemented but not wired / missing imple
 Teste unitário/fixture e CI verde não substituem dados reais. Cada bloco deve ter escopo e limitações explícitos; só pedir um comando Ubuntu quando o bloco coerente estiver publicado e CI verde. As falhas externas não devem levar a taxas zero, preços estimados apresentados como fatos ou PASS artificial.
 
 Não há comando obrigatório a executar nesta noite. O usuário encerrou o trabalho. Prompt pronto em `docs/RESTART_PROMPT_B3_INTELLIGENCE_2026-10-02.md`.
+
+### Confirmação Ubuntu e UC-04 com cenários explícitos
+
+O usuário confirmou que instalou `cb82c80` no Ubuntu e reiniciou
+`b3-runtime.service`. Esta confirmação cobre o bloco anterior de research.
+
+O incremento seguinte no Strategy Lab adiciona choques terminais explícitos sob
+`terminal-price-scenarios-v1`, com P&L determinístico de ações, PUT cash-secured
+e CALL coberta. A data comum precisa coincidir com o vencimento da opção para
+expor seu payoff; mismatch ou dados essenciais ausentes ficam parciais. Choques
+não são probabilidades, previsões, retorno esperado ou classificação.
+
+O bloco foi implementado localmente e aguarda publicação/CI. Leia
+`docs/UC04_EXPLICIT_SCENARIO_COMPARISON_BLOCK_2026-10-02.md` para escopo,
+equações, limites e aceite Ubuntu/UI pendente. A matriz funcional está em
+`docs/DECISION_WORKSPACES_DELIVERY_PLAN_2026-10-02.md`. Próximo: B2, objetivos e
+restrições comparáveis; depois C, ranking de Opportunities dentro/fora da
+carteira. Completar custos/tributos e as duas pernas da rotação ASAI3→Embraer
+segue aberto.

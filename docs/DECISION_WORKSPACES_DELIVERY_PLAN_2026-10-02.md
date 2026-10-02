@@ -29,8 +29,8 @@ Não usar desconhecidos como zero, nem aceitar uma comparação sem dados essenc
 | Bloco | Entrega funcional | Aceite / estado |
 | --- | --- | --- |
 | A — Contexto e research existente | SQLite de carteira/execuções já ligado; consultar notícias Qdrant e relações de eventos Neo4j antes da busca externa, para cada ativo explícito e IBOV | Este bloco implementa a parcela **research**. Fontes/datas/origem, exclusões, busca só quando não há evento recente admissível ou refresh explícito. Não conclui toda cobertura de informação/valuation. |
-| B — Comparação econômica | Comparar ativos, strikes/vencimentos e manter/reduzir/comprar com objetivo, horizonte, tamanho, capital e cenários compatíveis | Próximo bloco. Reusar StrategyComparison/AssetEvidencePack; determinar explicitamente dados essenciais e opcionais; mostrar trade-offs, custo de troca e impacto antes/depois. Não inventar retorno esperado ou pesos. |
-| C — Opportunities dentro/fora | Universo explícito de carteira + candidatos/watchlist, elegibilidade e ordenação explicável por objetivo | Falta ranking econômico no live path: DEFERRED_INCOMPLETE_CONTEXT. Implementar política determinística versionada; permitir ranking sem componente de experiência quando os demais dados exigidos forem válidos; mostrar exclusões e empates/incomparabilidade. |
+| B — Comparação econômica | Comparar ativos, strikes/vencimentos e manter/reduzir/comprar com objetivo, horizonte, tamanho, capital e cenários compatíveis | **Parcial:** B1 calcula payoffs em choques de preço explicitamente informados e horizonte comum; falta política de objetivo/restrições, opções comparáveis em cadeia e contabilidade completa de troca/custos. |
+| C — Opportunities dentro/fora | Universo explícito de carteira + candidatos/watchlist, elegibilidade e ordenação explicável por objetivo | Continua aberto. Falta ranking econômico no live path: DEFERRED_INCOMPLETE_CONTEXT. Implementar política determinística versionada; permitir ranking sem componente de experiência quando os demais dados exigidos forem válidos; mostrar exclusões e empates/incomparabilidade. |
 | D — Market Intelligence/Copilot | Evidências compartilhadas, fundamentos, alvos com instituição/data/horizonte, eventos, riscos e investigação das comparações | Research compartilhado avança neste bloco; alvos estruturados, cobertura de lacunas por tipo e fechamento dos fluxos continuam abertos. Nenhum alvo é inferido de snippet ou consenso sem população definida. |
 | E — UC-07/08/09 | Desfechos comprovados, contexto PIT, experiência persistente e precedentes comparáveis | Execuções observadas e ligação exata já funcionam; desfechos elegíveis reais = 0. Owner canônico de produção e fatos terminais/PIT ainda faltam. Não bloquear B/C/D por esses gaps; não promover Qdrant/Neo4j a owner econômico. |
 | F — Aceite ponta a ponta | Executar os casos abaixo via telas/APIs e dados reais | CI e fixtures provam comportamento, não conclusão funcional real; registrar cada aceite e dependência externa separadamente. |
@@ -109,11 +109,37 @@ identificados; data/source lineage; ausência UNKNOWN; posição real para “me
 - Endpoint `/intelligence/research-context?ticker=RENT3` somente leitura de research,
   sem web/quotes/senior. O endpoint legado `/research/news` permanece coleta explícita.
   Este bloco não grava novos resultados na memória; ingestão/projeção existente
-  continua responsável por persistência/atualização.
+continua responsável por persistência/atualização.
 
-Próximo bloco: B, comparação econômica sob objetivos/restrições; prioridade de
-ranking e comparação corrigida pelo usuário prevalece sobre iniciar nova
-persistência de aprendizagem. UC-07/08/09 avançam sem travar decisões correntes.
+## Bloco B1 implementado nesta entrega — cenários explícitos
+
+- Strategy Lab envia até nove choques percentuais definidos pela pessoa usuária
+  e uma data/horizonte comum. A política `terminal-price-scenarios-v1` calcula
+  P&L terminal determinístico para compra/posição mantida/reduzida, PUT
+  cash-secured e CALL coberta sobre os contratos e posições existentes.
+- Opções só recebem payoff quando a data coincide exatamente com vencimento.
+  Quantidade/capital/posição ou horizonte incompatível fica indisponível e pode
+  tornar o resultado parcial; nunca se marca opção a mercado usando choque como
+  se fosse cotação de saída.
+- Frontend mostra o P&L por cenário e limitações. Choques não recebem
+  probabilidade, retorno esperado ou ranking automático. Nenhum aprendizado
+  pessoal não validado entra no cálculo.
+- Ainda não cobre objetivo/restrições que ordenem alternativas, varredura
+  comparável de cadeia/strikes, custos/impostos, caixa e duas pernas financiadas
+  sell-to-buy. O caso ASAI3→Embraer permanece pendente da resolução do ticker e
+  das duas pernas econômicas. Oportunidades continua sem ranking live.
+
+Matriz: Strategy Lab passa de “cenários não expostos” para **parcial** para
+choques fornecidos pelo usuário; os casos AC-15…AC-20 e AC-26 seguem abertos
+para aceite real integral. Opportunities permanece como bloco C; UC-07/08/09
+seguem informativos e inelegíveis para influenciar a ordenação.
+
+Próximo bloco: B2, explicitar objetivo/restrições e comparação justa entre
+alternativas com capital/horizonte compatíveis; em seguida bloco C para ranking
+determinístico de Opportunities dentro e fora da carteira. A prioridade segue
+sendo fechar os fluxos corrigidos pelo usuário, sem criar persistência de
+aprendizagem conveniente. UC-07/08/09 enriquecem o contexto sem travar decisões
+correntes nem alterar a ordenação até evidência elegível.
 
 ## Verificação deste bloco
 

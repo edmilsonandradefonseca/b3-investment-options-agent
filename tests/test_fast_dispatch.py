@@ -215,6 +215,42 @@ def test_structured_sell_put_dispatches_explicit_contract_without_llm(monkeypatc
     assert response.result["option_evidence"]["WEGEV500"]["current_quote"]["bid"] == 1.2
 
 
+def test_strategy_dispatch_forwards_explicit_price_scenarios(monkeypatch):
+    _install_portfolio(monkeypatch)
+
+    class FakeStrategyService:
+        def compare(self, **kwargs):
+            assert kwargs["scenario_horizon"] == "2026-11-20"
+            assert kwargs["scenario_shocks_pct"] == [-10.0, 0.0, 10.0]
+            return {
+                "as_of": "2026-10-01T15:00:00+00:00",
+                "quality_status": "VALIDATED",
+                "summary": "comparison ready",
+                "strategy_comparison": {"assumptions": {"ranking": "not_applied"}},
+                "scenario_analysis": {"status": "COMPUTED"},
+                "asset_evidence": {"VALE3": {}, "WEGE3": {}},
+                "limitations": [],
+                "source_refs": [],
+            }
+
+    monkeypatch.setattr(fast_dispatch, "LiveStrategyComparisonService", FakeStrategyService)
+    response = FastRouteDispatcher().dispatch(
+        task="UC-04: calculate explicit terminal price scenarios",
+        context={
+            "workspace": "Strategy Lab",
+            "comparison_assets": ["VALE3", "WEGE3"],
+            "strategy_a": "Comprar ação",
+            "strategy_b": "Comprar ação",
+            "comparison_amount": 5000,
+            "scenario_horizon": "2026-11-20",
+            "scenario_shocks_pct": [-10, 0, 10],
+        },
+    )
+
+    assert response is not None
+    assert response.result["scenario_analysis"]["status"] == "COMPUTED"
+
+
 def test_market_price_lookup_uses_current_oplab_quote(monkeypatch):
     current = StockMarketData(
         instrument_id="WEGE3",

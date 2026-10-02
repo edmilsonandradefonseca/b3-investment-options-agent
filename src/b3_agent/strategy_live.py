@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+import math
 from typing import Any, Protocol
 
 from b3_agent.options.call import CallAnalysisEngine
@@ -329,6 +330,8 @@ class LiveStrategyComparisonService:
         strategies: tuple[str, str],
         option_ids: tuple[str | None, str | None] = (None, None),
         amount: float | None = None,
+        scenario_horizon: date | str | None = None,
+        scenario_shocks_pct: list[float] | tuple[float, ...] | None = None,
         portfolio: PortfolioContext | None = None,
         as_of: datetime | None = None,
     ) -> dict[str, Any]:
@@ -338,6 +341,29 @@ class LiveStrategyComparisonService:
             )
         if amount is not None and amount < 0:
             raise ValueError("comparison amount must be non-negative")
+
+        horizon = (
+            date.fromisoformat(scenario_horizon)
+            if isinstance(scenario_horizon, str) and scenario_horizon.strip()
+            else scenario_horizon
+        )
+        shocks = tuple(scenario_shocks_pct or ())
+        if len(shocks) > 9:
+            raise ValueError("at most nine explicit price scenarios are supported")
+        if any(
+            not isinstance(shock, (int, float))
+            or not math.isfinite(shock)
+            or shock < -90
+            or shock > 300
+            for shock in shocks
+        ):
+            raise ValueError("scenario shocks must be finite percentages from -90 to 300")
+        if len(set(shocks)) != len(shocks):
+            raise ValueError("scenario shocks must be unique")
+        if shocks and horizon is None:
+            raise ValueError("scenario horizon is required for explicit price scenarios")
+        if horizon is not None and horizon <= (as_of.date() if as_of else datetime.now(timezone.utc).date()):
+            raise ValueError("scenario horizon must be after the comparison date")
 
         normalized_strategies = tuple(
             self.normalize_strategy(value) for value in strategies
@@ -396,6 +422,8 @@ class LiveStrategyComparisonService:
             subject_id = pack.ticker
             label = f"{original} · {pack.ticker}"
             alternative_sources = list(pack.source_refs)
+            option_contract = None
+            option_quote = None
 
             if normalized_strategy == "SELL_STOCK":
                 if amount is None or amount <= 0:
@@ -488,6 +516,8 @@ class LiveStrategyComparisonService:
                     raise ValueError(
                         f"{normalized_option} has no executable current bid"
                     )
+                option_contract = contract
+                option_quote = quote
 
                 subject_id = contract.option_id
                 label = f"{original} {contract.option_id} · {pack.ticker}"
@@ -615,6 +645,50 @@ class LiveStrategyComparisonService:
                 alternative_sources.append(quote.source)
                 all_sources.append(quote.source)
 
+            payoff_by_scenario: dict[str, float] = {}
+            if shocks and horizon is not None:
+                option_expiry = (
+                    option_contract.expiration_date
+                    if option_contract is not None
+                    else None
+                )
+                for shock in shocks:
+                    scenario_id = f"{horizon.isoformat()}:{shock:g}%"
+                    if option_expiry is not None and option_expiry != horizon:
+                        continue
+                    current_quote = pack.market.get("current_quote")
+                    current_price = (
+                        float(current_quote.get("close"))
+                        if isinstance(current_quote, dict)
+                        and isinstance(current_quote.get("close"), (int, float))
+                        and current_quote.get("close") > 0
+                        else None
+                    )
+                    if current_price is None:
+                        continue
+                    terminal_price = current_price * (1 + float(shock) / 100)
+                    shares = float(pack.portfolio.get("stock_quantity") or 0.0)
+                    pnl: float | None = None
+                    if normalized_strategy == "BUY_STOCK" and amount and amount > 0:
+                        pnl = amount / current_price * (terminal_price - current_price)
+                    elif normalized_strategy == "HOLD" and shares > 0:
+                        pnl = shares * (terminal_price - current_price)
+                    elif normalized_strategy == "SELL_STOCK" and shares > 0 and amount:
+                        reduced = amount / current_price
+                        pnl = max(0.0, shares - reduced) * (terminal_price - current_price)
+                    elif normalized_strategy == "SELL_PUT" and option_contract and option_quote:
+                        multiplier = float(option_contract.contract_multiplier)
+                        pnl = float(option_quote.bid) * multiplier - max(
+                            float(option_contract.strike) - terminal_price, 0.0
+                        ) * multiplier
+                    elif normalized_strategy == "SELL_CALL" and option_contract and option_quote:
+                        multiplier = float(option_contract.contract_multiplier)
+                        pnl = multiplier * (terminal_price - current_price)
+                        pnl += float(option_quote.bid) * multiplier
+                        pnl -= max(terminal_price - float(option_contract.strike), 0.0) * multiplier
+                    if pnl is not None and math.isfinite(pnl):
+                        payoff_by_scenario[scenario_id] = round(pnl, 8)
+
             alternative_sources = list(dict.fromkeys(alternative_sources))
             alternatives.append(
                 StrategyAlternative(
@@ -628,6 +702,7 @@ class LiveStrategyComparisonService:
                     as_of=effective_as_of,
                     capital_required=capital_required,
                     max_loss=max_loss,
+                    payoff_by_scenario=payoff_by_scenario,
                     assumptions=assumptions,
                     evidence_refs=tuple(
                         f"strategy_evidence:{subject_id}:{source}"
@@ -679,6 +754,63 @@ class LiveStrategyComparisonService:
             "Valuation is not computed without explicit, versioned assumptions.",
             "Deterministic comparative ranking is not yet applied.",
         ])
+        scenario_analysis = {
+            "policy_version": "terminal-price-scenarios-v1",
+            "as_of": effective_as_of.isoformat(),
+            "status": "NOT_REQUESTED",
+            "horizon": horizon.isoformat() if horizon else None,
+            "user_supplied_shocks_pct": list(shocks),
+            "probabilities": None,
+            "ranking": "NOT_APPLIED",
+            "basis": "deterministic_expiry_payoff_vs_decision_time_reference",
+            "limitations": [
+                "Price shocks are user scenarios, not forecasts or probabilities.",
+                "Payoff excludes taxes, fees, slippage, financing and early assignment.",
+                "A position without known current shares or comparison capital remains unavailable.",
+                "Option scenarios are computed only when the common horizon equals contract expiry.",
+            ],
+            "alternatives": [],
+        }
+        if shocks:
+            scenario_alternatives = comparison.alternatives
+            scenario_analysis["status"] = (
+                "COMPUTED" if any(item.payoff_by_scenario for item in scenario_alternatives)
+                else "UNAVAILABLE"
+            )
+            scenario_analysis["alternatives"] = [
+                {
+                    "alternative_id": item.alternative_id,
+                    "label": item.label,
+                    "underlying_ticker": (
+                        (as_object := item.assumptions.get("current_underlying_quote"))
+                        and as_object.get("ticker")
+                    ),
+                    "pnl_basis": {
+                        "BUY_STOCK": "incremental P&L on the modeled purchase amount versus retaining that cash",
+                        "HOLD": "change in known shares' market value versus the decision-time mark",
+                        "SELL_STOCK": "change in retained shares; released sale proceeds are treated as zero-return cash",
+                        "SELL_PUT": "current bid premium less terminal intrinsic loss for one contract",
+                        "SELL_CALL": "covered-share price change plus current bid less terminal intrinsic call value",
+                    }.get(item.action_type),
+                    "pnl_by_scenario_brl": item.payoff_by_scenario,
+                    "terminal_underlying_price_by_scenario": {
+                        f"{horizon.isoformat()}:{shock:g}%": round(
+                            float(as_object["close"]) * (1 + float(shock) / 100), 8
+                        )
+                        for shock in shocks
+                        if horizon is not None
+                        and isinstance(as_object, dict)
+                        and isinstance(as_object.get("close"), (int, float))
+                    },
+                }
+                for item in scenario_alternatives
+            ]
+            if any(not item.payoff_by_scenario for item in scenario_alternatives):
+                scenario_analysis["status"] = "PARTIAL"
+            limitations.append(
+                "Scenario outcomes use explicit user price shocks at the stated horizon; "
+                "they are deterministic what-ifs, not expected returns or assignment probabilities."
+            )
         limitations = list(dict.fromkeys(limitations))
 
         return {
@@ -692,6 +824,7 @@ class LiveStrategyComparisonService:
                 "Ranking não aplicado."
             ),
             "strategy_comparison": asdict(comparison),
+            "scenario_analysis": scenario_analysis,
             "asset_evidence": {
                 pack.ticker: asdict(pack)
                 for pack in packs
