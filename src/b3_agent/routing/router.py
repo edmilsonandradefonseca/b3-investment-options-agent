@@ -49,6 +49,14 @@ class FastRouter:
         option_a = str(meta.get("option_a") or "").strip() or None
         option_b = str(meta.get("option_b") or "").strip() or None
         comparison_amount = meta.get("comparison_amount")
+        put_candidate_ids = meta.get("put_candidate_option_ids")
+        explicit_put_chain_request = (
+            workspace == "strategy lab"
+            and isinstance(put_candidate_ids, (list, tuple))
+            and 2 <= len(put_candidate_ids) <= 20
+            and bool(str(meta.get("comparison_ticker") or meta.get("selected_ticker") or "").strip())
+            and all(isinstance(item, str) and item.strip() for item in put_candidate_ids)
+        )
         stock_reduction_present = (
             self._is_stock_reduction(strategy_a)
             or self._is_stock_reduction(strategy_b)
@@ -58,12 +66,15 @@ class FastRouter:
             or self._positive_number(comparison_amount)
         )
         if (
-            workspace == "strategy lab"
-            and isinstance(comparison_assets, (list, tuple))
-            and len(comparison_assets) == 2
-            and self._strategy_supported(strategy_a, option_a)
-            and self._strategy_supported(strategy_b, option_b)
-            and stock_reduction_amount_ok
+            explicit_put_chain_request
+            or (
+                workspace == "strategy lab"
+                and isinstance(comparison_assets, (list, tuple))
+                and len(comparison_assets) == 2
+                and self._strategy_supported(strategy_a, option_a)
+                and self._strategy_supported(strategy_b, option_b)
+                and stock_reduction_amount_ok
+            )
         ):
             return self._decision(
                 "strategy_comparison", "UC-04", "sync", "deterministic",

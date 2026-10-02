@@ -389,6 +389,13 @@ class LiveStrategyComparisonService:
         if shocks and horizon != expiration:
             raise ValueError("PUT terminal scenarios require a horizon equal to the selected contracts' expiration")
         underlying = pack.market.get("current_quote")
+        if as_of is not None and isinstance(underlying, dict):
+            for timestamp_field in ("observation_timestamp", "available_timestamp"):
+                timestamp = underlying.get(timestamp_field)
+                if isinstance(timestamp, str):
+                    timestamp = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+                if isinstance(timestamp, datetime) and timestamp > effective_as_of:
+                    raise ValueError(f"underlying quote was not observable and available at the requested as_of")
         spot = (
             float(underlying["close"])
             if isinstance(underlying, dict)

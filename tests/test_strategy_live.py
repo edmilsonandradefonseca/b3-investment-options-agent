@@ -334,6 +334,24 @@ def test_multi_strike_put_requires_exact_ids_and_same_expiration():
         raise AssertionError("an unlisted sibling must not be silently substituted")
 
 
+def test_multi_strike_put_does_not_use_underlying_quote_after_requested_as_of():
+    evidence = StrategyEvidenceService(
+        market_provider=FakeMarketProvider(),
+        fundamentals_provider=FakeFundamentalsProvider(),
+        current_quote_provider=FakeCurrentQuoteProvider(),
+    )
+    service = LiveStrategyComparisonService(evidence_service=evidence, options_provider=FakeOptionsProvider())
+    try:
+        service.compare_put_candidates(
+            ticker="WEGE3", option_ids=("WEGEV500", "WEGEV490"),
+            as_of=datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc),
+        )
+    except ValueError as exc:
+        assert "underlying quote was not observable" in str(exc)
+    else:
+        raise AssertionError("future quote availability must not enter a past as_of comparison")
+
+
 def test_explicit_expiry_scenarios_calculate_stock_and_cash_secured_put_payoffs():
     evidence = StrategyEvidenceService(
         market_provider=FakeMarketProvider(),
