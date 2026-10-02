@@ -162,6 +162,11 @@ def test_workflow_reads_sqlite_before_reasoning_and_keeps_risk_gate(tmp_path):
     history=model.inputs[0]['deterministic_context']['personal_history']
     assert history['execution_count']==1
     assert history['assignment_frequency'] is None
+    decisions=model.inputs[0]['deterministic_context']['decision_history']
+    assert decisions['candidates'][0]['subject_id']=='PETR4'
+    assert decisions['subjects']['PETR4']['execution_count']==0
+    assert decisions['subjects']['PETR4']['match_policy']=='EXACT_SYMBOL'
+    assert result['decision_history']==decisions
     assert 'risk_validation' in result
     assert result['stage_telemetry']['reason']['cache']=='MISS'
     assert 'personal_history' in result['stage_telemetry']
@@ -173,7 +178,7 @@ def test_workspace_deterministic_mode_never_calls_senior(monkeypatch):
     from b3_agent.orchestration.contracts import OrchestratorRequest, OrchestratorResponse
     class Context:
         source_refs=('sqlite:history',)
-        def as_context(self): return {'deterministic_context': {'personal_history': {'coverage':'UNKNOWN'}}}
+        def as_context(self): return {'deterministic_context': {'personal_history': {'coverage':'UNKNOWN'}, 'decision_history': {'ranking_effect':'NONE'}}}
     class Service:
         def build(self,**kwargs):
             assert not kwargs['include_joao']
@@ -185,6 +190,7 @@ def test_workspace_deterministic_mode_never_calls_senior(monkeypatch):
     assert response.result['canonical_metric']==7
     assert response.result['telemetry']['llm_calls']==0
     assert response.result['personal_history']['coverage']=='UNKNOWN'
+    assert response.result['decision_history']['ranking_effect']=='NONE'
 
 
 def test_partial_repurchase_observation_never_finalizes_outcome(tmp_path, monkeypatch):

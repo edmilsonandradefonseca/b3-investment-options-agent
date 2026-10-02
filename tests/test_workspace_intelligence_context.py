@@ -165,6 +165,7 @@ class FakeOpportunityService:
                 "ranked_opportunities": [
                     {
                         "opportunity_id": "SELL_PUT:WEGEV500",
+                        "options_analysis_ref": "WEGEV500",
                         "ticker": "WEGE3",
                         "action": "SELL_PUT",
                     }
@@ -225,6 +226,9 @@ def test_workspace_context_combines_market_macro_local_and_joao(monkeypatch):
     )
 
     assert result.deterministic_context["workspace_result"]["fast_route"]["target"] == "strategy_engine"
+    decision_history = result.deterministic_context["decision_history"]
+    assert [c["subject_id"] for c in decision_history["candidates"]] == ["VALE3", "WEGE3"]
+    assert decision_history["ranking_effect"] == "NONE"
     market = result.deterministic_context["market_analysis"]
     assert market["tickers"]["WEGE3"]["current_quote"]["close"] == 49.4
     assert market["tickers"]["VALE3"]["research_events"][0]["headline"].startswith("VALE3")
@@ -284,6 +288,9 @@ def test_workspace_context_omits_degraded_local_and_fails_soft_on_joao(monkeypat
     opportunity_set = workspace_result["opportunity_set"]
     assert opportunity_set["ranked_opportunities"][0]["opportunity_id"] == "SELL_PUT:WEGEV500"
     assert workspace_result["opportunity_ranking_status"] == "DEFERRED_INCOMPLETE_CONTEXT"
+    decision = result.deterministic_context["decision_history"]
+    assert decision["candidates"][0]["subject_id"] == "WEGEV500"
+    assert decision["candidates"][0]["candidate_id"] == "SELL_PUT:WEGEV500"
 
     joao = result.derived_intelligence["joao_resolve"]
     assert joao["status"] == "UNAVAILABLE"

@@ -1,3 +1,11 @@
+**Decision-history block — 02/10:** read
+`docs/UC070809_DECISION_HISTORY_BLOCK_2026-10-02.md` first for the updated
+matrix, candidate/contract evidence in Opportunities, Strategy Lab and Copilot,
+exact-symbol identity, verification and focused pending Ubuntu gate. No canonical
+learning/outcome is admitted from execution observations.
+The user reports the preceding received-income feature working; do not repeat
+its completed implementation or source analysis.
+
 **Received-income block — 02/10:** the user supplied the BTG workbook and
 authorized Portfolio dividend/JCP extraction. Read
 `docs/BTG_RECEIVED_INCOME_BLOCK_2026-10-02.md` for the additive statement

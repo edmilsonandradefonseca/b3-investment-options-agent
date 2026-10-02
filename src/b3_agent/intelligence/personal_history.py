@@ -67,7 +67,7 @@ class PersonalHistoryService:
     def __init__(self, data_dir):
         self.data_dir = Path(data_dir).resolve()
 
-    def build(self, *, ticker=None, as_of=None, since=None):
+    def build(self, *, ticker=None, as_of=None, since=None, exact_symbol=False):
         started = monotonic()
         strict_pit = as_of is not None
         cutoff = _utc(as_of) if as_of is not None else datetime.now(timezone.utc)
@@ -147,7 +147,7 @@ class PersonalHistoryService:
                         in_window = False
                     else:
                         in_window = True
-                    identity = "EXACT_SYMBOL" if not selected or symbol == selected else "UNVERIFIED_OPTION_ROOT" if kind == "OPTION" and len(selected) >= 5 and symbol[:4] == selected[:4] else None
+                    identity = "EXACT_SYMBOL" if not selected or symbol == selected else "UNVERIFIED_OPTION_ROOT" if not exact_symbol and kind == "OPTION" and len(selected) >= 5 and symbol[:4] == selected[:4] else None
                     if identity is None:
                         continue
                     amount = Decimal(str(abs(qty))) * Decimal(str(price))
@@ -205,13 +205,14 @@ class PersonalHistoryService:
         visible = [{k:v for k,v in r.items() if k not in {"_sort_time", "in_window"}} for r in executions if r["in_window"]]
         observed_sequences.sort(key=lambda r: (r["last_trade_date"], r["operation_id"], r["broker"]))
         cycles.sort(key=lambda r: (r["last_trade_date"], r["operation_id"], r["broker"]))
-        fp = fingerprint(["personal-history-v2", str(self.data_dir), sources, selected, str(since), cutoff.isoformat() if strict_pit else "RETROSPECTIVE"])
+        fp = fingerprint(["personal-history-v3", str(self.data_dir), sources, selected, exact_symbol, str(since), cutoff.isoformat() if strict_pit else "RETROSPECTIVE"])
         return {
             "status": "LIMITED" if visible else "NO_MATCHING_EXECUTIONS",
             "authority": "existing_sqlite_execution_projection", "coverage": "UNKNOWN",
             "as_of": cutoff.isoformat(), "since": str(since) if since else None,
             "mode": "STRICT_KNOWN_AT_TIME" if strict_pit else "RETROSPECTIVE_AS_LOADED",
             "ticker": selected, "fingerprint": fp,
+            "match_policy": "EXACT_SYMBOL" if exact_symbol else "ASSET_WITH_UNVERIFIED_OPTION_ROOT",
             "sources": {k:{"status":v["status"], "loaded_row_count":len(v["rows"]), "truncated":v["truncated"]} for k,v in sources.items()},
             "execution_count": len(visible), "executions": visible[-20:], "execution_details_omitted": max(0,len(visible)-20),
             "cash_flow_observed": float(sum(Decimal(str(r["cash_flow"])) for r in visible)) if visible else None,

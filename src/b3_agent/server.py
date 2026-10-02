@@ -14,6 +14,7 @@ from uuid import uuid4
 from typing import Any
 from time import monotonic
 from b3_agent.intelligence.personal_history import PersonalHistoryService
+from b3_agent.intelligence.decision_history import build_decision_history
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
@@ -205,6 +206,7 @@ def _workspace_intelligence_response(
                 **(deterministic_response.result if deterministic_response else {}),
                 "deterministic_context": context_payload.get("deterministic_context", {}),
                 "personal_history": context_payload.get("deterministic_context", {}).get("personal_history", {}),
+                "decision_history": context_payload.get("deterministic_context", {}).get("decision_history", {}),
                 "derived_synthesis_status": "NOT_REQUESTED",
                 "telemetry": {"total_ms": (monotonic()-started)*1000, "llm_calls": 0},
             },
@@ -264,6 +266,7 @@ def _workspace_intelligence_response(
             else {}
         ),
         "personal_history": context_payload.get("deterministic_context", {}).get("personal_history", {}),
+        "decision_history": context_payload.get("deterministic_context", {}).get("decision_history", {}),
         "telemetry": {"total_ms": (monotonic()-started)*1000, "stages": senior.result.get("stage_telemetry", {})},
         "workspace_intelligence": {
             "workspace": context.workspace,
@@ -448,6 +451,20 @@ def personal_history_context(ticker: str | None = None, as_of: datetime | None =
     """Deterministic read projection; no models, providers, migrations or ingestion."""
     try:
         return PersonalHistoryService(settings.data_dir).build(ticker=ticker, as_of=as_of, since=since)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/history/decision-context")
+def decision_history_context(ticker: str, as_of: datetime | None = None, since: str | None = None):
+    """Exact subject evidence for an explicit analysis; no market/provider calls."""
+    if not ticker.strip():
+        raise HTTPException(status_code=400, detail="ticker must not be empty")
+    try:
+        return build_decision_history(
+            PersonalHistoryService(settings.data_dir), result={}, tickers=(ticker,),
+            as_of=as_of, since=since,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

@@ -1,4 +1,5 @@
 import PersonalHistory from './PersonalHistory';
+import DecisionHistory from './DecisionHistory';
 import type { OrchestrateResponse } from '../api/contracts';
 
 type Obj = Record<string, unknown>;
@@ -396,7 +397,8 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
       </div>
     </section>}
 
-    <PersonalHistory value={result.personal_history} />
+    <DecisionHistory value={result.decision_history} />
+    {asArray(asObject(result.decision_history)?.candidates).length ? <details><summary>Histórico geral do ativo — inclui raízes de opções não verificadas</summary><PersonalHistory value={result.personal_history} /></details> : <PersonalHistory value={result.personal_history} />}
 
     <BulletSection title="Pontos confirmados" values={agreements} />
     <BulletSection title="Riscos" values={risks} />

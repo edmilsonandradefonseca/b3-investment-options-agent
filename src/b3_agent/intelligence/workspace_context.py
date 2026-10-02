@@ -8,6 +8,7 @@ import urllib.request
 from typing import Any
 from time import monotonic
 from b3_agent.intelligence.personal_history import PersonalHistoryService
+from b3_agent.intelligence.decision_history import build_decision_history
 
 from b3_agent.config import settings
 from b3_agent.intelligence.observability import local_ticker_intelligence
@@ -656,6 +657,10 @@ class WorkspaceIntelligenceContextService:
         deterministic_context: dict[str, Any] = {
             "workspace": workspace,
             "personal_history": personal_history,
+            "decision_history": build_decision_history(
+                history_service, result=workspace_result, tickers=normalized_tickers,
+                as_of=history_as_of, since=history_since,
+            ),
             "workspace_result": workspace_result,
             "market_analysis": {
                 "as_of": as_of.isoformat(),

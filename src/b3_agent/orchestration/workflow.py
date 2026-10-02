@@ -20,6 +20,7 @@ from b3_agent.knowledge.memory import ObsidianMemoryManager
 from b3_agent.knowledge.retrieval import ObsidianRetriever
 from b3_agent.schemas.feature_snapshot import FeatureSnapshot
 from b3_agent.schemas.market_regime import MarketRegime
+from b3_agent.intelligence.decision_history import build_decision_history
 
 from .contracts import B3State
 from .experience_workflow import ExperienceContextService
@@ -79,8 +80,17 @@ def build_workflow(
             ticker=state.get("ticker"), as_of=state.get("as_of"),
             since=state.get("history_since"),
         )
-        return {"personal_history": built, "deterministic_context": {
-            **state.get("deterministic_context", {}), "personal_history": built,
+        deterministic = state.get("deterministic_context", {})
+        candidate_result = dict(deterministic.get("workspace_result", {}))
+        if "opportunity_set" in deterministic and "opportunity_set" not in candidate_result:
+            candidate_result["opportunity_set"] = deterministic["opportunity_set"]
+        decision_history = build_decision_history(
+            personal_history_service, result=candidate_result,
+            tickers=(state["ticker"],) if state.get("ticker") else (),
+            as_of=state.get("as_of"), since=state.get("history_since"),
+        )
+        return {"personal_history": built, "decision_history": decision_history, "deterministic_context": {
+            **deterministic, "personal_history": built, "decision_history": decision_history,
         }}
 
     def measured(name, action, agent=None):
@@ -181,6 +191,7 @@ def build_workflow(
     def _agent_context(state: B3State) -> AgentContext:
         keys = (
             "personal_history",
+            "decision_history",
             "portfolio_context",
             "options_transactions",
             "signals",
