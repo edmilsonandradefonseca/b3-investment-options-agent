@@ -239,3 +239,8 @@ Build frontend PASS localmente e regressão de prompt longo adicionada; pytest
 não está disponível neste sandbox. Esperar CI integral verde antes de pedir
 instalação/validação Ubuntu. Em produção validar Options, Opportunities ITUB4
 e Strategy Lab ITUB4 × WEGE3. UC-07/08/09 econômicos permanecem em andamento.
+
+
+### Checkpoint CI deste bloco
+
+Commit `1be3283`; CI [#1289 SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37051911828), com suíte Python e build frontend. O gate Ubuntu é a próxima validação: conferir o exemplo PCARJ40 52.000 × R$ 0,02, preço R$ 0,02 / total R$ 1.040, e repetir Opportunities ITUB4 e Strategy Lab ITUB4 × WEGE3. Em seguida continuar o plano econômico UC-03/04/12; esta correção de transporte/UI não fecha esse trabalho.

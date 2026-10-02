@@ -132,3 +132,6 @@ corretagem contém preço unitário e valor negociado (ex.: 52.000 PCARJ40 C a
 R$ 0,02 = R$ 1.040,00). Exiba ambos separadamente; use a operação para preço de
 posição aberta só com conciliação exata de lado/quantidade do contrato. O prompt
 OpenClaw vai por stdin (`--message-file -`), sem remover ou truncar evidências.
+
+
+Commit `1be3283`; CI [#1289 SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37051911828), ambos os jobs Python e React. Pedir agora um gate Ubuntu único cobrindo Options (incluindo PCARJ40), Opportunities ITUB4 e Strategy Lab ITUB4 × WEGE3. Não reabrir ranking/economia UC-07/08/09 neste gate.

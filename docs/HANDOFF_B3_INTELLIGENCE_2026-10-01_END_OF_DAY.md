@@ -286,3 +286,9 @@ C, 52.000 a R$ 0,02, total R$ 1.040,00, é o exemplo de aceite.
 
 Sem custo canônico ou conciliação, preço permanece indisponível. Ver
 `docs/OPENCLAW_STDIN_AND_OPTION_ENTRY_PRICE_BLOCK_2026-10-02.md`.
+
+
+Commit `1be3283` publicado na branch/PR #66; CI #1289 SUCCESS (testes Python e
+build React). Ubuntu permanece como gate de uso real para a coluna PCARJ40 e
+os fluxos Opportunities ITUB4 / Strategy Lab ITUB4 × WEGE3. A correção não
+altera o ranking determinístico nem admite execuções não conciliadas como custo.

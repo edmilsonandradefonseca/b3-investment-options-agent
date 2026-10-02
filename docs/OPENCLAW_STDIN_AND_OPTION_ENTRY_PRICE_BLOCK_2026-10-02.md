@@ -40,8 +40,7 @@ invalidate the note; it only prevents attributing the note to that open lot.
 - Added regression fixture for the 52,000 × R$ 0.02 brokerage-note row.
 - A focused local transport probe sent a 256 KB synthesis input through stdin
   and confirmed argv remains below 1 KB.
-- Full Python regression and frontend build: delegated to GitHub CI because
-  `pytest` is not installed in this local sandbox.
+- Local `pytest` is unavailable in this sandbox. GitHub CI [#1289 SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37051911828) completed both the full Python test job and React build.
 - Ubuntu acceptance: pending for the published block.
 
 ## Ubuntu acceptance
