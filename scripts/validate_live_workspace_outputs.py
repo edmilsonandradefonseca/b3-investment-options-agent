@@ -211,7 +211,8 @@ def main() -> int:
         "cases": [],
     }
     health = report["health"]
-    print(f"HEALTH http={health['http_status']} elapsed_ms={health['elapsed_ms']} transport_error={health['transport_error_type']}")
+    failures = int(health["http_status"] != 200 or health["transport_error_type"] is not None)
+    print(f"HEALTH http={health['http_status']} elapsed_ms={health['elapsed_ms']} transport_error={health['transport_error_type']}", flush=True)
     for case in make_cases():
         result = call_json(
             f"{base_url}/orchestrate",
@@ -227,18 +228,27 @@ def main() -> int:
         }
         report["cases"].append(entry)
         metadata = entry["response_metadata"]
+        failed = (
+            result["http_status"] != 200
+            or result["transport_error_type"] is not None
+            or metadata.get("api_error_present") is True
+        )
+        failures += int(failed)
         print(
             f"CASE {case['id']} http={result['http_status']} "
             f"elapsed_ms={result['elapsed_ms']} bytes={result['response_bytes']} "
             f"api_status={metadata.get('api_status')} "
             f"source_count={metadata.get('source_count')} "
             f"derived_synthesis={metadata.get('derived_synthesis_status')} "
-            f"transport_error={result['transport_error_type']}"
+            f"transport_error={result['transport_error_type']} failed={failed}",
+            flush=True,
         )
     path = write_private_report(Path(args.report_dir).expanduser(), report)
-    print(f"PRIVATE_REPORT={path}")
-    print("REPORT_CONTENT=not printed; no response body or portfolio data is sent to Actions logs.")
-    return 0
+    report["validation_failure_count"] = failures
+    print(f"PRIVATE_REPORT={path}", flush=True)
+    print("REPORT_CONTENT=not printed; no response body or portfolio data is sent to Actions logs.", flush=True)
+    print(f"VALIDATION_FAILURE_COUNT={failures}", flush=True)
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":
