@@ -212,8 +212,10 @@ class BrapiFundamentalsAdapter:
                 for result in results
                 if str(result.get("symbol", "")).upper() == normalized
             ),
-            results[0],
+            None,
         )
+        if item is None:
+            raise ValueError("BRAPI dividends unavailable for exact ticker")
         data = item.get("data") or {}
         cash = data.get("cashDividends") or []
         ingested_at = datetime.now(timezone.utc)
