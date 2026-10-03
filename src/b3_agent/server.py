@@ -257,7 +257,6 @@ def _workspace_intelligence_response(
                 "deterministic_context": context_payload.get("deterministic_context", {}),
                 "research_context": context_payload.get("deterministic_context", {}).get("market_analysis", {}),
                 "stored_research": context_payload.get("deterministic_context", {}).get("stored_research", {}),
-                "derived_synthesis_status": "FAILED" if senior.error else "COMPLETED",
         "personal_history": context_payload.get("deterministic_context", {}).get("personal_history", {}),
                 "decision_history": context_payload.get("deterministic_context", {}).get("decision_history", {}),
                 "canonical_experience_context": {
