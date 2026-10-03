@@ -29,10 +29,12 @@ def main():
     result=data['result'];pair=result['stock_purchase_comparison']
     assert len(pair['rows'])==2 and {row['ticker'] for row in pair['rows']}=={'ITUB4','BBDC4'}
     assert result['telemetry']['llm_calls']==0
+    assert all(row['dividends']['policy_version']=='issuer-dividends-v1' for row in pair['rows'])
+    assert all(row['dividends']['net_amount'] is None for row in pair['rows'])
     assert all(row['expected_return'] is None and row['future_dividend_per_share'] is None for row in pair['rows'])
     assert all(row['source_refs'] and row['evidence_refs'] for row in pair['rows'])
     write_private_report(Path.home()/'.local/share/b3-investment-options-agent/live-validation/stock-purchase/deterministic',{'response':data})
-    print(json.dumps({'case':'stock_purchase','http':200,'rows':2,'llm_calls':0,'elapsed_ms':round((monotonic()-started)*1000,1),'fundamental_counts':[len(row['fundamental_metrics']) for row in pair['rows']],'forward_forecast':'UNKNOWN'}),flush=True)
+    print(json.dumps({'case':'stock_purchase','http':200,'rows':2,'llm_calls':0,'elapsed_ms':round((monotonic()-started)*1000,1),'fundamental_counts':[len(row['fundamental_metrics']) for row in pair['rows']],'forward_forecast':'UNKNOWN','dividend_collection':[row['dividends']['collection_status'] for row in pair['rows']],'dividend_events':[len(row['dividends']['events']) for row in pair['rows']]}),flush=True)
     if args.senior:
         request['context'].pop('analysis_mode');started=monotonic();response=client.post('/orchestrate',json=request);data=response.json()
         write_private_report(Path.home()/'.local/share/b3-investment-options-agent/live-validation/stock-purchase/senior',{'response':data})

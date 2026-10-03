@@ -17,7 +17,7 @@ def _timestamp(value):
         return None
 
 
-def stock_purchase_payload(alternatives, packs, cutoff):
+def stock_purchase_payload(alternatives, packs, cutoff, dividend_evidence=None):
     rows = []
     for alternative, pack in zip(alternatives, packs, strict=True):
         quote = pack.market.get("current_quote") or {}
@@ -40,11 +40,14 @@ def stock_purchase_payload(alternatives, packs, cutoff):
                 excluded.append({"metric": name, "reason": "UNQUALIFIED_OR_FUTURE_FUNDAMENTAL"})
                 continue
             admitted[name] = metric
+        from b3_agent.dividend_evidence import dividend_payload
+        dividends = dividend_payload(pack.ticker, (dividend_evidence or {}).get(pack.ticker, {}), cutoff)
         rows.append({
             "alternative_id": alternative.alternative_id, "ticker": pack.ticker,
             "current_price_brl": spot, "quote_observed_at": observed,
             "capital_required_brl": alternative.capital_required,
             "fundamental_metrics": admitted, "excluded_metrics": excluded,
+            "dividends": dividends,
             "observed_risk": {name: pack.quant.get(name) for name in
                 ("volatility_60d", "max_drawdown", "average_dollar_volume_20d")},
             "history_start": pack.market.get("history_start"),
