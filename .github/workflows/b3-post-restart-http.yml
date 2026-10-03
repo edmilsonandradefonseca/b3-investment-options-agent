@@ -43,6 +43,7 @@ jobs:
           assert all(row["dividends"]["policy_version"] == "issuer-dividends-v1" for row in rows)
           assert any(row["dividends"]["events"] for row in rows)
           assert all(row["institution_targets"]["policy_version"] == "stored-institution-targets-v1" for row in rows)
+          assert all(row["institution_targets"]["rows"] for row in rows), "Expected ingested primary reports on active runtime"
           print(json.dumps({"case":"ACTIVE_INSTITUTION_TARGETS","statuses":[row["institution_targets"]["status"] for row in rows],"counts":[len(row["institution_targets"]["rows"]) for row in rows]}),flush=True)
           print(json.dumps({"case":"ACTIVE_DIVIDENDS","collection":[row["dividends"]["collection_status"] for row in rows],"event_counts":[len(row["dividends"]["events"]) for row in rows]}),flush=True)
           print(json.dumps({"case":"ACTIVE_STOCK_PURCHASE","http":200,"elapsed_ms":response["elapsed_ms"],"fundamental_counts":[len(row["fundamental_metrics"]) for row in rows],"llm_calls":0}),flush=True)
@@ -65,4 +66,24 @@ jobs:
               assert row["expected_return"] is None and row["positive_return_probability"] is None
           print(json.dumps({"case":"ACTIVE_ECONOMIC_DECISION","http":200,"elapsed_ms":economic_response["elapsed_ms"],"cash_conservation":"PASS","llm_calls":0}),flush=True)
 
+          for row in result["stock_purchase_comparison"]["rows"]:
+              evidence=row["economic_evidence"]
+              assert evidence["quantity"]>0 and evidence["institution_target_potential"]
+              assert evidence["expected_return"] is None
+              assert abs(evidence["notional_brl"]+evidence["entry_cost_brl"]+evidence["residual_cash_brl"]-10000)<1e-7
+          opportunity_request={"task":"Compare verified institution target potential, keeping forecast fields unknown.","context":{"workspace":"Opportunities","opportunity_assets":["ITUB4","BBDC4"],"analysis_mode":"deterministic","opportunity_economic_inputs":{"budget_brl":10000,"entry_costs_brl":{"ITUB4":0,"BBDC4":0},"target_institution":"XP","target_horizon":"2027-12-31"}}}
+          opportunity_response=call_json(base+"/orchestrate",opportunity_request,90)
+          write_private_report(Path.home()/".local/share/b3-investment-options-agent/live-validation/active-sourced-opportunities",{"instance":"ACTIVE HTTP systemd","response":opportunity_response})
+          body=opportunity_response.get("response") or {}
+          assert opportunity_response["http_status"]==200 and not body.get("error")
+          result=body["result"]
+          assert result["telemetry"]["llm_calls"]==0
+          ranking=result["economic_target_ranking"]
+          assert ranking["status"]=="CONDITIONAL_TARGET_POTENTIAL" and len(ranking["rows"])==2
+          for row in result["opportunity_screen"]["rows"]:
+              evidence=row["economic_evidence"]
+              assert evidence["quantity"]>0 and evidence["institution_target_potential"]
+              assert abs(evidence["notional_brl"]+evidence["entry_cost_brl"]+evidence["residual_cash_brl"]-10000)<1e-7
+              assert evidence["expected_return"] is None
+          print(json.dumps({"case":"ACTIVE_SOURCED_OPPORTUNITIES","http":200,"elapsed_ms":opportunity_response["elapsed_ms"],"target_count":sum(len(row["economic_evidence"]["institution_target_potential"]) for row in result["opportunity_screen"]["rows"]),"cash_conservation":"PASS","llm_calls":0}),flush=True)
           PY
