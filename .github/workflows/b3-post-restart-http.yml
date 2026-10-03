@@ -52,3 +52,19 @@ jobs:
           print(json.dumps({"case":"ACTIVE_FUNDED_SWITCH","http":200,"elapsed_ms":response["elapsed_ms"],"cash_conservation":"PASS","llm_calls":0}),flush=True)
           print("ACTIVE_FUNDED_SWITCH=PASS RUNTIME_MUTATIONS=NONE",flush=True)
           PY
+      - name: Inspect only model-input availability from the latest private PUT report
+        run: |
+          python3 - <<'PY'
+          import json, math
+          from pathlib import Path
+          folder=Path.home()/".local/share/b3-investment-options-agent/live-validation/put-pair/LOWEST_MODEL_EXPIRY_ITM"
+          files=sorted(folder.glob("b3-live-workspaces-*.json"))
+          assert files, "Expected private candidate report not found"
+          data=json.loads(files[-1].read_text())["response"]["result"]
+          for row in data["put_pair_comparison"]["rows"]:
+              pack=data["asset_evidence"][row["underlying_ticker"]]
+              quote=data["option_evidence"][row["option_id"]]["current_quote"]
+              iv=quote.get("implied_volatility")
+              print(json.dumps({"scope":"candidate private report, no active PUT acceptance","reason":row["probability_estimates"].get("reason"),"underlying_quote_present":bool(pack["market"].get("current_quote")),"iv_present":iv is not None,"iv_admissible":isinstance(iv,(int,float)) and math.isfinite(iv) and 0<iv<=3}),flush=True)
+          print("BUSINESS_VALUES_PRINTED=NONE",flush=True)
+          PY
