@@ -7,6 +7,9 @@ on:
     paths:
       - .github/workflows/yfinance-history-pilot.yml
       - scripts/validate_yfinance_history.py
+      - scripts/validate_history_only_real.py
+      - src/b3_agent/orchestration/live_providers.py
+      - src/b3_agent/server.py
 
 permissions:
   contents: read
@@ -31,7 +34,7 @@ jobs:
             --target "$RUNNER_TEMP/yfinance-pilot" \
             "yfinance==1.6.0" "pandas>=2.2,<3" "websockets>=14,<17"
 
-      - name: Run read-only comparison
+      - name: Run read-only Yahoo comparison
         shell: bash
         env:
           PYTHONPATH: ${{ github.workspace }}/src:${{ runner.temp }}/yfinance-pilot
@@ -42,3 +45,11 @@ jobs:
             --market-root /opt/b3-runtime/data/archive/cotahist_raw \
             --tickers PETR4 VALE3 ITUB4 BBDC4 WEGE3 \
             --days 365
+
+      - name: Validate chart path without quote or options requests
+        shell: bash
+        run: |
+          cd /opt/b3-investment-options-agent
+          timeout 45s env PYTHONPATH="$GITHUB_WORKSPACE/src" \
+            /opt/b3-investment-options-agent/.venv/bin/python \
+            "$GITHUB_WORKSPACE/scripts/validate_history_only_real.py"
