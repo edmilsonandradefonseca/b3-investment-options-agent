@@ -269,3 +269,15 @@ def test_dossier_runtime_failure_is_deferred_not_dropped(tmp_path):
     assert result["remaining_queue"] == 1
     assert result["results"][0]["status"] == "DEFERRED"
     assert "temporary local model failure" in result["results"][0]["error"]
+
+
+def test_matching_dossier_survives_latest_pointer_for_another_evidence_topic(tmp_path):
+    queue=LocalEvidenceQueue(tmp_path)
+    news=build_request('ITUB4',_events())
+    analyst=LocalEvidenceAnalyst(FakeClient())
+    queue.complete(analyst.analyze(news))
+    target=build_request('ITUB4',[{'evidence_type':'institution_price_target','source_ref':'https://cvm.test/e1','summary':'Separate target opinion'}])
+    queue.complete(analyst.analyze(target))
+    assert queue.latest('ITUB4').analysis_id==target.analysis_id
+    selected=LocalEvidenceContextSelector(queue).select(ticker='ITUB4',evidence_events=_events())
+    assert selected.status=='READY' and selected.dossier.analysis_id==news.analysis_id

@@ -14,6 +14,9 @@ on:
       - scripts/validate_put_pair_real.py
       - docs/research/institution_targets_reviewed.json
       - src/b3_agent/jobs/primary_targets.py
+      - src/b3_agent/jobs/dividend_refresh.py
+      - src/b3_agent/stored_dividends.py
+      - scripts/validate_async_economic_real.py
       - scripts/run_nightly_intelligence.py
       - src/b3_agent/institution_target_ingestion.py
       - src/b3_agent/economic_evidence.py
@@ -82,6 +85,12 @@ jobs:
           timeout 120s /opt/b3-investment-options-agent/.venv/bin/python scripts/ingest_institution_targets.py --apply --reviewed-fallback docs/research/institution_targets_reviewed.json \
             --url https://conteudos.xpi.com.br/acoes/relatorios/itau-unibanco-itub4-ainda-faz-sentido-pagar-por-qualidade/ \
             --url https://conteudos.xpi.com.br/acoes/relatorios/bradesco-bbdc4-recuperacao-gradual-mas-com-ventos-macro-contrarios/
+
+      - name: Validate asynchronous dividends and one real DeepSeek worker
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: |
+          timeout 360s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_async_economic_real.py
 
       - name: Validate candidate app against real Ubuntu data
         env:

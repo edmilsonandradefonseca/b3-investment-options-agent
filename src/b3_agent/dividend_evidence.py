@@ -62,6 +62,8 @@ def dividend_payload(ticker, evidence, cutoff):
     trailing = [event for event in events if event["payment_date"] and today-timedelta(days=365) < event["payment_date"] <= today]
     possible = [event for event in events if event["payment_status"] == "ANNOUNCED_FUTURE_PAYMENT" and event["new_purchase_entitlement"] == "CONDITIONAL_FUTURE_RECORD_DATE"]
     return {"policy_version": "issuer-dividends-v1", "collection_status": evidence.get("status", "UNKNOWN"),
+        "read_origin": evidence.get("read_origin"), "snapshot_available_at": evidence.get("snapshot_available_at"),
+        "snapshot_document_id": evidence.get("snapshot_document_id"),
         "events": events, "exclusions": exclusions, "outside_window_count": outside_window_count,
         "provider_error_type": evidence.get("error_type"), "provider_http_status": evidence.get("http_status"),
         "observed_paid_365d_gross_per_share_brl": sum(event["gross_amount_per_share_brl"] for event in trailing) if trailing else None,

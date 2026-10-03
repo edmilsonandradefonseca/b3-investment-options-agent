@@ -33,9 +33,10 @@ def _admissible(record, ticker, cutoff):
 
 
 class StockOpportunityScreenService:
-    def __init__(self, evidence_service=None, target_service=None):
+    def __init__(self, evidence_service=None, target_service=None, dividend_service=None):
         self.evidence = evidence_service or StrategyEvidenceService()
         self.target_service = target_service
+        self.dividend_service = dividend_service
 
     def build(self, tickers, *, objective='COMPARE_ONLY', include_portfolio=False,
               as_of=None, portfolio=None, economic_inputs=None):
@@ -99,16 +100,9 @@ class StockOpportunityScreenService:
             acquired[ticker] = (records, quote, fundamentals, errors)
         dividend_evidence={}
         if not historical:
-            from concurrent.futures import ThreadPoolExecutor
-            getter=getattr(self.evidence.fundamentals_provider,'get_dividends',None)
-            def collect(ticker):
-                if getter is None: return {'status':'UNSUPPORTED_PROVIDER','records':[]}
-                try:
-                    return {'status':'READ_OK','records':[asdict(r) for r in getter(ticker,start=requested_at.date()-timedelta(days=366))]}
-                except (OSError,RuntimeError,ValueError) as exc:
-                    return {'status':'PROVIDER_UNAVAILABLE','records':[],'error_type':type(exc).__name__,'http_status':getattr(exc,'code',None)}
-            with ThreadPoolExecutor(max_workers=4) as executor:
-                dividend_evidence=dict(zip(universe,executor.map(collect,universe),strict=True))
+            from b3_agent.stored_dividends import StoredDividendService
+            dividend_service=self.dividend_service or StoredDividendService()
+            dividend_evidence={ticker:dividend_service.build(ticker,datetime.now(timezone.utc)) for ticker in universe}
         # Current ingestion can finish after request arrival. Freeze once, after
         # acquisition, then apply the same PIT cutoff to every asset and source.
         cutoff = as_of or datetime.now(timezone.utc)

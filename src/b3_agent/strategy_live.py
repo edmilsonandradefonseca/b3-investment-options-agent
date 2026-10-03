@@ -637,19 +637,9 @@ class LiveStrategyComparisonService:
         target_evidence = {}
         dividend_evidence = {}
         if normalized_strategies == ("BUY_STOCK", "BUY_STOCK") and as_of is None:
-            # Reuse the configured fundamentals adapter; failures are per-asset.
-            from concurrent.futures import ThreadPoolExecutor
-            getter = getattr(self.evidence_service.fundamentals_provider, "get_dividends", None)
-            def collect_dividends(ticker):
-                if getter is None:
-                    return {"status": "UNSUPPORTED_PROVIDER", "records": []}
-                try:
-                    return {"status": "READ_OK", "records": [asdict(row) for row in getter(ticker, start=datetime.now(timezone.utc).date()-timedelta(days=366))]}
-                except (OSError, RuntimeError, ValueError) as exc:
-                    return {"status": "PROVIDER_UNAVAILABLE", "records": [], "error_type": type(exc).__name__, "http_status": getattr(exc, "code", None)}
-            with ThreadPoolExecutor(max_workers=2) as executor:
-                tickers = tuple(dict.fromkeys(assets))
-                dividend_evidence = dict(zip(tickers, executor.map(collect_dividends, tickers), strict=True))
+            from b3_agent.stored_dividends import StoredDividendService
+            dividend_service=StoredDividendService()
+            dividend_evidence={ticker:dividend_service.build(ticker,datetime.now(timezone.utc)) for ticker in dict.fromkeys(assets)}
 
         # Current BUY evidence is acquired before freezing the decision cutoff.
         # Explicit historical cutoffs remain authoritative and are never advanced.

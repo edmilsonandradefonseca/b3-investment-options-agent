@@ -441,7 +441,9 @@ class LocalEvidenceContextSelector:
         evidence_events: list[dict[str, Any]] | tuple[dict[str, Any], ...],
         as_of: datetime | None = None,
     ) -> LocalContextSelection:
-        dossier = self.queue.latest(ticker)
+        request=build_request(ticker,evidence_events)
+        matching_path=self.queue.runs_dir / f"{request.analysis_id}.json"
+        dossier = LocalEvidenceDossier.from_dict(json.loads(matching_path.read_text(encoding="utf-8"))) if matching_path.exists() else self.queue.latest(ticker)
         if dossier is None:
             return LocalContextSelection(None, "ABSENT", ("NO_DOSSIER",))
 

@@ -33,7 +33,7 @@ class Providers:
 
 def service(records):
     provider=Providers(records)
-    return StockOpportunityScreenService(SimpleNamespace(market_provider=provider,current_quote_provider=provider,fundamentals_provider=provider),target_service=SimpleNamespace(build=lambda ticker,cutoff:{"status":"UNKNOWN_NO_ADMISSIBLE_TARGETS","rows":[]})),provider
+    return StockOpportunityScreenService(SimpleNamespace(market_provider=provider,current_quote_provider=provider,fundamentals_provider=provider),dividend_service=SimpleNamespace(build=lambda ticker,cutoff:{"status":"NO_STORED_SNAPSHOT","records":[]}),target_service=SimpleNamespace(build=lambda ticker,cutoff:{"status":"UNKNOWN_NO_ADMISSIBLE_TARGETS","rows":[]})),provider
 
 
 def test_lower_observed_risk_ranks_without_valuation_or_personal_outcomes():
@@ -122,7 +122,7 @@ def test_current_screen_enriches_economics_and_keeps_observed_rank_separate():
         evidence=row['economic_evidence']
         assert evidence['quantity']>0 and evidence['expected_return'] is None
         assert evidence['announced_conditional_gross_income_brl'] is None
-        assert row['dividends']['collection_status']=='UNSUPPORTED_PROVIDER'
+        assert row['dividends']['collection_status']=='NO_STORED_SNAPSHOT'
         assert abs(evidence['notional_brl']+evidence['residual_cash_brl']-1000)<1e-7
 
 

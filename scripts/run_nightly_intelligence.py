@@ -49,7 +49,12 @@ def main() -> int:
     from b3_agent.jobs.primary_targets import PrimaryTargetRefreshJob
     reviewed=ROOT/'docs'/'research'/'institution_targets_reviewed.json'
     target_refresh=PrimaryTargetRefreshJob().run(reviewed,tickers=list(selected)) if reviewed.exists() else {'status':'NO_REVIEWED_SOURCES'}
+    from b3_agent.jobs.dividend_refresh import DividendRefreshJob
+    dividend_job=DividendRefreshJob()
+    selected_list=list(selected)
+    dividend_refresh={"batches":[dividend_job.run(selected_list[i:i+20]) for i in range(0,len(selected_list),20)]}
     output = {
+        'issuer_dividend_refresh':dividend_refresh,
         'institution_target_refresh':target_refresh,
         "ticker_count": result["ticker_count"],
         "completed": result["completed"],
@@ -70,7 +75,8 @@ def main() -> int:
     # COVERAGE_INSUFFICIENT is an explicit V4.2/V4.3 evidence state, not a
     # runtime failure. The nightly producer succeeds as long as official-source
     # loading is healthy and no ticker execution failed.
-    return 0 if official_ok and not result["failed"] else 2
+    dividend_projection_ok=all(r["status"]=="PROJECTED" for batch in dividend_refresh["batches"] for r in batch["results"])
+    return 0 if official_ok and not result["failed"] and dividend_projection_ok else 2
 
 
 if __name__ == "__main__":
