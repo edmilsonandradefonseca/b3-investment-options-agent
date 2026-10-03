@@ -95,3 +95,21 @@ def acquire_xp_report(url, *, opener=urlopen):
         data = response.read(2_000_001)
         if len(data) > 2_000_000: raise ValueError('Report too large')
     return xp_report_evidence(url, data.decode('utf-8'), datetime.now(timezone.utc))
+
+
+def reviewed_evidence(raw, cutoff):
+    """Import previously acquired, parser-reviewed facts without redating them."""
+    m=dict(raw['metadata'])
+    for field in ('published_at','retrieved_at','valid_from','valid_to'):
+        if m.get(field) is not None: m[field]=datetime.fromisoformat(m[field].replace('Z','+00:00'))
+    metadata=EvidenceMetadata(**m)
+    target=metadata.extra.get('price_target',{})
+    if metadata.extra.get('parser_version')!='xp-explicit-report-v1' or not re.fullmatch(r'[0-9a-f]{64}',metadata.extra.get('source_content_sha256','')):
+        raise ValueError('Missing reviewed parser acquisition provenance')
+    if not qualify_targets(target.get('ticker'),[SimpleNamespace(metadata=asdict(metadata))],cutoff)['rows']:
+        raise ValueError('Reviewed evidence fails current qualification')
+    content=raw['content']
+    if sha256(content.encode()).hexdigest()!=raw.get('content_hash') or raw.get('source_url')!=metadata.source:
+        raise ValueError('Reviewed content identity mismatch')
+    return Evidence(evidence_id=raw['evidence_id'],kind=EvidenceKind(raw['kind']),title=raw['title'],
+        content=content,metadata=metadata,source_url=raw['source_url'],content_hash=raw['content_hash'])

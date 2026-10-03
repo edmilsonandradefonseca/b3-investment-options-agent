@@ -1,0 +1,114 @@
+{
+  "schema_version": "reviewed-primary-target-evidence-v1",
+  "acquisition_context": "Public primary HTTP pages acquired and parsed in the development workspace; Ubuntu direct retrieval returned HTTP403. No source body is redistributed.",
+  "evidence": [
+    {
+      "evidence_id": "XP:34ae23ba141fae7d7a5936f126cbcce753a93b07a39d4125bc582c79b8e4f493",
+      "kind": "market_research",
+      "title": "XP institutional target ITUB4",
+      "content": "Institution XP; equity ITUB4; target BRL 50.0; end-year horizon 2027-12-31; report version 2026-08-06T23:18:02+00:00.",
+      "metadata": {
+        "document_id": "XP:34ae23ba141fae7d7a5936f126cbcce753a93b07a39d4125bc582c79b8e4f493",
+        "source": "https://conteudos.xpi.com.br/acoes/relatorios/itau-unibanco-itub4-ainda-faz-sentido-pagar-por-qualidade/",
+        "published_at": "2026-08-06T23:18:02+00:00",
+        "retrieved_at": "2026-10-03T23:18:05.530050+00:00",
+        "ticker_refs": [
+          "ITUB4"
+        ],
+        "sector_refs": [],
+        "event_refs": [],
+        "issuer_ref": null,
+        "cvm_code": null,
+        "provider_record_id": null,
+        "source_class": null,
+        "authority_tier": null,
+        "discovery_channel": null,
+        "transport_reliability": null,
+        "reference_at": null,
+        "first_seen_at": null,
+        "observed_at": null,
+        "source_status": null,
+        "acquisition_status": null,
+        "pit_status": null,
+        "materiality": null,
+        "materiality_reason": null,
+        "materiality_policy_version": null,
+        "topic": "price_target",
+        "source_quality": "primary",
+        "confidence": 1.0,
+        "valid_from": null,
+        "valid_to": null,
+        "retention_class": "market_evidence",
+        "decay_profile": "fast",
+        "extra": {
+          "price_target": {
+            "institution": "XP",
+            "ticker": "ITUB4",
+            "price_brl": 50.0,
+            "currency": "BRL",
+            "horizon_date": "2027-12-31"
+          },
+          "parser_version": "xp-explicit-report-v1",
+          "source_content_sha256": "b58f9d09e604324dc127328ba586eccc22575b5797191bbfb0d49934b6c5bd99",
+          "published_at_semantics": "EXPLICIT_REPORT_VERSION_MODIFIED_AT"
+        }
+      },
+      "source_url": "https://conteudos.xpi.com.br/acoes/relatorios/itau-unibanco-itub4-ainda-faz-sentido-pagar-por-qualidade/",
+      "content_hash": "f0e58a4b641eb0d138f51aced09a9f2ba2daeb8f25b0d8702a65074e585c079f"
+    },
+    {
+      "evidence_id": "XP:426e7d98d22ef71c31026f9803f23302b49ed1652958c96c0b6b8d7555f7312c",
+      "kind": "market_research",
+      "title": "XP institutional target BBDC4",
+      "content": "Institution XP; equity BBDC4; target BRL 21.0; end-year horizon 2027-12-31; report version 2026-08-13T14:36:15+00:00.",
+      "metadata": {
+        "document_id": "XP:426e7d98d22ef71c31026f9803f23302b49ed1652958c96c0b6b8d7555f7312c",
+        "source": "https://conteudos.xpi.com.br/acoes/relatorios/bradesco-bbdc4-recuperacao-gradual-mas-com-ventos-macro-contrarios/",
+        "published_at": "2026-08-13T14:36:15+00:00",
+        "retrieved_at": "2026-10-03T23:18:12.134952+00:00",
+        "ticker_refs": [
+          "BBDC4"
+        ],
+        "sector_refs": [],
+        "event_refs": [],
+        "issuer_ref": null,
+        "cvm_code": null,
+        "provider_record_id": null,
+        "source_class": null,
+        "authority_tier": null,
+        "discovery_channel": null,
+        "transport_reliability": null,
+        "reference_at": null,
+        "first_seen_at": null,
+        "observed_at": null,
+        "source_status": null,
+        "acquisition_status": null,
+        "pit_status": null,
+        "materiality": null,
+        "materiality_reason": null,
+        "materiality_policy_version": null,
+        "topic": "price_target",
+        "source_quality": "primary",
+        "confidence": 1.0,
+        "valid_from": null,
+        "valid_to": null,
+        "retention_class": "market_evidence",
+        "decay_profile": "fast",
+        "extra": {
+          "price_target": {
+            "institution": "XP",
+            "ticker": "BBDC4",
+            "price_brl": 21.0,
+            "currency": "BRL",
+            "horizon_date": "2027-12-31"
+          },
+          "parser_version": "xp-explicit-report-v1",
+          "source_content_sha256": "4ff668058b3780ab34d153ea72fd380f25da29149e9427f63de96bf8c3d07c98",
+          "published_at_semantics": "EXPLICIT_REPORT_VERSION_MODIFIED_AT"
+        }
+      },
+      "source_url": "https://conteudos.xpi.com.br/acoes/relatorios/bradesco-bbdc4-recuperacao-gradual-mas-com-ventos-macro-contrarios/",
+      "content_hash": "926dbebd54ca2d1cd6c6dff145cf8ea3ae4deeaa2eb10a0d642b140a7d82ea27"
+    }
+  ]
+}

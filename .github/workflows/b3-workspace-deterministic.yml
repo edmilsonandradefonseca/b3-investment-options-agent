@@ -12,6 +12,9 @@ on:
       - src/b3_agent/opportunity_screen.py
       - scripts/validate_stock_screen_real.py
       - scripts/validate_put_pair_real.py
+      - docs/research/institution_targets_reviewed.json
+      - src/b3_agent/jobs/primary_targets.py
+      - scripts/run_nightly_intelligence.py
       - src/b3_agent/institution_target_ingestion.py
       - src/b3_agent/economic_evidence.py
       - scripts/ingest_institution_targets.py
@@ -75,7 +78,7 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/src
         run: |
-          timeout 120s /opt/b3-investment-options-agent/.venv/bin/python scripts/ingest_institution_targets.py --apply \
+          timeout 120s /opt/b3-investment-options-agent/.venv/bin/python scripts/ingest_institution_targets.py --apply --reviewed-fallback docs/research/institution_targets_reviewed.json \
             --url https://conteudos.xpi.com.br/acoes/relatorios/itau-unibanco-itub4-ainda-faz-sentido-pagar-por-qualidade/ \
             --url https://conteudos.xpi.com.br/acoes/relatorios/bradesco-bbdc4-recuperacao-gradual-mas-com-ventos-macro-contrarios/
 

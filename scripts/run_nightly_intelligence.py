@@ -46,7 +46,11 @@ def main() -> int:
         tickers=list(selected),
         official_evidence_by_ticker=official_map,
     )
+    from b3_agent.jobs.primary_targets import PrimaryTargetRefreshJob
+    reviewed=ROOT/'docs'/'research'/'institution_targets_reviewed.json'
+    target_refresh=PrimaryTargetRefreshJob().run(reviewed,tickers=list(selected)) if reviewed.exists() else {'status':'NO_REVIEWED_SOURCES'}
     output = {
+        'institution_target_refresh':target_refresh,
         "ticker_count": result["ticker_count"],
         "completed": result["completed"],
         "skipped": result["skipped"],
