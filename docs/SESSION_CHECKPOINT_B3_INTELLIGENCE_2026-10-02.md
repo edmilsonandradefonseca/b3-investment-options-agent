@@ -6,6 +6,41 @@
 **Último HEAD de código validado:** `34c1fe6cb2669a7a115e17558dc4e3aa10c2698b`; este checkpoint será o commit mais novo da branch.  
 **CI no HEAD:** sucesso — Actions run `37088394248` (Python e frontend build).
 
+## Bloco funcional progressivo — 03/10/2026
+
+Código `743de2d` + tabela `9256e0d`; CI #1334/#1335 SUCCESS: 806 testes Python e build React. Runner Ubuntu [37116668333](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37116668333) SUCCESS após aguardar CI verde.
+
+### Entrega e matriz
+
+| Capacidade | Estado deste bloco |
+| --- | --- |
+| Opportunities determinístico exposto à UI | Corrigido: workspace_result/candidatos/marketability/ranking e packs por ativo são expostos no resultado, mesmo sem fast route. Facts do fast route continuam prevalecendo. |
+| Opportunities e Strategy Lab antes da síntese | Frontend solicita fatos determinísticos com research armazenado e zero modelos, publica-os e depois solicita o senior normal. Não repete pesquisa web na primeira fase. |
+| Erro ou troca de seleção | Falha da síntese preserva o resultado determinístico já exibido; seleção/navegação invalida resposta antiga. Indicadores PENDING/FAILED explícitos. |
+| Comparação lado a lado | Tabela alinhada de capital, métricas informadas pelo motor, qualidade, as_of e fontes. Não calcula no React nem atribui vencedor. Aceite visual ainda aberto. |
+| UNKNOWN | Ausência de evidência de holding deixa “Na carteira” indisponível, não “Não”. Métricas ausentes não viram zero. |
+| Copilot | Perguntas livres preservam caminho senior/contextual, sem serem forçadas a snapshot. Nenhuma nova orquestração transversal neste bloco. |
+| Ranking econômico dentro/fora | Continua aberto; os 20 candidatos de PETR4 têm ordenação técnica, não ranking econômico validado. |
+| Síntese/latência completa | Continua aberta. Não houve comparação de qualidade nem medição senior neste bloco. |
+
+### Validação real e limites
+
+A instância candidata isolada (ASGI) no runner usa o código GitHub e apenas configuração B3/provedores selecionada do processo real, sem imprimir valores de ambiente. Usa /opt/b3-runtime/data e os provedores reais. Sem fixtures/modelos/novos ledgers.
+
+No primeiro gate, gráfico/PIT PETR4: 85 bars, timestamps de observação/disponibilidade dentro do cutoff, indicadores backend coerentes, zero opções; 357,4 ms. Opportunities: 20 candidatos, ranking DEFERRED_INCOMPLETE_CONTEXT, zero LLMs, 1.894,6 ms. Strategy Lab ITUB4 BUY × BBDC4 BUY: duas alternativas/packs, zero LLMs, 1.942,7 ms. Segundo gate do código final também PASS.
+
+O checkout de produção foi atualizado pelo runner para `9256e0d`, mas o restart segue `RUNTIME_RESTART=BLOCKED` por sudo interativo. Os logs HTTP do processo ativo ainda têm o shape antigo de Opportunities. **Não declarar o backend novo ativado ou a UI Windows instalada.** O aceite PETR4 do processo ativo e o diferencial HTTP continuam PASS; isso não comprova carga do novo bloco. Nenhum sinal/process kill ou mudança de sudoers foi usado.
+
+A primeira fase adiciona uma chamada determinística; caches de provedor existentes podem reutilizar aquisições dentro de suas regras, mas não há garantia de zero reacquisition ou melhora na latência total. O senior continua automático e não recebe fatos do cliente como autoridade. Cada resposta mantém seu próprio as_of/fontes; não fundimos snapshots distintos.
+
+### Próximo bloco direto
+
+1. Autenticar no Ubuntu e reiniciar `b3-runtime.service`; atualizar/rebuildar o frontend Windows da mesma branch. Este é o único bloqueio operacional do bloco novo.
+2. Validar diretamente as telas reais: gráfico PETR4, candidatos antes do senior e comparação ITUB4 × BBDC4 no painel central. Não repetir inventários/histórico/Yahoo.
+3. Fechar ranking econômico com política/objetivo/restrições explícitos sobre universo dentro/fora e aprofundar síntese/Copilot com um caso real por correção. UNKNOWN/PIT/V4.3/autoridade determinística permanecem obrigatórios; sem ledgers novos.
+
+Fluxo autorizado simplificado: conferir código/HEAD no GitHub → bloco coerente + CI → candidato e serviço reais via runner. Informar progresso durante o trabalho e pedir ação humana apenas onde autenticação/UI local realmente impedir a execução.
+
 ## Aceite HTTP real após nova tentativa — 03/10/2026
 
 Runner Ubuntu [37115180151](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37115180151): SUCCESS no checkout `e4b2594`. O sudo do runner permanece bloqueado, mas agora o workflow registra essa condição e consulta o processo ativo, permitindo validar um restart feito fora do job sem atribuí-lo ao runner.
