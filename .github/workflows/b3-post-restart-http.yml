@@ -33,31 +33,24 @@ jobs:
           assert {"b3_cotahist", "oplab"} <= set(data["source_refs"])
           assert data["options"]["contract_count"] == 0
           print("ACTIVE_PETR4_HTTP=PASS bars=" + str(data["market"]["history_count"]) + " options=0", flush=True)
-          case = next(case for case in make_cases() if case["id"] == "copilot_natural_language_compare")
-          response = call_json(base + "/orchestrate", case["request"], 240)
-          write_private_report(Path.home() / ".local/share/b3-investment-options-agent/live-validation", {
-              "instance": "ACTIVE HTTP systemd process; no candidate app, update or restart",
-              "case": case, "response": response,
-          })
-          body = response.get("response") or {}
-          result = body.get("result") or {}
-          proposal = result.get("proposal") or result.get("decision_proposal") or {}
-          alternatives = (result.get("strategy_comparison") or {}).get("alternatives") or []
-          assessments = proposal.get("alternative_assessments") or []
-          print(json.dumps({
-              "instance": "active HTTP systemd process",
-              "http": response["http_status"], "elapsed_ms": response["elapsed_ms"],
-              "api_error": bool(body.get("error")),
-              "alternatives": len(alternatives), "structured_assessments": len(assessments),
-              "source_count": len(body.get("sources") or []),
-              "transport_error": response["transport_error_type"],
-          }), flush=True)
-          assert response["http_status"] == 200 and not response["transport_error_type"] and not body.get("error")
-          assert len(alternatives) == len(assessments) == 2
-          assert {row["alternative_id"] for row in alternatives} == {row["alternative_id"] for row in assessments}
-          assert all(row["decision_implications"] for row in assessments)
-          assert set(result.get("asset_evidence") or {}) == {"ITUB4", "BBDC4"}
-          assert result["workspace_intelligence"]["workspace"] == "Strategy Lab"
-          print("ACTIVE_STRUCTURED_COMPARE=PASS stale_sidebar_selection_excluded=YES", flush=True)
-          print("RUNTIME_MUTATIONS=NONE", flush=True)
+          version = call_json(base + "/version", None, 15)
+          assert version["http_status"] == 200
+          assert version["response"].get("opportunity_screen_policy") == "B3_OBSERVED_STOCK_SCREEN_V1", "Active process did not load the observed screen"
+          assets = ["VALE3", "RENT3", "VIVT3", "BBAS3"]
+          for objective in ("LOWEST_REALIZED_VOLATILITY_60D", "HIGHEST_OBSERVED_LIQUIDITY_20D"):
+              request = {"task": "Compare explicit assets by observed objective; no future return inference.", "ticker": None, "context": {"workspace": "Opportunities", "opportunity_assets": assets, "opportunity_objective": objective, "analysis_mode": "deterministic", "research_mode": "stored_only"}}
+              response = call_json(base + "/orchestrate", request, 90)
+              write_private_report(Path.home() / ".local/share/b3-investment-options-agent/live-validation/active-stock-screen" / objective, {"instance": "ACTIVE HTTP systemd process", "request": request, "response": response})
+              body = response.get("response") or {}
+              result = body.get("result") or {}
+              screen = result.get("opportunity_screen") or {}
+              assert response["http_status"] == 200 and not body.get("error") and not response["transport_error_type"]
+              assert screen.get("policy_version") == "B3_OBSERVED_STOCK_SCREEN_V1"
+              assert set(result.get("asset_evidence") or {}) == set(assets)
+              assert screen["ranked_count"] >= 2 and len(screen["rows"]) == 4
+              assert result["telemetry"]["llm_calls"] == 0
+              assert result["derived_synthesis_status"] == "NOT_REQUESTED"
+              assert all(row["expected_return"] is None for row in screen["rows"])
+              print(json.dumps({"instance": "ACTIVE HTTP systemd process", "objective": objective, "status": screen["status"], "ranked_count": screen["ranked_count"], "elapsed_ms": response["elapsed_ms"], "llm_calls": 0}), flush=True)
+          print("ACTIVE_STOCK_SCREEN=PASS RUNTIME_MUTATIONS=NONE", flush=True)
           PY
