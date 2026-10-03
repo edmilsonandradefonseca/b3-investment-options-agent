@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Read-only Yahoo daily-history pilot against the existing local market archive.
 
-This script never writes downloaded rows to the project or runtime data stores.
-It emits aggregate coverage/difference metadata only.
+No downloaded market rows are written to the project or runtime data stores.
+Only coverage and aggregate comparison metadata is emitted to CI logs.
 """
 from __future__ import annotations
 
@@ -30,6 +30,13 @@ def _finite(value) -> float | None:
     return result if math.isfinite(result) else None
 
 
+def _percent_match(values: list[float], threshold: float) -> float | None:
+    return (
+        round(sum(value <= threshold for value in values) / len(values) * 100, 3)
+        if values else None
+    )
+
+
 def _compare(ticker: str, frame, local_rows: list) -> dict:
     yahoo: dict[date, dict] = {}
     for index, row in frame.iterrows():
@@ -48,50 +55,46 @@ def _compare(ticker: str, frame, local_rows: list) -> dict:
         if row.close is None:
             continue
         local[day] = {
-            "open": _finite(row.open),
-            "high": _finite(row.high),
-            "low": _finite(row.low),
-            "close": _finite(row.close),
-            "volume": _finite(row.volume),
-            "source": row.source,
+            key: _finite(getattr(row, key))
+            for key in ("open", "high", "low", "close", "volume")
         }
+        local[day]["source"] = row.source
 
     overlap = sorted(set(yahoo) & set(local))
-    close_abs_pct: list[float] = []
+    close_abs_pct: list[tuple[date, float]] = []
     ohlc_matches = 0
     ohlc_compared = 0
-    volume_matches = 0
-    volume_compared = 0
+    volume_abs_pct: list[float] = []
     for day in overlap:
         yc, lc = yahoo[day]["close"], local[day]["close"]
         if yc is not None and lc is not None and lc != 0:
-            close_abs_pct.append(abs(yc - lc) / abs(lc) * 100)
-        bar_pairs = [
-            (yahoo[day][field], local[day][field])
-            for field in ("open", "high", "low", "close")
-        ]
-        for left, right in bar_pairs:
+            close_abs_pct.append((day, abs(yc - lc) / abs(lc) * 100))
+        for field in ("open", "high", "low", "close"):
+            left, right = yahoo[day][field], local[day][field]
             if left is not None and right is not None:
                 ohlc_compared += 1
                 if math.isclose(left, right, rel_tol=0, abs_tol=0.011):
                     ohlc_matches += 1
         yv, lv = yahoo[day]["volume"], local[day]["volume"]
-        if yv is not None and lv is not None:
-            volume_compared += 1
-            if math.isclose(yv, lv, rel_tol=0, abs_tol=1):
-                volume_matches += 1
+        if yv is not None and lv is not None and lv != 0:
+            volume_abs_pct.append(abs(yv - lv) / abs(lv) * 100)
 
+    close_diffs = sorted(value for _, value in close_abs_pct)
+    p95 = (
+        close_diffs[min(len(close_diffs) - 1, math.ceil(0.95 * len(close_diffs)) - 1)]
+        if close_diffs else None
+    )
+    largest_differences = [
+        {"date": day.isoformat(), "absolute_close_difference_pct": round(value, 6)}
+        for day, value in sorted(close_abs_pct, key=lambda item: item[1], reverse=True)[:5]
+    ]
     latest_yahoo = max(yahoo) if yahoo else None
     latest_local = max(local) if local else None
     actions = {}
     for column in ("Dividends", "Stock Splits"):
         if column in frame.columns:
             actions[column.lower().replace(" ", "_")] = int(
-                sum(
-                    1
-                    for value in frame[column].tolist()
-                    if (_finite(value) or 0) != 0
-                )
+                sum(1 for value in frame[column].tolist() if (_finite(value) or 0) != 0)
             )
     return {
         "ticker": ticker,
@@ -100,25 +103,22 @@ def _compare(ticker: str, frame, local_rows: list) -> dict:
         "yahoo_first_date": min(yahoo).isoformat() if yahoo else None,
         "yahoo_latest_date": latest_yahoo.isoformat() if latest_yahoo else None,
         "yahoo_latest_calendar_age_days": (
-            (datetime.now(timezone.utc).date() - latest_yahoo).days
-            if latest_yahoo else None
+            (datetime.now(timezone.utc).date() - latest_yahoo).days if latest_yahoo else None
         ),
         "local_row_count_1y": len(local),
         "local_latest_date": latest_local.isoformat() if latest_local else None,
         "overlap_day_count": len(overlap),
-        "close_abs_pct_median": (
-            round(statistics.median(close_abs_pct), 6) if close_abs_pct else None
-        ),
-        "close_abs_pct_max": round(max(close_abs_pct), 6) if close_abs_pct else None,
+        "close_abs_pct_median": round(statistics.median(close_diffs), 6) if close_diffs else None,
+        "close_abs_pct_p95": round(p95, 6) if p95 is not None else None,
+        "close_within_0_01_pct": _percent_match(close_diffs, 0.01),
+        "close_within_0_1_pct": _percent_match(close_diffs, 0.1),
+        "close_within_0_5_pct": _percent_match(close_diffs, 0.5),
         "ohlc_within_0_011_match_pct": (
-            round(ohlc_matches / ohlc_compared * 100, 3)
-            if ohlc_compared else None
+            round(ohlc_matches / ohlc_compared * 100, 3) if ohlc_compared else None
         ),
-        "volume_within_one_share_match_pct": (
-            round(volume_matches / volume_compared * 100, 3)
-            if volume_compared else None
-        ),
+        "volume_abs_pct_median": round(statistics.median(volume_abs_pct), 3) if volume_abs_pct else None,
         "corporate_action_row_counts": actions,
+        "largest_close_differences": largest_differences,
         "local_sources": sorted({str(item["source"]) for item in local.values()}),
     }
 
@@ -127,8 +127,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--market-root", type=Path, required=True)
     parser.add_argument(
-        "--tickers",
-        nargs="+",
+        "--tickers", nargs="+",
         default=["PETR4", "VALE3", "ITUB4", "BBDC4", "WEGE3"],
     )
     parser.add_argument("--days", type=int, default=365)
@@ -145,6 +144,7 @@ def main() -> int:
         "yfinance_version": getattr(yf, "__version__", "UNKNOWN"),
         "tickers": args.tickers,
         "period_days": args.days,
+        "interval": "1d",
         "auto_adjust": False,
         "actions": True,
         "write_to_runtime_store": False,
@@ -155,7 +155,7 @@ def main() -> int:
         ticker = raw_ticker.upper().strip()
         started = monotonic()
         try:
-            rows = [
+            local_rows = [
                 row for row in repo.read(ticker)
                 if _day(row.observation_timestamp) >= cutoff
             ]
@@ -165,9 +165,8 @@ def main() -> int:
                 auto_adjust=False,
                 actions=True,
                 timeout=10,
-                raise_errors=True,
             )
-            result = _compare(ticker, frame, rows)
+            result = _compare(ticker, frame, local_rows)
             result["elapsed_ms"] = round((monotonic() - started) * 1000, 1)
             if result["status"] == "READ_OK":
                 successes += 1
