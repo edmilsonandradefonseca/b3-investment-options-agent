@@ -176,7 +176,7 @@ def test_weekend_request_fills_latest_published_weekday_after_local_archive(tmp_
     )
 
     rows = service.get_market_data(
-        "PETR4", date(2026, 9, 1), date(2026, 10, 3)
+        "PETR4", date(2026, 9, 25), date(2026, 10, 3)
     )
 
     assert oplab.calls == [("PETR4", date(2026, 9, 26), date(2026, 10, 3))]
