@@ -13,3 +13,7 @@ New-code GitHub CI 37158394546 PASS: 865 tests (2 warnings) in 10.04s, React and
 Ubuntu checkout updated; RUNTIME_RESTART=BLOCKED by sudo authentication. To activate this reader/adapter code: sudo systemctl restart b3-runtime.service. Focused active HTTP acceptance afterward must check institution_targets policy/status and dividend payload; no repeated senior call needed. Windows frontend visual verification remains pending.
 
 Next substantive data work: collect and verify current primary institution reports into existing canonical evidence, without a duplicate table/store, then evaluate current-horizon targets and dividend forecasts separately from issuer distributions. This reader does not close the economic recommendation or forecast gaps. BBDC4 distribution access needs a genuinely admissible source or appropriate provider permission; repeated identical 403 probes are unnecessary.
+
+## Active HTTP acceptance after user restart — 2026-10-03
+
+Workflow 37158805809 SUCCESS confirms the active systemd process returns stored-institution-targets-v1 for both ITUB4/BBDC4 plus issuer-dividends-v1. No senior call or runtime mutation. Current source statuses remain explicit; no target acquisition or access restoration is inferred. Test-only commit 3ce2f07; installed code bafd2df. New backend activation is accepted; report collection and Windows visual verification remain open.
