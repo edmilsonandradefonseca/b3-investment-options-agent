@@ -72,9 +72,10 @@ class LocalFirstMarketDataAdapter:
                 first_local - timedelta(days=1),
             )
 
-        # Fill dates after the local archive on weekdays. If the live provider
-        # has not published a new daily candle yet, keep the last local close.
-        if last_local < end and end.weekday() < 5:
+        # Request the uncovered tail for every calendar day. Providers return
+        # only published exchange sessions, so weekend requests still recover
+        # the latest completed weekday candle after a stale local archive.
+        if last_local < end:
             self._merge_remote(
                 combined,
                 normalized,
