@@ -843,7 +843,10 @@ def live_analysis(ticker: str) -> dict[str, Any]:
         snapshot = LiveProviderService().load(
             ticker, include_current_quote=False, include_options=False
         )
-        cutoff = snapshot.as_of
+        # OPLAB history becomes available to this response when acquisition completes.
+        # Use that response-time cutoff so ingestion-time availability is not
+        # incorrectly treated as future data.
+        cutoff = datetime.now(timezone.utc)
         if cutoff.tzinfo is None or cutoff.utcoffset() is None:
             raise ValueError("live snapshot as_of must be timezone-aware")
 
