@@ -32,6 +32,14 @@ const numberValue = (value: unknown): number | null =>
 const brl = (value: number | null) =>
   value == null ? null : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
+const strategyMetrics: {label: string; key: string; format: (value: number | null) => string | null}[] = [
+  {label: 'Capital requerido', key: 'capital_required', format: value => brl(value)},
+  {label: 'Retorno esperado informado pelo motor', key: 'expected_return', format: value => pct(value)},
+  {label: 'Perda máxima modelada', key: 'max_loss', format: value => brl(value)},
+  {label: 'Score de liquidez (0–1)', key: 'liquidity_score', format: value => value == null ? null : value.toLocaleString('pt-BR')},
+  {label: 'Impacto na carteira informado pelo motor', key: 'portfolio_impact', format: value => value == null ? null : value.toLocaleString('pt-BR')},
+];
+
 const pct = (value: number | null) =>
   value == null ? null : new Intl.NumberFormat('pt-BR', { style: 'percent', maximumFractionDigits: 2 }).format(value);
 
@@ -357,6 +365,16 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
 
     {strategyAlternatives.length > 0 && <section className="analysis-section">
       <h4>Alternativas comparadas</h4>
+      <div className="table-wrap"><table aria-label="Comparação de alternativas lado a lado">
+        <thead><tr><th>Métrica</th>{strategyAlternatives.map((item,index)=><th key={asText(item.alternative_id)??String(index)}>{asText(item.subject_id)??'Ativo'} · {asText(item.label)??asText(item.action_type)??'Alternativa'}</th>)}</tr></thead>
+        <tbody>
+          {strategyMetrics.map(row=><tr key={row.key}><th scope="row">{row.label}</th>{strategyAlternatives.map((item,index)=><td key={asText(item.alternative_id)??String(index)}>{row.format(numberValue(item[row.key]))??'Indisponível'}</td>)}</tr>)}
+          <tr><th scope="row">Data de referência</th>{strategyAlternatives.map((item,index)=><td key={index}>{when(item.as_of)}</td>)}</tr>
+          <tr><th scope="row">Qualidade</th>{strategyAlternatives.map((item,index)=><td key={index}>{asText(item.quality_status)??'Indisponível'}</td>)}</tr>
+          <tr><th scope="row">Fontes</th>{strategyAlternatives.map((item,index)=><td key={index}>{asStrings(item.source_refs).join(' · ')||'Indisponível'}</td>)}</tr>
+        </tbody>
+      </table></div>
+      <p className="muted">Valores fornecidos pelo backend. Indisponível não significa zero; esta tabela não escolhe um vencedor.</p>
       <div className="evidence-grid">
         {strategyAlternatives.map((item, index) => {
           const assumptions = asObject(item.assumptions);
