@@ -631,6 +631,12 @@ class LiveStrategyComparisonService:
                 for ticker in assets
             )
 
+        # Current BUY evidence is acquired before freezing the decision cutoff.
+        # Explicit historical cutoffs remain authoritative and are never advanced.
+        if normalized_strategies == ("BUY_STOCK", "BUY_STOCK") and as_of is None:
+            effective_as_of = datetime.now(timezone.utc)
+            packs = tuple(AssetEvidencePack(**{**asdict(pack), "as_of": effective_as_of}) for pack in packs)
+
         alternatives: list[StrategyAlternative] = []
         option_evidence: dict[str, dict[str, Any]] = {}
         option_snapshots: dict[str, tuple[list[Any], list[Any]]] = prefetched_options
