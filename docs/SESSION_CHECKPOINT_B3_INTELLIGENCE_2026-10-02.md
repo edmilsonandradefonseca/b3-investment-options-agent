@@ -170,3 +170,15 @@ Checkout `/opt/b3-investment-options-agent` atualizado para código validado. **
 A missão completa continua aberta. Prioridades seguintes: política determinística de ranking econômico e universo dentro/fora da carteira; fontes estruturadas de alvos/valuation; comparação financiada sell-to-buy com capital/custos; orquestração multi-alternativa AC-27/28; qualidade semântica e comparação controlada com ChatGPT usando a mesma pergunta/evidência. Cobertura estrutural não comprova superioridade, qualidade de cada inferência ou aceite integral dos AC-01–AC-28. UNKNOWN, V4.3, PIT e nenhuma nova ledger preservados.
 
 Detalhes: `docs/INTELLIGENCE_QUALITY_CAUSES_2026-10-03.md`.
+
+
+### Reinício confirmado no processo ativo — 03/10/2026, 09:14 BRT
+
+Usuário informou “feito”. Validação [37122133861 SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37122133861), usando o runner Ubuntu **somente por HTTP contra o serviço systemd ativo**, sem ASGI candidato, git update, sudo ou outro reinício:
+
+- `/analysis/live/PETR4`: 85 barras, último registro 02/10, fontes COTAHIST/OPLAB, zero opções.
+- Copilot explícito ITUB4/BBDC4: HTTP 200, sem erro, duas alternativas canônicas e duas `proposal.alternative_assessments` com IDs exatos e implicações por alternativa; 26 fontes; 82,4 segundos.
+- Seleção lateral PETR4 foi excluída: asset_evidence contém exatamente ITUB4 e BBDC4; workspace Strategy Lab.
+- CI do commit de validação `2e4a0d5` SUCCESS. Backend validado anteriormente `2d18f51` não foi alterado por esse commit (somente workflow de verificação).
+
+**Este aceite substitui o estado “reinício pendente” do bloco anterior.** O novo contrato está confirmado no processo ativo. Não confirma visualmente a instalação Windows nem qualidade semântica superior ao ChatGPT. Ranking econômico amplo, alvos/valuation verificados, comparação financiada e AC-27/28 completos continuam como próximos blocos. Não repetir as quatro chamadas senior nem pedir outro reinício sem nova mudança de runtime.
