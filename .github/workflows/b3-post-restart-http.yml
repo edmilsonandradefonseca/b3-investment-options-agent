@@ -52,5 +52,15 @@ jobs:
               assert result["derived_synthesis_status"] == "NOT_REQUESTED"
               assert all(row["expected_return"] is None for row in screen["rows"])
               print(json.dumps({"instance": "ACTIVE HTTP systemd process", "objective": objective, "status": screen["status"], "ranked_count": screen["ranked_count"], "elapsed_ms": response["elapsed_ms"], "llm_calls": 0}), flush=True)
-          print("ACTIVE_STOCK_SCREEN=PASS RUNTIME_MUTATIONS=NONE", flush=True)
+          request["context"].pop("analysis_mode")
+          response = call_json(base + "/orchestrate", request, 240)
+          write_private_report(Path.home() / ".local/share/b3-investment-options-agent/live-validation/active-senior-projection", {"instance": "ACTIVE HTTP systemd", "response": response})
+          body = response.get("response") or {}
+          result = body.get("result") or {}
+          assessments = (result.get("proposal") or {}).get("alternative_assessments") or []
+          assert response["http_status"] == 200 and not body.get("error")
+          assert {row["alternative_id"] for row in assessments} == set(assets)
+          assert all(row["decision_implications"] and row["unknowns"] for row in assessments)
+          print(json.dumps({"instance":"ACTIVE HTTP systemd", "senior_http":response["http_status"], "elapsed_ms":response["elapsed_ms"], "assessments":len(assessments), "stages":result.get("telemetry",{}).get("stages",{})}), flush=True)
+          print("ACTIVE_STOCK_SCREEN_AND_SENIOR=PASS RUNTIME_MUTATIONS=NONE", flush=True)
           PY
