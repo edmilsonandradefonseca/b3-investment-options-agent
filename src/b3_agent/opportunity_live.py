@@ -243,7 +243,7 @@ class LiveOpportunityService:
         )
 
         # UC-03 requires valuation, risk, liquidity, portfolio impact and
-        # prior experience for an economic ranking. The live path does not yet
+        # a declared objective for an economic ranking. Personal experience is optional. The live path does not yet
         # have all of those canonical dimensions, so annualized return must not
         # silently become the deciding score. Preserve a deterministic candidate
         # order by expiration/strike/id and explicitly defer economic ranking.
@@ -265,7 +265,7 @@ class LiveOpportunityService:
         ranking_status = "DEFERRED_INCOMPLETE_CONTEXT"
         ranking_reason = (
             "Economic ranking is deferred because canonical valuation, risk, "
-            "portfolio impact, calibrated liquidity and prior-experience inputs "
+            "portfolio impact, liquidity policy and a declared ranking objective "
             "are not all available. Annualized return remains evidence only."
         )
         selected_ids = {item.opportunity_id for item in ranked}

@@ -95,6 +95,19 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
   const workspaceMacro = asObject(workspaceMarket?.macro);
   const broadMarketResearch = asArray(workspaceMarket?.market_overview_research);
   const broadMarketDiagnostics = asArray(workspaceMarket?.market_overview_diagnostics);
+  const opportunityScreen = asObject(result.opportunity_screen);
+  const screenedRows = asArray(opportunityScreen?.rows).map(asObject).filter((item): item is Obj => item !== null);
+  const screeningReasons: Record<string, string> = {
+    HISTORY_PROVIDER_UNAVAILABLE:'Histórico indisponível na fonte', CURRENT_QUOTE_UNAVAILABLE:'Cotação atual indisponível',
+    FUNDAMENTALS_UNAVAILABLE:'Fundamentos indisponíveis', INVALID_HISTORY_VALUE:'Histórico contém valores inválidos',
+    DUPLICATE_HISTORY_OBSERVATIONS:'Observações duplicadas no histórico', INSUFFICIENT_OBJECTIVE_SAMPLE:'Amostra insuficiente para o objetivo',
+    STALE_OBJECTIVE_WINDOW:'Última observação há mais de 7 dias · fora da ordenação',
+    NONCOMPARABLE_OBSERVATION_WINDOW:'Janela de observações diferente da população comparável',
+  };
+  const screenStatus: Record<string, string> = {
+    RANKED_CONDITIONALLY:'Ordenação condicional disponível', PARTIAL_COMPARABLE_UNIVERSE:'Ordenação parcial · há ativos não comparáveis',
+    INSUFFICIENT_COMPARABLE_ASSETS:'Menos de dois ativos comparáveis · sem ranking', COMPARED_WITHOUT_RANKING:'Comparação sem ranking',
+  };
   const opportunitySet = asObject(result.opportunity_set);
   const opportunityRankingStatus = asText(result.opportunity_ranking_status);
   const opportunityRankingReason = asText(result.opportunity_ranking_reason);
@@ -190,7 +203,7 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
     </section>}
 
     {rationale && <section className="analysis-section"><h4>Racional</h4><p>{rationale}</p></section>}
-    {workspaceName === 'Opportunities' && rankedOpportunities.length === 0 && <div className="state-banner limited">
+    {workspaceName === 'Opportunities' && !opportunityScreen && rankedOpportunities.length === 0 && <div className="state-banner limited">
       <strong>Sem ranking disponível</strong>
       <span>{opportunityRankingReason ?? (opportunitySet ? 'O pipeline não retornou candidatos canônicos nesta execução.' : 'O pipeline canônico não retornou um conjunto de oportunidades.')}{opportunityRankingStatus ? ` · estado ${opportunityRankingStatus}` : ''}</span>
     </div>}
@@ -281,6 +294,28 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
         {assignmentCapital != null ? `Capital potencial de exercício/assign: ${brl(assignmentCapital)}.` : ''}
         {uncoveredCallShares != null ? ` Ações descobertas em calls: ${uncoveredCallShares}.` : ''}
       </p>}
+    </section>}
+
+    {opportunityScreen && <section className="analysis-section">
+      <h4>Comparação de ações · risco e liquidez observados</h4>
+      <p>{screenStatus[asText(opportunityScreen.status) ?? ''] ?? 'Estado indisponível'}</p>
+      <p className="muted">Objetivo: {asText(opportunityScreen.objective) === 'LOWEST_REALIZED_VOLATILITY_60D' ? 'menor volatilidade realizada em 60 retornos' : asText(opportunityScreen.objective) === 'HIGHEST_OBSERVED_LIQUIDITY_20D' ? 'maior proxy de liquidez em 20 observações' : 'comparar sem ordenar'}.
+        {' '}Janela comparável: {asText(opportunityScreen.reference_window_start) ?? 'Indisponível'} a {asText(opportunityScreen.reference_window_end) ?? 'Indisponível'}.
+        {' '}Ordenação calculada pelo backend; não representa maior retorno futuro ou recomendação de compra.</p>
+      <div className="table-wrap"><table><thead><tr><th>Posição no objetivo</th><th>Ativo</th><th>Carteira</th><th>Qtd. de ações</th><th>Cotação atual</th><th>Data da cotação</th><th>Volatilidade realizada 60d</th><th>Proxy de liquidez média 20d</th><th>Cobertura / exclusões</th></tr></thead><tbody>{screenedRows.map(row => {
+        const holding = asObject(row.portfolio);
+        return <tr key={asText(row.ticker)}>
+          <td>{numberValue(row.rank) ?? 'Sem ranking'}</td><td>{asText(row.ticker)}</td>
+          <td>{holding?.held === true ? 'Dentro' : holding?.held === false ? 'Fora' : 'UNKNOWN'}</td>
+          <td>{numberValue(holding?.stock_quantity)?.toLocaleString('pt-BR') ?? 'Indisponível'}</td>
+          <td>{brl(numberValue(row.current_price)) ?? 'Indisponível'}</td><td>{when(row.quote_as_of)}</td>
+          <td>{pct(numberValue(row.volatility_60d)) ?? 'Indisponível'}</td><td>{brl(numberValue(row.liquidity_proxy_20d)) ?? 'Indisponível'}</td>
+          <td>{numberValue(row.history_count) ?? 0} observações{asStrings(row.exclusions).map(reason => <p className="muted" key={reason}>{screeningReasons[reason] ?? reason}</p>)}</td>
+        </tr>;
+      })}</tbody></table></div>
+      <p className="muted">Liquidez aproximada: fechamento ajustado quando disponível (senão fechamento) × volume; não é o volume financeiro efetivamente negociado. Empates ficam na mesma posição. Preço-alvo e retorno esperado: UNKNOWN nesta política.</p>
+      <BulletSection title="Premissas e limites da ordenação" values={asStrings(opportunityScreen.limitations)} />
+      <details><summary>Fontes por ativo e evidência do cálculo</summary>{screenedRows.map(row => <p key={asText(row.ticker)}>{asText(row.ticker)} · {asStrings(row.source_refs).join(' · ')} · {asText(row.ranking_evidence_ref)}</p>)}</details>
     </section>}
 
     {rankedOpportunities.length > 0 && <section className="analysis-section">

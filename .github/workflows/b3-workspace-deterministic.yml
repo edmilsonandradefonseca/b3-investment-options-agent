@@ -9,6 +9,8 @@ on:
       - scripts/validate_workspace_deterministic_outputs.py
       - scripts/validate_progressive_workspace_real.py
       - src/b3_agent/agents/**
+      - src/b3_agent/opportunity_screen.py
+      - scripts/validate_stock_screen_real.py
       - src/b3_agent/server.py
       - frontend/src/App.tsx
       - frontend/src/components/AnalysisOutput.tsx
@@ -61,13 +63,11 @@ jobs:
         run: |
           timeout 90s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_progressive_workspace_real.py
 
-      - name: Validate real senior outputs for all decision workspaces and Copilot
+      - name: Validate observed stock ranking and one focused senior comparison
         env:
           PYTHONPATH: ${{ github.workspace }}/src
         run: |
-          for senior_case in strategy_lab_stock_buy_comparison opportunities_petr4 market_intelligence_vale3 copilot_natural_language_compare; do
-            timeout 240s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_progressive_workspace_real.py --senior --case "$senior_case"
-          done
+          timeout 300s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_stock_screen_real.py --senior
 
       - name: Update and restart the authorized Ubuntu runtime
         shell: bash

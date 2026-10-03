@@ -153,6 +153,9 @@ def _workspace_name(request: OrchestratorRequest) -> str:
 
 
 def _workspace_tickers(request: OrchestratorRequest) -> tuple[str, ...]:
+    selected = request.context.get("opportunity_assets")
+    if isinstance(selected, (list, tuple)):
+        return tuple(dict.fromkeys(str(item).upper().strip() for item in selected))
     values: list[str] = []
     for raw in (
         request.ticker,
@@ -170,6 +173,26 @@ def _workspace_tickers(request: OrchestratorRequest) -> tuple[str, ...]:
         )
     values.extend(re.findall(r"(?<![A-Z0-9])([A-Z]{4}\d{1,2})(?![A-Z0-9])", request.task.upper()))
     return tuple(dict.fromkeys(values))
+
+
+def _dispatch_opportunity_screen(request: OrchestratorRequest) -> OrchestratorResponse | None:
+    if _workspace_name(request).casefold() != 'opportunities' or 'opportunity_assets' not in request.context:
+        return None
+    from b3_agent.opportunity_screen import StockOpportunityScreenService
+    assets = request.context['opportunity_assets']
+    include = request.context.get('include_portfolio_stocks', False)
+    if not isinstance(assets, (list, tuple)) or any(not isinstance(item, str) for item in assets) or not isinstance(include, bool):
+        raise ValueError('opportunity_assets must be a list of symbols and include_portfolio_stocks a boolean')
+    started = monotonic()
+    result = StockOpportunityScreenService().build(assets,
+        objective=request.context.get('opportunity_objective', 'COMPARE_ONLY'),
+        include_portfolio=include, as_of=request.context.get('as_of'))
+    result['workspace_intelligence'] = {'workspace':'Opportunities', 'as_of':result['as_of'],
+        'tickers':result['opportunity_screen']['requested_universe'], 'limitations':result['limitations'], 'derived_intelligence':{}}
+    result['derived_synthesis_status'] = 'NOT_REQUESTED'
+    result['telemetry'] = {'total_ms':(monotonic()-started)*1000, 'llm_calls':0}
+    return OrchestratorResponse(status='COMPLETED', result=result, sources=tuple(result['source_refs']),
+        audit=({'event':'observed_stock_screen', 'policy':result['opportunity_screen']['policy_version']},))
 
 
 def _uses_workspace_intelligence(request: OrchestratorRequest) -> bool:
@@ -234,7 +257,8 @@ def _workspace_intelligence_response(
                 "deterministic_context": context_payload.get("deterministic_context", {}),
                 "research_context": context_payload.get("deterministic_context", {}).get("market_analysis", {}),
                 "stored_research": context_payload.get("deterministic_context", {}).get("stored_research", {}),
-                "personal_history": context_payload.get("deterministic_context", {}).get("personal_history", {}),
+                "derived_synthesis_status": "FAILED" if senior.error else "COMPLETED",
+        "personal_history": context_payload.get("deterministic_context", {}).get("personal_history", {}),
                 "decision_history": context_payload.get("deterministic_context", {}).get("decision_history", {}),
                 "canonical_experience_context": {
                     "status": "CANONICAL_LOADER_NOT_CONFIGURED", "learnings": [],
@@ -1045,7 +1069,7 @@ def intelligence_local_ticker(ticker: str) -> dict[str, Any]:
 
 @app.get("/version")
 def version() -> dict[str, str]:
-    return {"service": "b3-orchestrator-server", "version": app.version}
+    return {"service": "b3-orchestrator-server", "version": app.version, "opportunity_screen_policy": "B3_OBSERVED_STOCK_SCREEN_V1"}
 
 
 @app.post("/orchestrate", response_model=OrchestrateResponse)
@@ -1058,7 +1082,16 @@ def orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
             context=request.context,
         )
         normalized = explicit_stock_comparison(normalized)
-        fast_response = _dispatch_fast_route(normalized)
+        fast_response = _dispatch_opportunity_screen(normalized)
+        if fast_response is not None:
+            if normalized.context.get('analysis_mode') == 'deterministic' or normalized.context.get('as_of') is not None:
+                return _response_to_model(fast_response)
+            normalized = OrchestratorRequest(task=normalized.task, ticker=None, context={
+                **normalized.context, 'selected_ticker':None,
+                'opportunity_assets':fast_response.result['opportunity_screen']['requested_universe'],
+            })
+        else:
+            fast_response = _dispatch_fast_route(normalized)
         if _uses_workspace_intelligence(normalized):
             response = _workspace_intelligence_response(
                 normalized,

@@ -24,6 +24,12 @@ try {
   for (const value of ['Verified supporting evidence','Verified contrary evidence','Alternative specific tradeoff','Missing comparable valuation','Missing cash evidence','Foregone alternative','Verified new evidence','Conflicting evidence','Material finding','Specific market risk','Capital not established','provider:1']) {
     assert.ok(visible.includes(value), `Decision content lost before render: ${value}`);
   }
+  const screenData={status:'COMPLETED',error:null,sources:[],audit:[],result:{workspace_intelligence:{workspace:'Opportunities'},opportunity_screen:{status:'PARTIAL_COMPARABLE_UNIVERSE',objective:'LOWEST_REALIZED_VOLATILITY_60D',reference_window_start:'2026-07-01',reference_window_end:'2026-10-02',rows:[{ticker:'ITUB4',rank:1,portfolio:{held:null,stock_quantity:null},volatility_60d:null,liquidity_proxy_20d:null,exclusions:['NONCOMPARABLE_OBSERVATION_WINDOW'],source_refs:['source:screen'],ranking_evidence_ref:'quant:screen'}]}}};
+  const screenHTML=renderToStaticMarkup(createElement(AnalysisOutput,{data:screenData})).split('<details class="technical-output">')[0];
+  assert.ok(screenHTML.includes('UNKNOWN'));
+  assert.ok(screenHTML.includes('Janela de observações diferente'));
+  assert.ok(screenHTML.includes('source:screen'));
+  assert.ok(!screenHTML.includes('Sem ranking disponível'));
   console.log('Decision rendering: PASS (human-facing evidence and tradeoffs)');
 } finally {
   await rm(directory,{recursive:true,force:true});

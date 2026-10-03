@@ -666,7 +666,7 @@ class WorkspaceIntelligenceContextService:
 
         workspace_result = dict(deterministic_result or {})
         if normalized_workspace == "opportunities" and normalized_tickers:
-            if "opportunity_set" not in workspace_result:
+            if "opportunity_set" not in workspace_result and "opportunity_screen" not in workspace_result:
                 try:
                     live_opportunities = self.opportunity_service.build(
                         normalized_tickers[0],
@@ -704,6 +704,7 @@ class WorkspaceIntelligenceContextService:
         if (
             normalized_workspace == "opportunities"
             and "opportunity_set" not in workspace_result
+            and "opportunity_screen" not in workspace_result
         ):
             limitations.append(
                 "No canonical UC-03 OpportunitySet is available. B3/João may "
