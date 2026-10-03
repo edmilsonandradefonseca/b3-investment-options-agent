@@ -1,3 +1,5 @@
+> **Última atualização: 03/10/2026.** A seção final “Atualização autoritativa” prevalece sobre os estados anteriores.
+
 # Checkpoint de sessão — B3 Investment & Options Agent
 
 **Data local:** 02/10/2026 (America/Sao_Paulo)  
@@ -129,3 +131,42 @@ Preservar V4.3, autoridade determinística, `UNKNOWN`, proveniência e correçã
 ## Prompt para retomar amanhã
 
 > Continue o projeto B3 Investment & Options Agent no repositório `edmilsonandradefonseca/b3-investment-options-agent`, branch `feature/react-functional-v43-integration`, PR #66. Leia primeiro `docs/SESSION_CHECKPOINT_B3_INTELLIGENCE_2026-10-02.md`, depois `docs/RESTART_PROMPT_B3_INTELLIGENCE_2026-10-02.md`, `docs/HANDOFF_B3_INTELLIGENCE_2026-10-01_END_OF_DAY.md` e documentos de autoridade indicados. Confirme HEAD e CI no GitHub. O último HEAD de código validado é `34c1fe6` e seu CI está verde; o checkpoint documental foi gravado após esse commit. Confirme o HEAD e CI atuais no GitHub. O Ubuntu ainda está em `4db5b07`: o endpoint mostrou 80 candles até 25/09 embora `source_refs` incluísse OPLAB. A correção publicada captura o `as_of` após adquirir o histórico para que `available_timestamp` de ingestão passe no corte sem admitir observações futuras. Primeiro peça/analise a validação HTTP Ubuntu descrita no checkpoint. Se passar, confirme visualmente Market Intelligence/PETR4. Depois continue a implementação real para Opportunities, Strategy Lab e Copilot a partir dos gaps registrados: ranking econômico dentro/fora da carteira, comparação BUY financiada/métricas, dados e painéis exigidos, síntese/latência. Não redesenhe V4.3, não crie ledgers, preserve UNKNOWN, autoridade determinística e PIT. Trabalhe autonomamente, mantenha CI verde e só solicite validação Ubuntu quando o próximo bloco completo estiver pronto.
+
+## Atualização autoritativa — 03/10/2026: qualidade estruturada e routing
+
+Código validado: `2d18f510c789cf18e9839583a774333199e49eea`.
+CI #1342 [SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37118672441): **820 testes Python**, React build e regressão de renderização visível.
+Runner Ubuntu [37118669518 SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37118669518).
+O commit que registra esta seção é documental, posterior ao código validado.
+
+### Entrega e causas comprovadas
+
+- Interface descartava achados/riscos/referências dos especialistas, conflitos do comitê, custo de oportunidade, impacto no capital, confiança e invalidações da proposta. Agora todos chegam à saída compartilhada das três telas/Copilot; capital incremental ausente não aparece como zero.
+- Síntese de workspace usa por padrão o caminho direto existente (`B3_WORKSPACE_SINGLE_SYNTHESIS=true`); a instância real confirmou somente o estágio `reason`. Não esperar campos de três especialistas/comitê nesta configuração. O contrato agora produz análise qualitativa estruturada **por alternativa/ativo**, com evidências favoráveis/contrárias, implicações, lacunas e referências. IDs inexistentes/duplicados e arrays inválidos são rejeitados; a análise é obrigatória no schema quando há IDs fornecidos.
+- Prompts agora exigem análise específica, contraditório, critérios de invalidação observáveis, lacunas proporcionais e português. Não criam métricas financeiras, preço-alvo, probabilidades ou ranking.
+- Copilot aceita uma gramática limitada de comparação explícita de duas compras de ações e usa o composer UC-04 existente, excluindo seleção lateral obsoleta. Formulários estruturados têm prioridade. Perguntas negadas, três ativos, opções, ações mistas ou orçamento monetário não são adivinhadas. A comparação retornada pode ser aberta centralmente no Strategy Lab preservando o snapshot. Continuidade integral AC-27/28 segue aberta.
+
+### Aceite real deste bloco
+
+Instâncias ASGI candidatas usaram os dados de produção e configuração real do processo Ubuntu, sem fixtures. Todas retornaram HTTP 200, nenhuma API error e os IDs esperados:
+
+| Jornada | Tempo desta execução | Análises estruturadas | Fontes |
+| --- | ---: | ---: | ---: |
+| strategy_lab_stock_buy_comparison | 44.3 s | 2 | 26 |
+| opportunities_petr4 | 89.7 s | 1 | 32 |
+| market_intelligence_vale3 | 73.1 s | 1 | 20 |
+| copilot_natural_language_compare | 89.8 s | 2 | 26 |
+
+Provedor/modelo **solicitados na configuração**: OpenClaw / `openai/gpt-5.6-luna` em todas as jornadas. Não há roteamento dinâmico para modelo mais avançado neste bloco; identificar modelo solicitado não é verificar internamente a versão executada pelo gateway.
+Context build: 19–50 s; síntese senior: 23–43 s; inputs ~82–364 mil caracteres. Não atribuir toda latência ao frontend nem alegar melhoria global de tempo a partir de execuções variáveis.
+Relatórios completos ficam privados, mode 0600, no Ubuntu; logs públicos mostram apenas metadados.
+
+PETR4: 85 barras, PIT observation/availability <= as_of, quant data_points igual à amostra, zero opções. HTTP ativo também preservou aceite até 02/10, fontes COTAHIST/OPLAB e zero opções. Determinístico: Opportunities 20 candidatos técnicos ~1,6 s; comparação ~1,6 s; Copilot explícito PASS sem modelos e sem PETR4 obsoleto.
+
+### Estado de implantação e próximo trabalho
+
+Checkout `/opt/b3-investment-options-agent` atualizado para código validado. **Processo systemd ainda não confirmado nessa versão**: `sudo -n systemctl restart b3-runtime.service` permanece bloqueado por autenticação interativa. A última confirmação de reinício do usuário precede este novo bloco. Para ativar: executar `sudo systemctl restart b3-runtime.service` e atualizar o frontend dessa branch na instalação Windows. Não confundir CI/candidato/checkout com tela ou processo carregado. Após o reinício, verificar uma resposta senior HTTP com `proposal.alternative_assessments` e a renderização central, sem repetir quatro chamadas longas sem necessidade.
+
+A missão completa continua aberta. Prioridades seguintes: política determinística de ranking econômico e universo dentro/fora da carteira; fontes estruturadas de alvos/valuation; comparação financiada sell-to-buy com capital/custos; orquestração multi-alternativa AC-27/28; qualidade semântica e comparação controlada com ChatGPT usando a mesma pergunta/evidência. Cobertura estrutural não comprova superioridade, qualidade de cada inferência ou aceite integral dos AC-01–AC-28. UNKNOWN, V4.3, PIT e nenhuma nova ledger preservados.
+
+Detalhes: `docs/INTELLIGENCE_QUALITY_CAUSES_2026-10-03.md`.

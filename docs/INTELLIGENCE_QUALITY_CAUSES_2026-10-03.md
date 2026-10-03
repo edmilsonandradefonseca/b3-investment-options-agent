@@ -14,7 +14,7 @@ AC-01–AC-28 or proof of superiority over ChatGPT.
 | Opportunities engine | LiveOpportunityService selects at most 20 options in expiry/strike/ID technical order; economic ranking is explicitly deferred. No broad stock ranking or allocation is supplied. | Still open: a versioned deterministic policy, eligible universe and objective/restrictions. Prompt improvement cannot close this gap or turn first candidate into best investment. |
 | Market data | Historical chart exists. Verified institutional target loader is absent; fundamentals and research may be partial or unavailable. | Still open: source-backed target ingestion and decision inputs. No model-generated substitute targets. |
 | Copilot / layout | Conversation responses are rendered in the right sidebar; comparison form responses are central. Navigation clears analysis and lacks structured handoff of alternatives. | Still open: explicit central comparison continuation and workspace continuity. No inferred multi-leg economics in this block. |
-| Senior routing | Three specialists, committee and reasoning are used by default, with optional synchronous João perspective. There is no new comparative quality baseline. | Keep existing routing; run one bounded real senior stock comparison with stage telemetry before runtime update. Do not equate successful HTTP or nonempty text with quality. |
+| Senior routing | Workspace runtime defaults to the existing direct single-synthesis reasoning path; the three-specialist/committee route is configurable. Synchronous João perspective is separately configurable. There is no new comparative quality baseline. | Keep existing routing; run one bounded real senior stock comparison with stage telemetry before runtime update. Do not equate successful HTTP or nonempty text with quality. |
 
 ## Verification
 
@@ -86,3 +86,5 @@ retain the original schema shape. Every declared property remains required for
 strict-schema client compatibility. Nonempty assessments without supplied IDs
 are rejected as well as foreign and duplicate IDs. This hardens the admission
 boundary; interpretations still require quality review against their sources.
+
+Final code 2d18f51: CI #1342 SUCCESS (820 Python tests, React build, render regression). Ubuntu run 37118669518 SUCCESS: all four real senior cases passed linked structured coverage, deterministic gates and PETR4 HTTP acceptance. Checkout updated; authenticated systemd restart remains pending. See the authoritative 03/10 update in SESSION_CHECKPOINT_B3_INTELLIGENCE_2026-10-02.md for timings and deployment distinction.
