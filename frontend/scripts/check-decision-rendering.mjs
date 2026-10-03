@@ -13,7 +13,7 @@ try {
   const { default: AnalysisOutput } = await import(pathToFileURL(output).href);
   const data = {status:'PASS', error:null, sources:[], audit:[], result:{
     workspace_intelligence:{workspace:'Strategy Lab'},
-    proposal:{action:'WAIT',subject_id:'A versus B',thesis:'Evidence required',rationale:'Conditional decision',confidence:'UNKNOWN',capital_impact:'Missing cash evidence',opportunity_cost:'Foregone alternative',invalidation_conditions:['Verified new evidence'],evidence_refs:['canonical:1']},
+    proposal:{alternative_assessments:[{alternative_id:'A',supporting_evidence:['Verified supporting evidence'],contradicting_evidence:['Verified contrary evidence'],decision_implications:['Alternative specific tradeoff'],unknowns:['Missing comparable valuation'],evidence_refs:['canonical:1']}],action:'WAIT',subject_id:'A versus B',thesis:'Evidence required',rationale:'Conditional decision',confidence:'UNKNOWN',capital_impact:'Missing cash evidence',opportunity_cost:'Foregone alternative',invalidation_conditions:['Verified new evidence'],evidence_refs:['canonical:1']},
     synthesis:{conflicts:['Conflicting evidence'],agreements:[],uncertainties:[],evidence_gaps:[]},
     market_agent_analysis:{summary:'Market view',findings:['Material finding'],risks:['Specific market risk'],source_refs:['provider:1'],evidence_refs:[]},
     risk_validation:{status:'FAIL',reasons:['Capital not established']},
@@ -21,7 +21,7 @@ try {
   const html = renderToStaticMarkup(createElement(AnalysisOutput,{data}));
   // Ignore the debug JSON: these facts must reach the human-facing output.
   const visible = html.split('<details class="technical-output">')[0];
-  for (const value of ['Missing cash evidence','Foregone alternative','Verified new evidence','Conflicting evidence','Material finding','Specific market risk','Capital not established','provider:1']) {
+  for (const value of ['Verified supporting evidence','Verified contrary evidence','Alternative specific tradeoff','Missing comparable valuation','Missing cash evidence','Foregone alternative','Verified new evidence','Conflicting evidence','Material finding','Specific market risk','Capital not established','provider:1']) {
     assert.ok(visible.includes(value), `Decision content lost before render: ${value}`);
   }
   console.log('Decision rendering: PASS (human-facing evidence and tradeoffs)');

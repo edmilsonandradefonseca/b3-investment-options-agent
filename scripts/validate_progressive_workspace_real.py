@@ -57,6 +57,8 @@ def main() -> int:
             'http': response.status_code, 'api_error': bool(data.get('error')),
             'elapsed_ms': round((monotonic()-started)*1000, 1),
             'proposal_present': bool(proposal),
+            'alternative_assessment_count': len(proposal.get('alternative_assessments') or []),
+            'context_build_ms': (result.get('workspace_intelligence') or {}).get('context_telemetry', {}).get('build_ms'),
             'opportunity_cost_present': bool(proposal.get('opportunity_cost')),
             'capital_impact_present': bool(proposal.get('capital_impact')),
             'invalidation_count': len(proposal.get('invalidation_conditions') or []),
@@ -68,7 +70,11 @@ def main() -> int:
         }), flush=True)
         assert response.status_code == 200 and not data.get('error'), 'Real senior request failed'
         assert proposal and proposal.get('rationale'), 'No structured senior decision'
-        assert len(result.get('strategy_comparison', {}).get('alternatives', [])) == 2
+        alternatives = result.get('strategy_comparison', {}).get('alternatives', [])
+        assert len(alternatives) == 2
+        assessments = proposal.get('alternative_assessments') or []
+        assert {item['alternative_id'] for item in assessments} == {item['alternative_id'] for item in alternatives}, 'Senior omitted or invented comparison alternatives'
+        assert all(item['decision_implications'] for item in assessments), 'No alternative-specific implications'
         return 0
     started = monotonic()
     data = client.get("/analysis/live/PETR4").json()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from dataclasses import asdict
 from typing import Any
 from time import monotonic
 
@@ -279,6 +280,7 @@ def build_workflow(
     def reason(state: B3State) -> dict[str, Any]:
         proposal = reasoning_agent.decide(_agent_context(state))
         proposal_dict = {
+            "alternative_assessments": [asdict(item) for item in getattr(proposal, "alternative_assessments", ())],
             "action": proposal.action,
             "subject_id": proposal.subject_id,
             "thesis": proposal.thesis,

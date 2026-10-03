@@ -309,6 +309,7 @@ def _workspace_intelligence_response(
         "telemetry": {"total_ms": (monotonic()-started)*1000, "stages": senior.result.get("stage_telemetry", {})},
         "workspace_intelligence": {
             "workspace": context.workspace,
+            "context_telemetry": deterministic_context_payload.get("context_telemetry", {}),
             "as_of": context.as_of.isoformat(),
             "tickers": list(context.tickers),
             "market_context": market_context,

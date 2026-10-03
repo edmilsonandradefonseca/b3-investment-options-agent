@@ -47,3 +47,26 @@ an explicit button to open an existing canonical comparison centrally in
 Strategy Lab, preserving the response snapshot without another request.
 Opportunities' continuation pre-fills its selected ticker, but full AC-27/28
 continuity of all objectives/restrictions and multi-leg orchestration remains open.
+
+## Real results and structured reasoning follow-up
+
+CI #1338 (d1ce0e6) and #1339 (f10bd48) passed Python, React and human-facing
+render regression. Ubuntu run 37117816117 returned a real senior decision in
+69.6 seconds, with 26 sources and five invalidation conditions. Run 37117965409
+confirmed the no-model Copilot comparison and a senior response in 64.4 seconds.
+Runtime metadata showed only the `reason` model stage, proving the deployed
+configuration uses the existing single-synthesis branch: specialist findings
+and committee conflicts are therefore absent by design. Input to reasoning was
+~194k characters. Checkout updated but sudo restart was blocked; these are
+candidate-instance results, not deployment of the new process.
+
+To support this observed route, DecisionProposal now has backward-compatible
+qualitative alternative_assessments. Each item separates supporting evidence,
+contradicting evidence, decision implications, unknowns and references. The
+schema and parser link IDs to actual supplied alternatives/assets and reject
+foreign or duplicate IDs and malformed arrays. No financial metric, valuation,
+probability or ranking authority is added. The workflow carries the structured
+items and the shared frontend renders them. Ubuntu's senior gate requires both
+canonical comparison alternatives and nonempty decision implications; merely
+producing a generic proposal is no longer sufficient. This is coverage validation,
+not proof that every interpretation is correct or superior to ChatGPT.

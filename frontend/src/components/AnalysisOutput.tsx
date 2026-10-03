@@ -174,6 +174,21 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
       </>}
     </section>}
 
+    {asArray(proposal?.alternative_assessments).length > 0 && <section className="analysis-section">
+      <h4>Análise por alternativa · interpretação dos agentes</h4>
+      <div className="evidence-grid">{asArray(proposal?.alternative_assessments).map((value, index) => {
+        const assessment = asObject(value);
+        return <article className="evidence-card" key={asText(assessment?.alternative_id) ?? String(index)}>
+          <h5>{asText(assessment?.alternative_id) ?? 'Alternativa'}</h5>
+          <BulletSection title="Evidências favoráveis" values={asStrings(assessment?.supporting_evidence)} />
+          <BulletSection title="Evidências contrárias" values={asStrings(assessment?.contradicting_evidence)} />
+          <BulletSection title="Implicações para a decisão" values={asStrings(assessment?.decision_implications)} />
+          <BulletSection title="O que falta saber" values={asStrings(assessment?.unknowns)} />
+          <BulletSection title="Referências" values={asStrings(assessment?.evidence_refs)} />
+        </article>;
+      })}</div>
+    </section>}
+
     {rationale && <section className="analysis-section"><h4>Racional</h4><p>{rationale}</p></section>}
     {workspaceName === 'Opportunities' && rankedOpportunities.length === 0 && <div className="state-banner limited">
       <strong>Sem ranking disponível</strong>
