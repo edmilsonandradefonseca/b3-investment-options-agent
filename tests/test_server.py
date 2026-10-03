@@ -369,7 +369,7 @@ def test_live_analysis_returns_pit_history_and_backend_indicators(monkeypatch) -
     from b3_agent.options.analysis import OptionsAnalysis
     from b3_agent.schemas.market import StockMarketData
 
-    as_of = datetime(2026, 10, 2, 12, tzinfo=timezone.utc)
+    as_of = datetime.now(timezone.utc) - timedelta(seconds=2)
     history = tuple(
         StockMarketData(
             instrument_id="PETR4",
@@ -387,13 +387,28 @@ def test_live_analysis_returns_pit_history_and_backend_indicators(monkeypatch) -
         )
         for index in range(40)
     )
+    acquired_at = datetime.now(timezone.utc)
+    fetched = StockMarketData(
+        instrument_id="PETR4",
+        ticker="PETR4",
+        observation_timestamp=acquired_at,
+        available_timestamp=acquired_at,
+        source="oplab",
+        ingested_at=acquired_at,
+        source_record_id="petr4:fetched-after-initial-as-of",
+        open=60,
+        high=61,
+        low=59,
+        close=60,
+        volume=2000,
+    )
     future = StockMarketData(
         instrument_id="PETR4",
         ticker="PETR4",
-        observation_timestamp=as_of + timedelta(days=1),
-        available_timestamp=as_of + timedelta(days=1),
+        observation_timestamp=acquired_at + timedelta(days=1),
+        available_timestamp=acquired_at + timedelta(days=1),
         source="test-history",
-        ingested_at=as_of + timedelta(days=1),
+        ingested_at=acquired_at + timedelta(days=1),
         source_record_id="petr4:future",
         open=999,
         high=999,
@@ -404,12 +419,12 @@ def test_live_analysis_returns_pit_history_and_backend_indicators(monkeypatch) -
     snapshot = type("Snapshot", (), {
         "ticker": "PETR4",
         "as_of": as_of,
-        "market_records": history + (future,),
+        "market_records": history + (fetched, future),
         "current_stock_quote": None,
         "option_contracts": (),
         "option_quotes": (),
         "options_analysis": OptionsAnalysis(),
-        "source_refs": ("test-history",),
+        "source_refs": ("test-history", "oplab"),
     })()
 
     class FakeLiveProviderService:
@@ -424,13 +439,13 @@ def test_live_analysis_returns_pit_history_and_backend_indicators(monkeypatch) -
 
     assert response.status_code == 200
     body = response.json()
-    assert body["market"]["history_count"] == 40
-    assert len(body["market"]["price_history"]) == 40
-    assert body["market"]["price_history"][-1]["close"] == 59
-    assert body["market"]["quant"]["data_points"] == 40
-    assert body["market"]["quant"]["rsi_14"] == 100
-    assert body["market"]["latest"]["source_record_id"] == "petr4:39"
-
+    assert body["market"]["history_count"] == 41
+    assert len(body["market"]["price_history"]) == 41
+    assert body["market"]["price_history"][-1]["close"] == 60
+    assert body["market"]["price_history"][-1]["source_record_id"] == fetched.source_record_id
+    assert body["market"]["quant"]["data_points"] == 41
+    assert body["market"]["latest"]["source_record_id"] == fetched.source_record_id
+    assert datetime.fromisoformat(body["as_of"]) >= acquired_at
 
 def test_current_fundamentals_exposes_source_and_excludes_future_records(monkeypatch) -> None:
     now = datetime.now(timezone.utc)
