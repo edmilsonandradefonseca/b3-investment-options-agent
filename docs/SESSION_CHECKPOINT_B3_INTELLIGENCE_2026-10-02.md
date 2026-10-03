@@ -1,0 +1,70 @@
+# Checkpoint de sessão — B3 Investment & Options Agent
+
+**Data local:** 02/10/2026 (America/Sao_Paulo)  
+**Branch:** `feature/react-functional-v43-integration`  
+**PR:** #66 (draft, aberto, mergeable)  
+**HEAD confirmado:** `34c1fe6cb2669a7a115e17558dc4e3aa10c2698b`  
+**CI no HEAD:** sucesso — Actions run `37088394248` (Python e frontend build).
+
+## Estado ao encerrar
+
+O usuário atualizou o Ubuntu até `4db5b07`, reiniciou `b3-runtime.service` e consultou `/analysis/live/PETR4`. A resposta teve `history_count=80`, último candle COTAHIST em `2026-09-25`, `source_refs` incluindo `oplab` e `options_count=0`. Isso revelou que OPLAB estava sendo buscado, mas os candles não entravam no histórico elegível da rota.
+
+## Diagnóstico e alterações desde o último bloco
+
+- O adaptador consultava o intervalo remoto descoberto apenas se a data final fosse dia útil. Corrigido para consultar também em fins de semana; teste de regressão adicionado.
+- A rota `/analysis/live/{ticker}` capturava `as_of` antes da aquisição. O OPLAB marca `available_timestamp` no momento da ingestão, posterior ao início da chamada, então o próprio corte descartava esses candles. Corrigido para registrar o corte depois da aquisição. Observações ainda futuras em relação ao corte continuam excluídas.
+- Teste da rota cobre candle recebido depois do `as_of` inicial e rejeita registro com observação futura.
+- CI final no HEAD `34c1fe6`: sucesso. O runner Ubuntu executou o caminho contra `/opt/b3-runtime/data` no commit do código `cb141dc`: PETR4, ITUB4, BBDC4 e WEGE3 tiveram 85 candles combinando `b3_cotahist` + `oplab`, até `2026-10-02`, em 145–181 ms. Nenhuma cotação atual ou cadeia de opções foi solicitada. É uma validação direta do serviço de histórico, ainda falta validar a resposta HTTP da rota com o último commit instalado.
+
+## Avaliação do piloto Yahoo Finance
+
+O piloto `yfinance` é somente de leitura, não persiste dados e não foi integrado à aplicação. No runner, obteve dados até 02/10 em aproximadamente 226–601 ms. A comparação com COTAHIST encontrou diferenças por ativo/período: VALE3 teve apenas 45 dias sobrepostos e mediana de diferença de fechamento de 0,766%; ITUB4 teve divergências pontuais de até 2,913%; PETR4, BBDC4 e WEGE3 tiveram melhor concordância geral, mas também pontos discrepantes. Não usar Yahoo sem validação específica como fonte de preço, indicador determinístico, liquidez, opção, aprendizado ou decisão. O histórico OPLAB recente foi obtido no runner, então Yahoo não é necessário para preencher a lacuna atual.
+
+## Próximo passo — aceite HTTP no Ubuntu
+
+O serviço em produção ainda não recebeu o último commit `34c1fe6`. Amanhã, atualizar e reiniciar:
+
+```bash
+cd /opt/b3-investment-options-agent &&
+git pull --ff-only origin feature/react-functional-v43-integration &&
+sudo systemctl restart b3-runtime.service
+
+ready=0
+for i in {1..20}; do
+  if curl -fsS --max-time 2 http://127.0.0.1:8000/health >/dev/null; then
+    ready=1
+    break
+  fi
+  sleep 2
+done
+test "$ready" -eq 1 &&
+curl -fsS --max-time 15 http://127.0.0.1:8000/analysis/live/PETR4 |
+./.venv/bin/python -c 'import json,sys; d=json.load(sys.stdin); m=d["market"]; print({"ticker":d["ticker"],"history_count":m["history_count"],"latest_source":m["latest"]["source"],"latest_date":m["latest"]["observation_timestamp"],"sources":d["source_refs"],"options_count":d["options"]["contract_count"]})'
+```
+
+Resultado esperado: último candle em `2026-10-02`, fontes `b3_cotahist` e `oplab`, histórico por volta de 85 candles e `options_count=0`. Se a resposta continuar em 25/09, inspecionar no payload a `available_timestamp` dos registros OPLAB e o `as_of` retornado antes de fazer outra alteração.
+
+## Trabalho ainda aberto
+
+- Validar visualmente Market Intelligence/PETR4: série, indicadores determinísticos, fontes, `as_of` e aviso de cobertura parcial.
+- Retomar o objetivo principal de Opportunities, Strategy Lab e Copilot com casos reais e logs privados já existentes, sem repetir os diagnósticos de timeout/ausência anteriores.
+- Opportunities ainda precisa evidenciar candidatos realmente calculados dentro e fora da carteira e uma ordenação econômica justificável; não declarar resolvida a venda de uma ação para financiar outra.
+- Strategy Lab ainda precisa demonstrar comparação lado a lado de BUY de ações e distinguir métricas determinísticas de cenários. Não declarar vencedor quando os dados ou política não sustentarem.
+- Market Intelligence deve apresentar cotação/histórico/indicadores/notícias com data, fonte, proveniência e limitações, sem preencher lacunas por inferência.
+- Para UC-07/08/09, manter resultados observados separados de outcomes canônicos; `UNKNOWN` não vira zero. Learning/ranking só após evidência canônica suficiente e corte PIT estrito. Não criar ledgers por conveniência.
+- Corrigir/validar erros comuns de síntese OpenClaw nos workspaces e comparar latência por estágio. O último gate extenso mostrou timeouts em Opportunities, Strategy Lab e Copilot; não repetir o replay longo inteiro sem correção focada.
+
+## Restrições e documentos de autoridade
+
+Preservar V4.3, autoridade determinística, `UNKNOWN`, proveniência e correção point-in-time. GitHub branch/PR é fonte da implementação. Antes de mudanças amplas, ler `docs/RESTART_PROMPT_B3_INTELLIGENCE_2026-10-02.md`, `docs/HANDOFF_B3_INTELLIGENCE_2026-10-01_END_OF_DAY.md` e documentos de autoridade que eles indicam, especialmente:
+
+- `docs/DECISION_WORKSPACES_DELIVERY_PLAN_2026-10-02.md`
+- `docs/UC070809_PRODUCTION_GAP_ANALYSIS_2026-10-02.md`
+- `docs/UC070809_OBSERVED_LIFECYCLE_BLOCK_2026-10-02.md`
+- `docs/UC070809_DECISION_HISTORY_BLOCK_2026-10-02.md`
+- `docs/UC08_CANONICAL_BOUNDARY_BLOCK_2026-10-02.md`
+
+## Prompt para retomar amanhã
+
+> Continue o projeto B3 Investment & Options Agent no repositório `edmilsonandradefonseca/b3-investment-options-agent`, branch `feature/react-functional-v43-integration`, PR #66. Leia primeiro `docs/SESSION_CHECKPOINT_B3_INTELLIGENCE_2026-10-02.md`, depois `docs/RESTART_PROMPT_B3_INTELLIGENCE_2026-10-02.md`, `docs/HANDOFF_B3_INTELLIGENCE_2026-10-01_END_OF_DAY.md` e documentos de autoridade indicados. Confirme HEAD e CI no GitHub. O HEAD atual no checkpoint é `34c1fe6`; CI está verde. O Ubuntu ainda está em `4db5b07`: o endpoint mostrou 80 candles até 25/09 embora `source_refs` incluísse OPLAB. A correção publicada captura o `as_of` após adquirir o histórico para que `available_timestamp` de ingestão passe no corte sem admitir observações futuras. Primeiro peça/analise a validação HTTP Ubuntu descrita no checkpoint. Se passar, confirme visualmente Market Intelligence/PETR4. Depois continue a implementação real para Opportunities, Strategy Lab e Copilot a partir dos gaps registrados: ranking econômico dentro/fora da carteira, comparação BUY financiada/métricas, dados e painéis exigidos, síntese/latência. Não redesenhe V4.3, não crie ledgers, preserve UNKNOWN, autoridade determinística e PIT. Trabalhe autonomamente, mantenha CI verde e só solicite validação Ubuntu quando o próximo bloco completo estiver pronto.
