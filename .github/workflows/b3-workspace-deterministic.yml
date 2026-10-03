@@ -77,6 +77,7 @@ jobs:
       - name: Acquire reviewed primary institutional reports into existing Qdrant
         env:
           PYTHONPATH: ${{ github.workspace }}/src
+          B3_AGENT_DATA_DIR: /opt/b3-runtime/data
         run: |
           timeout 120s /opt/b3-investment-options-agent/.venv/bin/python scripts/ingest_institution_targets.py --apply --reviewed-fallback docs/research/institution_targets_reviewed.json \
             --url https://conteudos.xpi.com.br/acoes/relatorios/itau-unibanco-itub4-ainda-faz-sentido-pagar-por-qualidade/ \

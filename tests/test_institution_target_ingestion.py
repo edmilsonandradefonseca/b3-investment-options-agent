@@ -31,6 +31,8 @@ def test_reviewed_transport_preserves_source_dates_and_rejects_modified_facts():
     raw=json.loads(json.dumps(asdict(xp_report_evidence(URL,page(),NOW)),default=lambda o:o.isoformat()))
     restored=reviewed_evidence(raw,NOW)
     assert restored.metadata.retrieved_at==NOW
+    assert restored.metadata.retention_class.value=="market_evidence"
+    assert restored.metadata.decay_profile.value=="fast"
     raw['content']='tampered'
     with pytest.raises(ValueError): reviewed_evidence(raw,NOW)
 

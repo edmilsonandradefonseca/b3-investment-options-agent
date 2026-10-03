@@ -102,6 +102,9 @@ def reviewed_evidence(raw, cutoff):
     m=dict(raw['metadata'])
     for field in ('published_at','retrieved_at','valid_from','valid_to'):
         if m.get(field) is not None: m[field]=datetime.fromisoformat(m[field].replace('Z','+00:00'))
+    from b3_agent.knowledge.lifecycle import RetentionClass,DecayProfile
+    if 'retention_class' in m: m['retention_class']=RetentionClass(m['retention_class'])
+    if 'decay_profile' in m: m['decay_profile']=DecayProfile(m['decay_profile'])
     metadata=EvidenceMetadata(**m)
     target=metadata.extra.get('price_target',{})
     if metadata.extra.get('parser_version')!='xp-explicit-report-v1' or not re.fullmatch(r'[0-9a-f]{64}',metadata.extra.get('source_content_sha256','')):
