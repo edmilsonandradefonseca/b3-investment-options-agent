@@ -37,7 +37,11 @@ jobs:
           git -C "$runtime_dir" fetch origin feature/react-functional-v43-integration
           git -C "$runtime_dir" merge --ff-only "$GITHUB_SHA"
           test "$(git -C "$runtime_dir" rev-parse HEAD)" = "$GITHUB_SHA"
-          sudo -n systemctl restart b3-runtime.service
+          if sudo -n systemctl restart b3-runtime.service; then
+            echo "RUNTIME_RESTART=PERFORMED"
+          else
+            echo "RUNTIME_RESTART=BLOCKED; checking the active HTTP runtime without claiming deployment"
+          fi
           ready=0
           for attempt in {1..20}; do
             if curl -fsS --max-time 2 http://127.0.0.1:8000/health >/dev/null; then
