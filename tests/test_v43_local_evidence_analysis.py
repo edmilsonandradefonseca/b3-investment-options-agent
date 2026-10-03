@@ -281,3 +281,10 @@ def test_matching_dossier_survives_latest_pointer_for_another_evidence_topic(tmp
     assert queue.latest('ITUB4').analysis_id==target.analysis_id
     selected=LocalEvidenceContextSelector(queue).select(ticker='ITUB4',evidence_events=_events())
     assert selected.status=='READY' and selected.dossier.analysis_id==news.analysis_id
+
+
+def test_default_local_analyst_is_bounded_non_thinking_structured_extraction():
+    analyst=LocalEvidenceAnalyst()
+    assert analyst.client.think is False
+    assert analyst.client.format_schema==LOCAL_ANALYSIS_SCHEMA
+    assert build_request('ITUB4',_events()).prompt_version=='b3_local_evidence_analyst_v3'

@@ -12,7 +12,7 @@ from b3_agent.llm.ollama_client import OllamaClient
 
 
 POLICY_VERSION = "v4.3-local-evidence-1"
-PROMPT_VERSION = "b3_local_evidence_analyst_v2"
+PROMPT_VERSION = "b3_local_evidence_analyst_v3"
 
 LOCAL_ANALYSIS_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -346,7 +346,7 @@ class LocalEvidenceQueue:
 
 class LocalEvidenceAnalyst:
     def __init__(self, client: OllamaClient | None = None):
-        self.client = client or OllamaClient(format_schema=LOCAL_ANALYSIS_SCHEMA)
+        self.client = client or OllamaClient(think=False,format_schema=LOCAL_ANALYSIS_SCHEMA)
 
     def analyze(self, request: LocalEvidenceAnalysisRequest) -> LocalEvidenceDossier:
         prompt = _analysis_prompt(request)

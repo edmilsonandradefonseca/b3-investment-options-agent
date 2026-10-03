@@ -49,6 +49,7 @@ def main():
             def __getattr__(self,key): return getattr(queue,key)
         started=monotonic();result=LocalEvidenceAnalystJob(queue=FocusedQueue()).run(limit=1)
         write_private_report(Path.home()/'.local/share/b3-investment-options-agent/live-validation/async-economic/local-worker',result)
+        print(json.dumps({'case':'LOCAL_ADMISSION','ready':result['ready'],'degraded':result['degraded'],'failed':result['failed'],'deferred':result['deferred'],'quality_flags':[row['quality_flags'] for row in result['results']]}),flush=True)
         assert result['ready']==1 and result['failed']==result['degraded']==result['deferred']==0, 'Real DeepSeek target dossier did not pass admission'
         print(json.dumps({'case':'REAL_DEEPSEEK_TARGET_WORKER','status':'READY','processed':1,'elapsed_ms':round((monotonic()-started)*1000,1)}),flush=True)
     else:
