@@ -33,3 +33,9 @@ def test_empty_store_preserves_unknown_not_zero_target():
     result=qualify_targets("ITUB4",[],NOW)
     assert result["status"]=="UNKNOWN_NO_ADMISSIBLE_TARGETS"
     assert result["expected_return"] is None
+
+
+def test_real_qdrant_payload_epoch_timestamps_are_qualified():
+    result=qualify_targets('ITUB4',[hit(published_at=(NOW-timedelta(days=1)).timestamp(),retrieved_at=NOW.timestamp())],NOW)
+    assert result['rows'][0]['price_brl']==40
+    assert not qualify_targets('ITUB4',[hit(published_at=float('nan'))],NOW)['rows']

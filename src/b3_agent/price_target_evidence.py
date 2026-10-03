@@ -1,7 +1,8 @@
 """Read institution targets only from explicit, qualified stored metadata."""
 from datetime import date, timedelta
 from urllib.parse import urlparse
-from b3_agent.stock_purchase import _number, _timestamp
+from b3_agent.stock_purchase import _number
+from b3_agent.intelligence.stored_research import _timestamp
 
 HOSTS={"BTG":("btgpactual.com",),"XP":("xpi.com.br",),"SAFRA":("safra.com.br",),"ITAU":("itau.com.br","itaucorretora.com.br")}
 
