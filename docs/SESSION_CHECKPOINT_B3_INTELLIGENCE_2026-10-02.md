@@ -6,6 +6,20 @@
 **Último HEAD de código validado:** `34c1fe6cb2669a7a115e17558dc4e3aa10c2698b`; este checkpoint será o commit mais novo da branch.  
 **CI no HEAD:** sucesso — Actions run `37088394248` (Python e frontend build).
 
+## Aceite HTTP real após nova tentativa — 03/10/2026
+
+Runner Ubuntu [37115180151](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37115180151): SUCCESS no checkout `e4b2594`. O sudo do runner permanece bloqueado, mas agora o workflow registra essa condição e consulta o processo ativo, permitindo validar um restart feito fora do job sem atribuí-lo ao runner.
+
+- PETR4 HTTP PASS: 85 candles; último `2026-10-02T03:00:00Z`, fonte OPLAB; `source_refs=["b3_cotahist","oplab"]`; zero opções. Latência observada: 692,9 ms.
+- Payload contém `price_history` e `quant`, além de latest/history_latest. Aceite visual do gráfico ainda não realizado.
+- Diferencial determinístico: zero falhas de transporte/HTTP; não é aceite de qualidade econômica nem da síntese senior.
+- Market Intelligence VALE3: orquestração determinística 1.217,5 ms; histórico direto 86 registros em 177,5 ms. Research armazenado sem eventos; pesquisa externa excluiu 18 registros futuros. UNKNOWN/limitações preservados.
+- Strategy Lab ITUB4 BUY × BBDC4 BUY: resposta determinística em 1.737,9 ms, com contrato de comparação e evidências; não declara vencedor ou payoff sem entradas econômicas suficientes.
+- Opportunities PETR4: resposta em 3.019,5 ms; ranking `DEFERRED_INCOMPLETE_CONTEXT`. Continua pendente ranking econômico dentro/fora da carteira.
+- Todos esses workspaces reportam `derived_synthesis_status=NOT_REQUESTED`; os tempos não medem OpenClaw, qualidade de síntese ou ciclo completo.
+- Relatório privado no Ubuntu: `/home/edmilson/.local/share/b3-investment-options-agent/live-validation/b3-deterministic-workspaces-20261003T100441Z.json`. Corpos de resposta e valores pessoais não foram publicados.
+- Esta seção supersede a pendência HTTP da tentativa anterior. Nenhum restart manual adicional é necessário para esse aceite. Gaps funcionais e aceite visual permanecem abertos.
+
 ## Retomada real pelo runner Ubuntu — 03/10/2026
 
 - HEAD recebido: `5e3815b`; CI #1329 SUCCESS; PR #66 continua aberto/draft.
