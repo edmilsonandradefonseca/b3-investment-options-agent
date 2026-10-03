@@ -9,7 +9,9 @@ on:
       - scripts/validate_yfinance_history.py
       - scripts/validate_history_only_real.py
       - src/b3_agent/orchestration/live_providers.py
+      - src/b3_agent/providers/local_market_history.py
       - src/b3_agent/server.py
+      - tests/test_local_market_history.py
 
 permissions:
   contents: read
