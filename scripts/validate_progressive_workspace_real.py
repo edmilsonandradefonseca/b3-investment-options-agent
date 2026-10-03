@@ -6,6 +6,7 @@ This is an isolated ASGI instance, not proof that systemd loaded the new code.
 """
 from __future__ import annotations
 
+import argparse
 from datetime import datetime
 import json
 import os
@@ -15,6 +16,9 @@ from time import monotonic
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--senior', action='store_true')
+    args = parser.parse_args()
     pid = subprocess.check_output(
         ["systemctl", "show", "b3-runtime.service", "--property=MainPID", "--value"],
         text=True, timeout=10,
@@ -34,6 +38,38 @@ def main() -> int:
     from b3_agent.server import app
 
     client = TestClient(app)
+    if args.senior:
+        from validate_live_workspace_outputs import make_cases, write_private_report
+        case = next(item for item in make_cases() if item['id'] == 'strategy_lab_stock_buy_comparison')
+        started = monotonic()
+        response = client.post('/orchestrate', json=case['request'])
+        data = response.json()
+        write_private_report(Path.home() / '.local/share/b3-investment-options-agent/live-validation', {
+            'instance': 'candidate ASGI using real Ubuntu data and existing model routing',
+            'case': case, 'response': data,
+        })
+        result = data.get('result') or {}
+        proposal = result.get('proposal') or result.get('decision_proposal') or {}
+        synthesis = result.get('synthesis') or {}
+        specialists = [result.get(key) or {} for key in ('market_agent_analysis', 'portfolio_agent_analysis', 'options_agent_analysis')]
+        print(json.dumps({
+            'case': case['id'], 'instance': 'candidate ASGI',
+            'http': response.status_code, 'api_error': bool(data.get('error')),
+            'elapsed_ms': round((monotonic()-started)*1000, 1),
+            'proposal_present': bool(proposal),
+            'opportunity_cost_present': bool(proposal.get('opportunity_cost')),
+            'capital_impact_present': bool(proposal.get('capital_impact')),
+            'invalidation_count': len(proposal.get('invalidation_conditions') or []),
+            'specialist_findings_count': sum(len(item.get('findings') or []) for item in specialists),
+            'conflicts_count': len(synthesis.get('conflicts') or []),
+            'source_count': len(data.get('sources') or []),
+            'telemetry': result.get('telemetry'),
+            'note': 'Structural coverage only; qualitative review and ChatGPT comparison remain pending.',
+        }), flush=True)
+        assert response.status_code == 200 and not data.get('error'), 'Real senior request failed'
+        assert proposal and proposal.get('rationale'), 'No structured senior decision'
+        assert len(result.get('strategy_comparison', {}).get('alternatives', [])) == 2
+        return 0
     started = monotonic()
     data = client.get("/analysis/live/PETR4").json()
     bars = data["market"]["price_history"]

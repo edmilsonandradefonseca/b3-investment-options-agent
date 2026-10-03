@@ -53,3 +53,7 @@ jobs:
       - name: Build React frontend
         working-directory: frontend
         run: npm run build
+
+      - name: Verify decision information reaches the rendered frontend
+        working-directory: frontend
+        run: node scripts/check-decision-rendering.mjs

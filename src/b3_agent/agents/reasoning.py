@@ -53,7 +53,14 @@ class InvestmentReasoningAgent:
                 "UNKNOWN assignment/expiry/roll statistics must remain unknown; personal frequency is not market probability. "
                 "When no specialist synthesis is supplied, synthesize supporting and contradicting evidence directly, "
                 "including risks, prior executions, limitations and explicit alternatives for PUT, CALL or stock. "
-                "Do not invent data or calculations. "
+                "Answer in Portuguese with a decision-specific thesis, not a generic market overview. "
+                "In rationale compare every supplied alternative, its strongest supporting and contradicting evidence, "
+                "and explain which supplied metric or missing dependency prevents a conclusion. "
+                "Use capital_impact and opportunity_cost to discuss the actual tradeoff; when unknown state the "
+                "specific missing input, never assume zero costs or available cash. Give observable, sourced "
+                "invalidation_conditions rather than vague warnings. Cite supplied identifiers. "
+                "Do not invent data or calculations. A technically ordered list with deferred ranking does not "
+                "authorize choosing its first item as the best investment. "
                 "If evidence is insufficient, prefer WAIT or NO_CHANGE. Return a structured proposal for human review."
             ),
             input_text=json.dumps(payload, ensure_ascii=False, default=str),

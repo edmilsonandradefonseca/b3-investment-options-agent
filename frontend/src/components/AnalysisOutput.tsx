@@ -158,6 +158,22 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
 
     {summary && <section className="analysis-summary"><h3>Resumo</h3><p>{summary}</p></section>}
 
+    {proposal && <section className="analysis-section">
+      <h4>Decisão proposta · revisão humana</h4>
+      <dl>
+        <div><dt>Ação / alternativa</dt><dd>{asText(proposal.action) ?? 'UNKNOWN'} · {asText(proposal.subject_id) ?? 'UNKNOWN'}</dd></div>
+        <div><dt>Confiança declarada pelo agente</dt><dd>{asText(proposal.confidence) ?? 'UNKNOWN'}</dd></div>
+        <div><dt>Impacto no capital</dt><dd>{asText(proposal.capital_impact) ?? 'Indisponível'}</dd></div>
+        <div><dt>Custo de oportunidade</dt><dd>{asText(proposal.opportunity_cost) ?? 'Indisponível'}</dd></div>
+      </dl>
+      <BulletSection title="O que invalidaria esta decisão" values={asStrings(proposal.invalidation_conditions)} />
+      <BulletSection title="Referências da decisão" values={asStrings(proposal.evidence_refs)} />
+      {asObject(result.risk_validation) && <>
+        <p>Validação determinística: {asText(asObject(result.risk_validation)?.status) ?? 'UNKNOWN'}</p>
+        <BulletSection title="Motivos da validação" values={asStrings(asObject(result.risk_validation)?.reasons)} />
+      </>}
+    </section>}
+
     {rationale && <section className="analysis-section"><h4>Racional</h4><p>{rationale}</p></section>}
     {workspaceName === 'Opportunities' && rankedOpportunities.length === 0 && <div className="state-banner limited">
       <strong>Sem ranking disponível</strong>
@@ -181,14 +197,23 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
         {marketAgent && <article className="evidence-card">
           <h5>Agente B3 · Mercado</h5>
           <p>{asText(marketAgent.summary) ?? 'Sem síntese disponível.'}</p>
+          <BulletSection title="Achados e implicações" values={asStrings(marketAgent.findings)} />
+          <BulletSection title="Riscos identificados" values={asStrings(marketAgent.risks)} />
+          <BulletSection title="Evidências e fontes" values={[...asStrings(marketAgent.evidence_refs), ...asStrings(marketAgent.source_refs)]} />
         </article>}
         {portfolioAgent && <article className="evidence-card">
           <h5>Agente B3 · Portfólio</h5>
           <p>{asText(portfolioAgent.summary) ?? 'Sem síntese disponível.'}</p>
+          <BulletSection title="Achados e implicações" values={asStrings(portfolioAgent.findings)} />
+          <BulletSection title="Riscos identificados" values={asStrings(portfolioAgent.risks)} />
+          <BulletSection title="Evidências e fontes" values={[...asStrings(portfolioAgent.evidence_refs), ...asStrings(portfolioAgent.source_refs)]} />
         </article>}
         {optionsAgent && <article className="evidence-card">
           <h5>Agente B3 · Opções</h5>
           <p>{asText(optionsAgent.summary) ?? 'Sem síntese disponível.'}</p>
+          <BulletSection title="Achados e implicações" values={asStrings(optionsAgent.findings)} />
+          <BulletSection title="Riscos identificados" values={asStrings(optionsAgent.risks)} />
+          <BulletSection title="Evidências e fontes" values={[...asStrings(optionsAgent.evidence_refs), ...asStrings(optionsAgent.source_refs)]} />
         </article>}
         {joaoPerspective && <article className="evidence-card">
           <h5>João Resolve · Pesquisa</h5>
@@ -290,7 +315,7 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
               {optionType === 'CALL'
                 ? <>
                     <div><dt>Capital já coberto pelas ações</dt><dd>{brl(coveredPositionValue ?? capital) ?? 'Indisponível'}</dd></div>
-                    <div><dt>Capital incremental</dt><dd>{brl(incrementalCapital ?? 0)}</dd></div>
+                    <div><dt>Capital incremental</dt><dd>{brl(incrementalCapital) ?? 'Indisponível'}</dd></div>
                   </>
                 : <div><dt>Capital requerido</dt><dd>{brl(capital) ?? 'Indisponível'}</dd></div>}
               <div><dt>Atratividade</dt><dd>{asText(item.attractiveness) ?? 'UNKNOWN'}</dd></div>
@@ -523,6 +548,7 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
     {asArray(asObject(result.decision_history)?.candidates).length ? <details><summary>Histórico geral do ativo — inclui raízes de opções não verificadas</summary><PersonalHistory value={result.personal_history} /></details> : <PersonalHistory value={result.personal_history} />}
 
     <BulletSection title="Pontos confirmados" values={agreements} />
+    <BulletSection title="Conflitos entre análises" values={asStrings(synthesis?.conflicts)} />
     <BulletSection title="Riscos" values={risks} />
     <BulletSection title="Incertezas" values={uncertainties} />
     <BulletSection title="Lacunas de evidência" values={evidenceGaps} />

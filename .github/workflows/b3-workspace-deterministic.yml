@@ -8,6 +8,7 @@ on:
       - .github/workflows/b3-workspace-deterministic.yml
       - scripts/validate_workspace_deterministic_outputs.py
       - scripts/validate_progressive_workspace_real.py
+      - src/b3_agent/agents/**
       - src/b3_agent/server.py
       - frontend/src/App.tsx
       - frontend/src/components/AnalysisOutput.tsx
@@ -59,6 +60,12 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/src
         run: |
           timeout 90s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_progressive_workspace_real.py
+
+      - name: Validate one real senior comparison with existing routing
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: |
+          timeout 300s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_progressive_workspace_real.py --senior
 
       - name: Update and restart the authorized Ubuntu runtime
         shell: bash

@@ -14,6 +14,7 @@ class SpecialistAgent:
 
     agent_name = "specialist"
     focus_keys: tuple[str, ...] = ()
+    analytical_focus = "Explain material evidence and limitations for each supplied alternative."
 
     def __init__(self, llm: LLMClient):
         self.llm = llm
@@ -33,7 +34,12 @@ class SpecialistAgent:
                 "and supplied evidence. Do not invent data, prices, calculations, rankings, "
                 "or recommendations. Optional derived intelligence is non-authoritative and may only "
                 "be used when consistent with supplied facts/evidence. Produce analysis for a separate synthesis agent. "
-                "Clearly state uncertainty and risks."
+                "Answer in Portuguese. Each finding must identify the asset or alternative, "
+                "the supplied evidence/reference and its implication for the user's decision. "
+                "Include supporting AND contradicting evidence; distinguish missing data from neutral evidence. "
+                "Avoid generic sector commentary without a supplied source. UNKNOWN is not zero. "
+                "Discuss all requested alternatives; a deferred technical candidate list is not an economic ranking. "
+                f"{self.analytical_focus} Clearly state uncertainty and risks."
             ),
             input_text=json.dumps(
                 {
@@ -71,11 +77,13 @@ class SpecialistAgent:
 
 class MarketAnalysisAgent(SpecialistAgent):
     agent_name = "market_analysis"
+    analytical_focus = "Assess price versus history, trend, volatility, drawdown, sourced fundamentals and dated events; distinguish association from causation and explain unavailable targets."
     focus_keys = ("market_analysis", "signals", "threats", "workspace_result")
 
 
 class PortfolioAnalysisAgent(SpecialistAgent):
     agent_name = "portfolio_analysis"
+    analytical_focus = "Assess actual holdings, incremental concentration, available capital and obligations only when supplied; contrast owning more, substituting and waiting without assuming free cash or calculating new metrics."
     focus_keys = (
         "portfolio_context",
         "risk_analysis",
@@ -87,6 +95,7 @@ class PortfolioAnalysisAgent(SpecialistAgent):
 
 class OptionsAnalysisAgent(SpecialistAgent):
     agent_name = "options_analysis"
+    analytical_focus = "For supplied contracts explain premium versus collateral, strike and expiry, bid/ask executability, coverage and adverse terminal scenarios. Separate modeled ITM, touch, early assignment and personal frequencies. If no options are requested, do not introduce an option recommendation."
     focus_keys = (
         "options_analysis",
         "options_transactions",
