@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from b3_agent.agents.context import AgentContext
+from b3_agent.agents.prompt_context import serialize_senior_context
 from b3_agent.llm.client import LLMClient
 from b3_agent.schemas.decision import AlternativeAssessment, DecisionProposal
 
@@ -71,6 +72,8 @@ class InvestmentReasoningAgent:
         result = self.llm.complete_json(
             instructions=(
                 "Act as the investment reasoning component of a decision copilot. "
+                "An object containing only $b3_context_ref is an exact repeated block: resolve its JSON Pointer "
+                "against this input and use the complete referenced facts, including UNKNOWN and source dates. "
                 "Use the supplied deterministic facts and retrieved evidence as the source of truth. "
                 "The supplied synthesis is a non-authoritative interpretation of independent specialist analyses: "
                 "use it to identify agreements, conflicts, uncertainties and evidence gaps, but do not treat it "
@@ -99,7 +102,7 @@ class InvestmentReasoningAgent:
                 "authorize choosing its first item as the best investment. "
                 "If evidence is insufficient, prefer WAIT or NO_CHANGE. Return a structured proposal for human review."
             ),
-            input_text=json.dumps(payload, ensure_ascii=False, default=str),
+            input_text=serialize_senior_context(payload),
             schema_name="investment_decision",
             schema=schema,
         )
