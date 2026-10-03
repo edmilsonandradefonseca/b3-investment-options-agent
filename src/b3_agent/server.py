@@ -186,7 +186,8 @@ def _dispatch_opportunity_screen(request: OrchestratorRequest) -> OrchestratorRe
     started = monotonic()
     result = StockOpportunityScreenService().build(assets,
         objective=request.context.get('opportunity_objective', 'COMPARE_ONLY'),
-        include_portfolio=include, as_of=request.context.get('as_of'))
+        include_portfolio=include, as_of=request.context.get('as_of'),
+        economic_inputs=request.context.get('opportunity_economic_inputs'))
     result['workspace_intelligence'] = {'workspace':'Opportunities', 'as_of':result['as_of'],
         'tickers':result['opportunity_screen']['requested_universe'], 'limitations':result['limitations'], 'derived_intelligence':{}}
     result['derived_synthesis_status'] = 'NOT_REQUESTED'

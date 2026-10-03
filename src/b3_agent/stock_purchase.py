@@ -17,7 +17,7 @@ def _timestamp(value):
         return None
 
 
-def stock_purchase_payload(alternatives, packs, cutoff, dividend_evidence=None, target_evidence=None):
+def stock_purchase_payload(alternatives, packs, cutoff, dividend_evidence=None, target_evidence=None, portfolio=None, economic_inputs=None):
     rows = []
     for alternative, pack in zip(alternatives, packs, strict=True):
         quote = pack.market.get("current_quote") or {}
@@ -59,6 +59,10 @@ def stock_purchase_payload(alternatives, packs, cutoff, dividend_evidence=None, 
             "future_dividend_per_share": None, "verified_price_target": None,
             "forecast_status": "UNKNOWN_NO_QUALIFIED_FORECAST_EVIDENCE",
         })
+    from b3_agent.economic_evidence import economic_evidence
+    for row in rows:
+        row["economic_evidence"] = economic_evidence(row, budget=row["capital_required_brl"],
+            entry_cost=(economic_inputs or {}).get("entry_costs_brl",{}).get(row["ticker"]), portfolio=portfolio)
     comparisons = []
     for name in sorted(set(rows[0]["fundamental_metrics"]) | set(rows[1]["fundamental_metrics"])):
         left = rows[0]["fundamental_metrics"].get(name)

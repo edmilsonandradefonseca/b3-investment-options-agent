@@ -33,7 +33,7 @@ class Providers:
 
 def service(records):
     provider=Providers(records)
-    return StockOpportunityScreenService(SimpleNamespace(market_provider=provider,current_quote_provider=provider,fundamentals_provider=provider)),provider
+    return StockOpportunityScreenService(SimpleNamespace(market_provider=provider,current_quote_provider=provider,fundamentals_provider=provider),target_service=SimpleNamespace(build=lambda ticker,cutoff:{"status":"UNKNOWN_NO_ADMISSIBLE_TARGETS","rows":[]})),provider
 
 
 def test_lower_observed_risk_ranks_without_valuation_or_personal_outcomes():
@@ -105,3 +105,29 @@ def test_http_deterministic_screen_never_configures_senior(monkeypatch):
     assert data['result']['telemetry']['llm_calls']==0
     assert set(data['result']['asset_evidence'])=={'ITUB4','VALE3'}
     assert data['result']['opportunity_screen']['ranked_count']==2
+
+
+def test_current_screen_enriches_economics_and_keeps_observed_rank_separate():
+    records={'ITUB4':history('ITUB4'),'BBDC4':history('BBDC4')}
+    screen,_=service(records)
+    def targets(ticker,cutoff):
+        return {'status':'QUALIFIED_OBSERVATIONS','rows':[{'institution':'XP','price_brl':60 if ticker=='ITUB4' else 55,
+            'horizon_date':date(2027,12,31),'published_at':CUTOFF-timedelta(days=1),
+            'document_id':ticker,'source_url':'fixture'}]}
+    screen.target_service=SimpleNamespace(build=targets)
+    data=screen.build(list(records),economic_inputs={'budget_brl':1000,'entry_costs_brl':{'ITUB4':0,'BBDC4':0},'target_institution':'XP','target_horizon':'2027-12-31'})
+    assert data['economic_target_ranking']['status']=='CONDITIONAL_TARGET_POTENTIAL'
+    assert all(r['rank'] is None for r in data['opportunity_screen']['rows'])
+    for row in data['opportunity_screen']['rows']:
+        evidence=row['economic_evidence']
+        assert evidence['quantity']>0 and evidence['expected_return'] is None
+        assert evidence['announced_conditional_gross_income_brl'] is None
+        assert row['dividends']['collection_status']=='UNSUPPORTED_PROVIDER'
+        assert abs(evidence['notional_brl']+evidence['residual_cash_brl']-1000)<1e-7
+
+
+def test_unsupported_or_incomplete_economic_inputs_fail_before_acquisition():
+    screen,provider=service({'ITUB4':history('ITUB4')})
+    for inputs in ({'budget_brl':float('nan')},{'entry_costs_brl':{'BBDC4':0}},{'target_institution':'XP'},{'target_institution':'XP','target_horizon':'future'},{'forecast':99}):
+        with pytest.raises(ValueError): screen.build(['ITUB4'],economic_inputs=inputs)
+    assert provider.quote_calls==0

@@ -33,13 +33,23 @@ def _admissible(record, ticker, cutoff):
 
 
 class StockOpportunityScreenService:
-    def __init__(self, evidence_service=None):
+    def __init__(self, evidence_service=None, target_service=None):
         self.evidence = evidence_service or StrategyEvidenceService()
+        self.target_service = target_service
 
     def build(self, tickers, *, objective='COMPARE_ONLY', include_portfolio=False,
-              as_of=None, portfolio=None):
+              as_of=None, portfolio=None, economic_inputs=None):
         if objective not in OBJECTIVES:
             raise ValueError('Unsupported opportunity objective')
+        inputs = economic_inputs or {}
+        if not isinstance(inputs, dict) or set(inputs)-{'budget_brl','entry_costs_brl','target_institution','target_horizon'}:
+            raise ValueError('Unsupported Opportunity economic inputs')
+        from b3_agent.stock_purchase import _number
+        budget=inputs.get('budget_brl')
+        costs=inputs.get('entry_costs_brl',{})
+        if budget is not None and (_number(budget) is None or budget<=0): raise ValueError('Budget must be finite and positive')
+        if not isinstance(costs,dict) or any(_number(v) is None or v<0 for v in costs.values()): raise ValueError('Entry costs must be finite and nonnegative')
+        if ('target_institution' in inputs) != ('target_horizon' in inputs): raise ValueError('Target institution and horizon are jointly required')
         historical = as_of is not None
         if isinstance(as_of, str):
             as_of = datetime.fromisoformat(as_of.replace('Z', '+00:00'))
@@ -63,6 +73,10 @@ class StockOpportunityScreenService:
             universe = list(dict.fromkeys(universe))
         if not 1 <= len(universe) <= 20:
             raise ValueError('Select 1 to 20 assets; portfolio union is not silently truncated')
+        if set(costs)-set(universe): raise ValueError('Entry cost asset mismatch')
+        if 'target_institution' in inputs:
+            from b3_agent.economic_evidence import rank_target_potential
+            rank_target_potential([],inputs['target_institution'],inputs['target_horizon'])
         requested_at = as_of or datetime.now(timezone.utc)
         acquired = {}
         for ticker in universe:
@@ -83,6 +97,18 @@ class StockOpportunityScreenService:
                 except (OSError, RuntimeError, ValueError):
                     errors.append('FUNDAMENTALS_UNAVAILABLE')
             acquired[ticker] = (records, quote, fundamentals, errors)
+        dividend_evidence={}
+        if not historical:
+            from concurrent.futures import ThreadPoolExecutor
+            getter=getattr(self.evidence.fundamentals_provider,'get_dividends',None)
+            def collect(ticker):
+                if getter is None: return {'status':'UNSUPPORTED_PROVIDER','records':[]}
+                try:
+                    return {'status':'READ_OK','records':[asdict(r) for r in getter(ticker,start=requested_at.date()-timedelta(days=366))]}
+                except (OSError,RuntimeError,ValueError) as exc:
+                    return {'status':'PROVIDER_UNAVAILABLE','records':[],'error_type':type(exc).__name__,'http_status':getattr(exc,'code',None)}
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                dividend_evidence=dict(zip(universe,executor.map(collect,universe),strict=True))
         # Current ingestion can finish after request arrival. Freeze once, after
         # acquisition, then apply the same PIT cutoff to every asset and source.
         cutoff = as_of or datetime.now(timezone.utc)
@@ -129,11 +155,30 @@ class StockOpportunityScreenService:
             if eligible and window and len(eligible) >= window and not any(r in reasons for r in ('INVALID_HISTORY_VALUE', 'DUPLICATE_HISTORY_OBSERVATIONS', 'STALE_OBJECTIVE_WINDOW')):
                 windows[ticker] = tuple(r.observation_timestamp.date().isoformat() for r in eligible[-window:])
             rows.append({'ticker':ticker, 'rank':None, 'objective_value':value,
-                'volatility_60d':quant.get('volatility_60d'), 'liquidity_proxy_20d':quant.get('average_dollar_volume_20d'),
+                'volatility_60d':quant.get('volatility_60d'), 'max_drawdown':quant.get('max_drawdown'), 'liquidity_proxy_20d':quant.get('average_dollar_volume_20d'),
                 'current_price':quote.close if quote else None, 'quote_as_of':quote.observation_timestamp if quote else None,
                 'portfolio':holdings, 'expected_return':None, 'valuation_status':'UNKNOWN',
                 'source_refs':list(sources), 'history_count':len(eligible), 'excluded_pit_or_identity_count':excluded_pit, 'exclusions':reasons,
                 'ranking_evidence_ref':f'quant:{ticker}:{POLICY}:{cutoff.isoformat()}'})
+        from b3_agent.dividend_evidence import dividend_payload
+        from b3_agent.price_target_evidence import StoredPriceTargetService
+        from b3_agent.economic_evidence import economic_evidence, rank_target_potential
+        target_service=self.target_service or StoredPriceTargetService()
+        for row in rows:
+            ticker=row['ticker']
+            row['dividends']=dividend_payload(ticker,dividend_evidence.get(ticker,{}),cutoff)
+            row['institution_targets']=target_service.build(ticker,cutoff) if not historical else {'status':'HISTORICAL_TARGET_READ_NOT_REQUESTED','rows':[]}
+            # Economic calculations require a recent qualified current quote.
+            spot=row['current_price']
+            if row['quote_as_of'] and (cutoff-row['quote_as_of']).total_seconds()>7*86400: spot=None
+            projection={'ticker':ticker,'current_price_brl':spot,'dividends':row['dividends'],
+                'institution_targets':row['institution_targets'],
+                'observed_risk':{k:row.get(k) for k in ('volatility_60d','max_drawdown','liquidity_proxy_20d')}}
+            row['economic_evidence']=economic_evidence(projection,budget=budget,entry_cost=costs.get(ticker),portfolio=portfolio)
+            row['source_refs'].extend(t['source_url'] for t in row['institution_targets']['rows'])
+            row['source_refs'].extend(e['source'] for e in row['dividends']['events'])
+            row['source_refs']=list(dict.fromkeys(row['source_refs']))
+        economic_ranking=rank_target_potential([r['economic_evidence'] for r in rows],inputs['target_institution'],inputs['target_horizon']) if 'target_institution' in inputs else {'status':'NOT_REQUESTED','rows':[]}
         valid = [r for r in rows if r['ticker'] in windows and r['objective_value'] is not None]
         cohorts = Counter(windows[r['ticker']] for r in valid)
         reference = max(cohorts, key=lambda w:(cohorts[w], w[-1], w)) if cohorts else None
@@ -162,4 +207,4 @@ class StockOpportunityScreenService:
         return {'as_of':cutoff, 'opportunity_screen':{'policy_version':POLICY, 'objective':objective, 'metric':metric, 'direction':direction, 'status':status,
             'maximum_history_age_days':7, 'tie_tolerance':{'relative':1e-9,'absolute':1e-12}, 'sample_observations':window, 'reference_window_start':reference[0] if reference else None, 'reference_window_end':reference[-1] if reference else None,
             'requested_universe':universe, 'ranked_count':sum(r['rank'] is not None for r in rows), 'rows':rows, 'limitations':limitations},
-            'asset_evidence':packs, 'limitations':limitations, 'source_refs':list(dict.fromkeys(s for r in rows for s in r['source_refs']))}
+            'economic_target_ranking':economic_ranking, 'asset_evidence':packs, 'limitations':limitations, 'source_refs':list(dict.fromkeys(s for r in rows for s in r['source_refs']))}

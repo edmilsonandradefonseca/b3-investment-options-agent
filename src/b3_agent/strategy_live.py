@@ -1196,7 +1196,12 @@ class LiveStrategyComparisonService:
         stock_purchase = None
         if normalized_strategies == ("BUY_STOCK", "BUY_STOCK"):
             from b3_agent.stock_purchase import stock_purchase_payload
-            stock_purchase = stock_purchase_payload(comparison.alternatives, packs, effective_as_of, dividend_evidence, target_evidence)
+            stock_purchase = stock_purchase_payload(comparison.alternatives, packs, effective_as_of, dividend_evidence, target_evidence,
+                portfolio=portfolio if as_of is None and portfolio is not None and portfolio.as_of<=effective_as_of.date() else None,
+                economic_inputs=economic_inputs)
+            for row in stock_purchase["rows"]:
+                all_sources.extend(t["source_url"] for t in row["institution_targets"].get("rows", []))
+                all_sources.extend(e["source"] for e in row["dividends"]["events"])
 
         economic = None
         if stock_purchase:
