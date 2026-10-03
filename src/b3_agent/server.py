@@ -840,7 +840,9 @@ def current_option_quotes(
 def live_analysis(ticker: str) -> dict[str, Any]:
     """Return normalized live market/options analytics for one B3 underlying."""
     try:
-        snapshot = LiveProviderService().load(ticker)
+        snapshot = LiveProviderService().load(
+            ticker, include_current_quote=False, include_options=False
+        )
         cutoff = snapshot.as_of
         if cutoff.tzinfo is None or cutoff.utcoffset() is None:
             raise ValueError("live snapshot as_of must be timezone-aware")

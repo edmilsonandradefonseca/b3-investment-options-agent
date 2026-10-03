@@ -61,7 +61,14 @@ class LiveProviderService:
         self.current_market_provider = current_market_provider or OplabAdapter()
         self.history_days = history_days
 
-    def load(self, ticker: str, *, as_of: datetime | None = None) -> LiveProviderSnapshot:
+    def load(
+        self,
+        ticker: str,
+        *,
+        as_of: datetime | None = None,
+        include_current_quote: bool = True,
+        include_options: bool = True,
+    ) -> LiveProviderSnapshot:
         normalized = ticker.upper().strip()
         if not normalized:
             raise ValueError("ticker must not be empty")
@@ -79,24 +86,28 @@ class LiveProviderService:
 
         current_stock_quote = None
         current_quote_error = None
-        try:
-            current_stock_quote = self.current_market_provider.get_current_quote(
-                normalized
-            )
-        except (OSError, RuntimeError, ValueError) as exc:
-            current_quote_error = str(exc)
+        if include_current_quote:
+            try:
+                current_stock_quote = self.current_market_provider.get_current_quote(
+                    normalized
+                )
+            except (OSError, RuntimeError, ValueError) as exc:
+                current_quote_error = str(exc)
 
-        if isinstance(self.options_provider, OplabOptionsAdapter):
-            option_contracts, option_quotes = self.options_provider.get_snapshot(
-                normalized, effective_as_of
-            )
+        if include_options:
+            if isinstance(self.options_provider, OplabOptionsAdapter):
+                option_contracts, option_quotes = self.options_provider.get_snapshot(
+                    normalized, effective_as_of
+                )
+            else:
+                option_contracts = self.options_provider.get_options(
+                    normalized, effective_as_of
+                )
+                option_quotes = self.options_provider.get_option_quotes(
+                    normalized, effective_as_of
+                )
         else:
-            option_contracts = self.options_provider.get_options(
-                normalized, effective_as_of
-            )
-            option_quotes = self.options_provider.get_option_quotes(
-                normalized, effective_as_of
-            )
+            option_contracts, option_quotes = (), ()
         contracts = tuple(option_contracts)
         quotes = tuple(option_quotes)
 
@@ -112,10 +123,9 @@ class LiveProviderService:
             if current_stock_quote is not None
             else ()
         )
+        option_sources = (self.options_provider.name,) if include_options else ()
         source_refs = tuple(
-            dict.fromkeys(
-                (*market_sources, *quote_sources, self.options_provider.name)
-            )
+            dict.fromkeys((*market_sources, *quote_sources, *option_sources))
         )
         current_prices = (
             {normalized: current_stock_quote.close}
@@ -155,6 +165,9 @@ class LiveProviderService:
             source_refs=source_refs,
             reuse_telemetry={
                 "stock_quote": getattr(self.current_market_provider, "last_reuse_telemetry", {}),
-                "option_chain": getattr(self.options_provider, "last_reuse_telemetry", {}),
+                "option_chain": (
+                    getattr(self.options_provider, "last_reuse_telemetry", {})
+                    if include_options else {}
+                ),
             },
         )

@@ -413,8 +413,10 @@ def test_live_analysis_returns_pit_history_and_backend_indicators(monkeypatch) -
     })()
 
     class FakeLiveProviderService:
-        def load(self, ticker):
+        def load(self, ticker, *, include_current_quote, include_options):
             assert ticker == "PETR4"
+            assert include_current_quote is False
+            assert include_options is False
             return snapshot
 
     monkeypatch.setattr(server, "LiveProviderService", FakeLiveProviderService)

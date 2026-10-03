@@ -183,3 +183,40 @@ def test_live_provider_does_not_substitute_history_when_current_quote_fails():
         item == "missing_current_price:PETRJ320"
         for item in result.options_analysis.assumptions["rejected_quotes"]
     )
+
+class ForbiddenOptionalMarketProvider:
+    name = "must-not-be-requested"
+
+    def get_current_quote(self, ticker):
+        raise AssertionError("history-only load must not request a current quote")
+
+
+class ForbiddenOptionsProvider:
+    name = "must-not-be-requested"
+
+    def get_options(self, ticker, as_of):
+        raise AssertionError("history-only load must not request an option chain")
+
+    def get_option_quotes(self, ticker, as_of):
+        raise AssertionError("history-only load must not request option quotes")
+
+
+def test_history_only_load_skips_current_quote_and_option_chain():
+    as_of = datetime(2026, 9, 27, 16, 0, tzinfo=timezone.utc)
+    result = LiveProviderService(
+        market_provider=FakeMarketProvider(),
+        options_provider=ForbiddenOptionsProvider(),
+        current_market_provider=ForbiddenOptionalMarketProvider(),
+    ).load(
+        "PETR4",
+        as_of=as_of,
+        include_current_quote=False,
+        include_options=False,
+    )
+
+    assert len(result.market_records) == 1
+    assert result.current_stock_quote is None
+    assert result.option_contracts == ()
+    assert result.option_quotes == ()
+    assert result.source_refs == ("brapi",)
+    assert result.reuse_telemetry["option_chain"] == {}
