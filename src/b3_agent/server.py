@@ -1098,7 +1098,7 @@ def orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
             if normalized.context.get('analysis_mode') == 'deterministic':
                 result['telemetry'] = {'llm_calls':0}
                 result['derived_synthesis_status'] = 'NOT_REQUESTED'
-                return _response_to_model(fast_response)
+                return _response_to_model(OrchestratorResponse(status='COMPLETED',result=result,sources=tuple(result['source_refs'])))
             return _response_to_model(_workspace_intelligence_response(normalized, deterministic_response=fast_response))
         fast_response = _dispatch_opportunity_screen(normalized)
         if fast_response is not None:

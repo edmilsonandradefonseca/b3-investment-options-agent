@@ -34,3 +34,13 @@ def test_zero_cost_scenario_preserves_residual():
 @pytest.mark.parametrize('inputs',[{'quantity':101},{'quantity':True},{'quantity':1,'fees_brl':'NaN'},{'quantity':1,'fees_brl':11,'taxes_brl':0}])
 def test_invalid_or_unfunded_request_rejects(inputs):
     with pytest.raises(ValueError): build(inputs)
+
+
+def test_deterministic_http_switch_retains_zero_call_telemetry(monkeypatch):
+    from fastapi.testclient import TestClient
+    from b3_agent.server import app
+    monkeypatch.setattr('b3_agent.funded_switch.build_funded_switch',lambda *args,**kwargs:build({'quantity':10,'fees_brl':0,'taxes_brl':0}))
+    response=TestClient(app).post('/orchestrate',json={'task':'Compare funded switch','context':{'workspace':'Strategy Lab','comparison_assets':['ITUB4','BBDC4'],'funded_switch':{'quantity':10},'analysis_mode':'deterministic'}})
+    assert response.status_code==200
+    assert response.json()['result']['telemetry']['llm_calls']==0
+    assert response.json()['result']['derived_synthesis_status']=='NOT_REQUESTED'
