@@ -42,6 +42,8 @@ jobs:
           assert {row["alternative_id"] for row in rows} == {row["alternative_id"] for row in result["strategy_comparison"]["alternatives"]}
           assert all(row["dividends"]["policy_version"] == "issuer-dividends-v1" for row in rows)
           assert any(row["dividends"]["events"] for row in rows)
+          assert all(row["institution_targets"]["policy_version"] == "stored-institution-targets-v1" for row in rows)
+          print(json.dumps({"case":"ACTIVE_INSTITUTION_TARGETS","statuses":[row["institution_targets"]["status"] for row in rows],"counts":[len(row["institution_targets"]["rows"]) for row in rows]}),flush=True)
           print(json.dumps({"case":"ACTIVE_DIVIDENDS","collection":[row["dividends"]["collection_status"] for row in rows],"event_counts":[len(row["dividends"]["events"]) for row in rows]}),flush=True)
           print(json.dumps({"case":"ACTIVE_STOCK_PURCHASE","http":200,"elapsed_ms":response["elapsed_ms"],"fundamental_counts":[len(row["fundamental_metrics"]) for row in rows],"llm_calls":0}),flush=True)
           print("ACTIVE_STOCK_PURCHASE=PASS RUNTIME_MUTATIONS=NONE",flush=True)
