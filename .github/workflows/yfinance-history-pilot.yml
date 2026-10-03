@@ -50,6 +50,8 @@ jobs:
 
       - name: Validate chart path without quote or options requests
         shell: bash
+        env:
+          B3_AGENT_DATA_DIR: /opt/b3-runtime/data
         run: |
           cd /opt/b3-investment-options-agent
           timeout 45s env PYTHONPATH="$GITHUB_WORKSPACE/src" \
