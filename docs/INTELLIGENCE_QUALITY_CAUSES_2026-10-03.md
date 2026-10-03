@@ -70,3 +70,12 @@ items and the shared frontend renders them. Ubuntu's senior gate requires both
 canonical comparison alternatives and nonempty decision implications; merely
 producing a generic proposal is no longer sufficient. This is coverage validation,
 not proof that every interpretation is correct or superior to ChatGPT.
+
+The final acceptance gate now executes one senior case for each screen and an
+explicit Copilot comparison, each with a 240-second process bound and unchanged
+production model configuration. It logs the configured provider/model identifier
+(no credentials), context build timing and assessment coverage. For stock
+comparisons, both canonical alternative IDs are required; asset analysis must
+cover the supplied asset-evidence IDs. A failure prevents runtime checkout update.
+The 20-minute workflow ceiling accommodates all four bounded cases plus CI
+waiting; no production process or model routing is changed to make the gate pass.

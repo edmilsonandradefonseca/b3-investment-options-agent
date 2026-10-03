@@ -26,7 +26,7 @@ jobs:
   deterministic-workspaces:
     name: Deterministic PETR4 / VALE3 / ITUB4 × BBDC4
     runs-on: [self-hosted, Linux, X64]
-    timeout-minutes: 12
+    timeout-minutes: 20
     steps:
       - name: Checkout tested branch
         uses: actions/checkout@v4
@@ -61,11 +61,13 @@ jobs:
         run: |
           timeout 90s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_progressive_workspace_real.py
 
-      - name: Validate one real senior comparison with existing routing
+      - name: Validate real senior outputs for all decision workspaces and Copilot
         env:
           PYTHONPATH: ${{ github.workspace }}/src
         run: |
-          timeout 300s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_progressive_workspace_real.py --senior
+          for senior_case in strategy_lab_stock_buy_comparison opportunities_petr4 market_intelligence_vale3 copilot_natural_language_compare; do
+            timeout 240s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_progressive_workspace_real.py --senior --case "$senior_case"
+          done
 
       - name: Update and restart the authorized Ubuntu runtime
         shell: bash

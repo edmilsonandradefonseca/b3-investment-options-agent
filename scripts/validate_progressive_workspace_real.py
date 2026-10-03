@@ -18,6 +18,7 @@ from time import monotonic
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument('--senior', action='store_true')
+    parser.add_argument('--case', default='strategy_lab_stock_buy_comparison', choices=['opportunities_petr4', 'market_intelligence_vale3', 'strategy_lab_stock_buy_comparison', 'copilot_natural_language_compare'])
     args = parser.parse_args()
     pid = subprocess.check_output(
         ["systemctl", "show", "b3-runtime.service", "--property=MainPID", "--value"],
@@ -40,7 +41,7 @@ def main() -> int:
     client = TestClient(app)
     if args.senior:
         from validate_live_workspace_outputs import make_cases, write_private_report
-        case = next(item for item in make_cases() if item['id'] == 'strategy_lab_stock_buy_comparison')
+        case = next(item for item in make_cases() if item['id'] == args.case)
         started = monotonic()
         response = client.post('/orchestrate', json=case['request'])
         data = response.json()
@@ -48,6 +49,7 @@ def main() -> int:
             'instance': 'candidate ASGI using real Ubuntu data and existing model routing',
             'case': case, 'response': data,
         })
+        from b3_agent.config import settings
         result = data.get('result') or {}
         proposal = result.get('proposal') or result.get('decision_proposal') or {}
         synthesis = result.get('synthesis') or {}
@@ -55,6 +57,8 @@ def main() -> int:
         print(json.dumps({
             'case': case['id'], 'instance': 'candidate ASGI',
             'http': response.status_code, 'api_error': bool(data.get('error')),
+            'configured_provider': settings.llm_provider,
+            'configured_senior_model': settings.openclaw_model if settings.llm_provider == 'openclaw' else settings.llm_model,
             'elapsed_ms': round((monotonic()-started)*1000, 1),
             'proposal_present': bool(proposal),
             'alternative_assessment_count': len(proposal.get('alternative_assessments') or []),
@@ -71,9 +75,11 @@ def main() -> int:
         assert response.status_code == 200 and not data.get('error'), 'Real senior request failed'
         assert proposal and proposal.get('rationale'), 'No structured senior decision'
         alternatives = result.get('strategy_comparison', {}).get('alternatives', [])
-        assert len(alternatives) == 2
+        if args.case in {'strategy_lab_stock_buy_comparison', 'copilot_natural_language_compare'}:
+            assert len(alternatives) == 2
         assessments = proposal.get('alternative_assessments') or []
-        assert {item['alternative_id'] for item in assessments} == {item['alternative_id'] for item in alternatives}, 'Senior omitted or invented comparison alternatives'
+        expected_ids = {item['alternative_id'] for item in alternatives} if alternatives else set((result.get('asset_evidence') or {}))
+        assert expected_ids and {item['alternative_id'] for item in assessments} == expected_ids, 'Senior omitted or invented alternatives/assets'
         assert all(item['decision_implications'] for item in assessments), 'No alternative-specific implications'
         return 0
     started = monotonic()
