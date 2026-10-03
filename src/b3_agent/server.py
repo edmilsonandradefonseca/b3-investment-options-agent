@@ -207,10 +207,29 @@ def _workspace_intelligence_response(
 
     context_payload = context.as_context()
     if deterministic_only:
+        facts = context_payload.get("deterministic_context", {})
+        workspace_result = facts.get("workspace_result", {})
+        market_context = facts.get("market_analysis", {})
+        asset_evidence = {
+            ticker: entry["asset_evidence"]
+            for ticker, entry in market_context.get("tickers", {}).items()
+            if isinstance(entry, dict) and isinstance(entry.get("asset_evidence"), dict)
+        }
         return OrchestratorResponse(
             status="COMPLETED",
             result={
+                **workspace_result,
+                **({"asset_evidence": asset_evidence} if asset_evidence else {}),
                 **(deterministic_response.result if deterministic_response else {}),
+                "workspace_intelligence": {
+                    "workspace": workspace,
+                    "as_of": facts.get("as_of"),
+                    "tickers": list(_workspace_tickers(request)),
+                    "market_context": market_context,
+                    "derived_intelligence": {},
+                    "limitations": list(getattr(context, "limitations", ())),
+                    "source_refs": list(context.source_refs),
+                },
                 "deterministic_context": context_payload.get("deterministic_context", {}),
                 "research_context": context_payload.get("deterministic_context", {}).get("market_analysis", {}),
                 "stored_research": context_payload.get("deterministic_context", {}).get("stored_research", {}),
@@ -223,7 +242,7 @@ def _workspace_intelligence_response(
                 "derived_synthesis_status": "NOT_REQUESTED",
                 "telemetry": {"total_ms": (monotonic()-started)*1000, "llm_calls": 0},
             },
-            sources=context.source_refs,
+            sources=tuple(dict.fromkeys((*context.source_refs, *(deterministic_response.sources if deterministic_response else ())))),
         )
     senior_context = {
         **request.context,

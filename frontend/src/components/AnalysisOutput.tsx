@@ -145,6 +145,8 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
     </div>
 
     {data.error && <div className="state-banner error">{data.error}</div>}
+    {asText(result.derived_synthesis_status) === 'PENDING' && <p className="muted" role="status">Fatos disponíveis. Síntese em andamento…</p>}
+    {asText(result.derived_synthesis_status) === 'FAILED' && <div className="state-banner limited">Síntese indisponível. Os fatos determinísticos continuam disponíveis com suas fontes e limitações.</div>}
 
     {summary && <section className="analysis-summary"><h3>Resumo</h3><p>{summary}</p></section>}
 
@@ -343,7 +345,7 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
               <div><dt>Drawdown histórico</dt><dd>{pct(drawdown) ?? 'Indisponível'}</dd></div>
               <div><dt>RSI 14</dt><dd>{rsi == null ? 'Indisponível' : rsi.toFixed(1)}</dd></div>
               <div><dt>Fundamentos BRAPI</dt><dd>{metricCount == null ? 'Indisponível' : `${metricCount} métricas`}</dd></div>
-              <div><dt>Na carteira</dt><dd>{held ? `Sim${quantity != null ? ` · ${quantity} ações` : ''}` : 'Não'}</dd></div>
+              <div><dt>Na carteira</dt><dd>{held ? `Sim${quantity != null ? ` · ${quantity} ações` : ''}` : portfolio?.held === false ? 'Não' : 'Indisponível'}</dd></div>
             </dl>
           </article>;
         })}

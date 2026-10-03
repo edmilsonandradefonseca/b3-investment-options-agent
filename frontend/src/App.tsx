@@ -86,6 +86,9 @@ export default function App(){
   options?:{ticker?:string|null;context?:Record<string,unknown>}
  ){
   if(!conversation){++inspectionSequence.current;setAnalysis(null);setNotice('')}
+  const sequence=inspectionSequence.current;
+  const current=()=>conversation||inspectionSequence.current===sequence;
+  let deterministicResult:OrchestrateResponse|null=null;
   setBusy(true);
   const requestTicker = options && Object.prototype.hasOwnProperty.call(options,'ticker')
     ? options.ticker ?? null
@@ -123,19 +126,30 @@ export default function App(){
       setOnline(true);
       return;
     }
+    if(!conversation&&['Opportunities','Strategy Lab'].includes(page)){
+      deterministicResult=await b3Api.orchestrate({task,ticker:requestTicker,context:{...context,analysis_mode:'deterministic',research_mode:'stored_only'}});
+      if(!current())return;
+      setAnalysis({...deterministicResult,result:{...deterministicResult.result,derived_synthesis_status:'PENDING'}});
+    }
     const r=await b3Api.orchestrate({task,ticker:requestTicker,context});
+    if(!current())return;
     if(conversation){
       setChat(v=>v.map((item,index)=>index===pendingIndex?{...item,r}:item));
-    }else setAnalysis(r);
+    }else{
+      const displayed=r.error&&deterministicResult?{...deterministicResult,error:r.error}:r;
+      setAnalysis({...displayed,result:{...displayed.result,derived_synthesis_status:r.error?'FAILED':'COMPLETED'}});
+    }
     setOnline(true);
   }catch(e){
+    if(!current())return;
     const message=err(e);
     if(conversation){
       setChat(v=>v.map((item,index)=>index===pendingIndex?{...item,error:message}:item));
     }else{
+      if(deterministicResult)setAnalysis({...deterministicResult,result:{...deterministicResult.result,derived_synthesis_status:'FAILED'}});
       setNotice(`Análise: ${message}`);
     }
-  }finally{setBusy(false)}
+  }finally{if(current())setBusy(false)}
  }
  async function importPortfolio(e:ChangeEvent<HTMLInputElement>){const f=e.target.files?.[0];e.target.value='';if(!f)return;setBusy(true);try{await b3Api.importPortfolio(f);await load();setNotice('Carteira validada e atualizada.')}catch(x){setNotice(`Importação recusada: ${err(x)}`)}finally{setBusy(false)}}
  async function importNotes(e:ChangeEvent<HTMLInputElement>){

@@ -178,7 +178,19 @@ def test_workspace_deterministic_mode_never_calls_senior(monkeypatch):
     from b3_agent.orchestration.contracts import OrchestratorRequest, OrchestratorResponse
     class Context:
         source_refs=('sqlite:history',)
-        def as_context(self): return {'deterministic_context': {'personal_history': {'coverage':'UNKNOWN'}, 'decision_history': {'ranking_effect':'NONE'}}}
+        limitations=('Valuation unavailable',)
+        def as_context(self): return {'deterministic_context': {
+            'personal_history': {'coverage':'UNKNOWN'},
+            'decision_history': {'ranking_effect':'NONE'},
+            'workspace_result': {
+                'canonical_metric': 99,
+                'opportunity_ranking_status': 'DEFERRED_INCOMPLETE_CONTEXT',
+                'opportunity_set': {'ranked_opportunities': [{'ticker': 'PETR4'}]},
+            },
+            'market_analysis': {'tickers': {
+                'PETR4': {'asset_evidence': {'portfolio': {'held': None}}},
+            }},
+        }}
     class Service:
         def build(self,**kwargs):
             assert not kwargs['include_joao']
@@ -191,6 +203,15 @@ def test_workspace_deterministic_mode_never_calls_senior(monkeypatch):
     assert response.result['telemetry']['llm_calls']==0
     assert response.result['personal_history']['coverage']=='UNKNOWN'
     assert response.result['decision_history']['ranking_effect']=='NONE'
+    assert response.result['opportunity_set']['ranked_opportunities'][0]['ticker']=='PETR4'
+    assert response.result['opportunity_ranking_status']=='DEFERRED_INCOMPLETE_CONTEXT'
+    assert response.result['asset_evidence']['PETR4']['portfolio']['held'] is None
+    assert response.result['workspace_intelligence']['workspace']=='Strategy Lab'
+    assert response.result['workspace_intelligence']['limitations']==['Valuation unavailable']
+    without_fast_route=server._workspace_intelligence_response(OrchestratorRequest('Analyze','PETR4',{'workspace':'Opportunities','analysis_mode':'deterministic'}),deterministic_response=None)
+    assert without_fast_route.result['canonical_metric']==99
+    assert without_fast_route.result['workspace_intelligence']['workspace']=='Opportunities'
+    assert without_fast_route.result['opportunity_set']==response.result['opportunity_set']
 
 
 def test_partial_repurchase_observation_never_finalizes_outcome(tmp_path, monkeypatch):
