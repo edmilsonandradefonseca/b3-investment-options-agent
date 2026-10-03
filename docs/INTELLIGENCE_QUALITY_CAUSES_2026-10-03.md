@@ -79,3 +79,10 @@ comparisons, both canonical alternative IDs are required; asset analysis must
 cover the supplied asset-evidence IDs. A failure prevents runtime checkout update.
 The 20-minute workflow ceiling accommodates all four bounded cases plus CI
 waiting; no production process or model routing is changed to make the gate pass.
+
+Structured assessments are now required in the requested model schema whenever
+canonical alternative/asset IDs are present; legacy requests without those IDs
+retain the original schema shape. Every declared property remains required for
+strict-schema client compatibility. Nonempty assessments without supplied IDs
+are rejected as well as foreign and duplicate IDs. This hardens the admission
+boundary; interpretations still require quality review against their sources.

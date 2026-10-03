@@ -63,6 +63,11 @@ class InvestmentReasoningAgent:
         schema = deepcopy(_DECISION_SCHEMA)
         if allowed_ids:
             schema['properties']['alternative_assessments']['items']['properties']['alternative_id']['enum'] = allowed_ids
+            schema['required'].append('alternative_assessments')
+        else:
+            # Preserve the legacy shape when no alternatives/assets were supplied.
+            # Strict JSON-schema clients require every declared property to be required.
+            schema['properties'].pop('alternative_assessments')
         result = self.llm.complete_json(
             instructions=(
                 "Act as the investment reasoning component of a decision copilot. "
@@ -81,7 +86,7 @@ class InvestmentReasoningAgent:
                 "Use capital_impact and opportunity_cost to discuss the actual tradeoff; when unknown state the "
                 "specific missing input, never assume zero costs or available cash. Give observable, sourced "
                 "invalidation_conditions rather than vague warnings. Cite supplied identifiers. "
-                "Return alternative_assessments for every supplied comparison alternative, or for the requested assets "
+                "When the schema includes alternative_assessments, return it for every supplied comparison alternative, or for the requested assets "
                 "when no canonical comparison exists. Use their exact supplied alternative_id (or ticker for assets). "
                 "Each assessment must separately state supporting_evidence, contradicting_evidence, "
                 "decision_implications, unknowns and evidence_refs. These are qualitative interpretations of "
@@ -115,6 +120,8 @@ class InvestmentReasoningAgent:
 def _parse_assessments(values: Any, allowed_ids: list[str]) -> tuple[AlternativeAssessment, ...]:
     if not isinstance(values, list) or len(values) > 20:
         raise ValueError('Invalid alternative assessments')
+    if values and not allowed_ids:
+        raise ValueError('No supplied alternatives to assess')
     assessments = []
     seen = set()
     for item in values:
