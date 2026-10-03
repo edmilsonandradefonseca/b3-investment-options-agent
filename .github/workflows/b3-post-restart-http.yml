@@ -12,75 +12,34 @@ concurrency:
 jobs:
   active-http:
     runs-on: [self-hosted, Linux, X64]
-    timeout-minutes: 6
+    timeout-minutes: 4
     steps:
       - uses: actions/checkout@v4
-      - name: Verify the active HTTP process and structured comparison
+      - name: Verify BUY evidence on the active HTTP process
         run: |
           python3 - <<'PY'
-          import json, sys, time, subprocess
+          import json, sys
           from pathlib import Path
           sys.path.insert(0, str(Path("scripts").resolve()))
-          from validate_live_workspace_outputs import call_json, make_cases, write_private_report
+          from validate_live_workspace_outputs import call_json, write_private_report
           base = "http://127.0.0.1:8000"
           health = call_json(base + "/health", None, 15)
-          assert health["http_status"] == 200 and not health["transport_error_type"], "Runtime health failed"
-          chart = call_json(base + "/analysis/live/PETR4", None, 20)
-          assert chart["http_status"] == 200
-          data = chart["response"]
-          assert data["market"]["history_count"] >= 85
-          assert str(data["market"]["latest"]["observation_timestamp"]).startswith("2026-10-02")
-          assert {"b3_cotahist", "oplab"} <= set(data["source_refs"])
-          assert data["options"]["contract_count"] == 0
-          print("ACTIVE_PETR4_HTTP=PASS bars=" + str(data["market"]["history_count"]) + " options=0", flush=True)
-          version = call_json(base + "/version", None, 15)
-          assert version["http_status"] == 200
-          assert version["response"].get("opportunity_screen_policy") == "B3_OBSERVED_STOCK_SCREEN_V1", "Active process did not load the observed screen"
-          portfolio = call_json(base + "/portfolio/current", None, 30)["response"]
-          position = next(row for row in portfolio["positions"] if row["instrument_type"] == "STOCK" and row["quantity"] >= 1)
-          sell = position["ticker"]
-          buy = "BBAS3" if sell != "BBAS3" else "ITUB4"
-          request = {"task":"Compare one-share financed switch with explicit hypothetical zero costs.", "context":{"workspace":"Strategy Lab","comparison_assets":[sell,buy],"funded_switch":{"quantity":1,"fees_brl":0,"taxes_brl":0},"analysis_mode":"deterministic"}}
+          assert health["http_status"] == 200 and not health["transport_error_type"]
+          request = {"task":"Compare ITUB4 and BBDC4 purchases using qualified evidence; keep forward forecasts UNKNOWN.", "context":{"workspace":"Strategy Lab","comparison_assets":["ITUB4","BBDC4"],"strategy_a":"Comprar ação","strategy_b":"Comprar ação","comparison_amount":10000,"analysis_mode":"deterministic","research_mode":"stored_only"}}
           response = call_json(base + "/orchestrate", request, 90)
-          write_private_report(Path.home()/".local/share/b3-investment-options-agent/live-validation/active-funded-switch", {"instance":"ACTIVE HTTP systemd","response":response})
+          write_private_report(Path.home()/".local/share/b3-investment-options-agent/live-validation/active-stock-purchase", {"instance":"ACTIVE HTTP systemd","response":response})
           body = response.get("response") or {}
           assert response["http_status"] == 200 and not body.get("error")
-          result = body["result"]; funded = result["funded_switch"]
+          result = body["result"]
+          pair = result["stock_purchase_comparison"]
+          assert pair["policy_version"] == "stock-buy-evidence-v1"
           assert result["telemetry"]["llm_calls"] == 0
-          assert abs(funded["purchase_notional_brl"]+funded["residual_cash_brl"]-funded["net_sale_proceeds_brl"]) < 1e-7
-          assert len(result["strategy_comparison"]["alternatives"]) == 2
-          print(json.dumps({"case":"ACTIVE_FUNDED_SWITCH","http":200,"elapsed_ms":response["elapsed_ms"],"cash_conservation":"PASS","llm_calls":0}),flush=True)
-          print("ACTIVE_FUNDED_SWITCH=PASS RUNTIME_MUTATIONS=NONE",flush=True)
-          PY
-      - name: Inspect only model-input availability from the latest private PUT report
-        run: |
-          python3 - <<'PY'
-          import json, math
-          from pathlib import Path
-          folder=Path.home()/".local/share/b3-investment-options-agent/live-validation/put-pair/LOWEST_MODEL_EXPIRY_ITM"
-          files=sorted(folder.glob("b3-live-workspaces-*.json"))
-          assert files, "Expected private candidate report not found"
-          data=json.loads(files[-1].read_text())["response"]["result"]
-          for row in data["put_pair_comparison"]["rows"]:
-              pack=data["asset_evidence"][row["underlying_ticker"]]
-              quote=data["option_evidence"][row["option_id"]]["current_quote"]
-              iv=quote.get("implied_volatility")
-              print(json.dumps({"scope":"candidate private report, no active PUT acceptance","reason":row["probability_estimates"].get("reason"),"underlying_quote_present":bool(pack["market"].get("current_quote")),"iv_present":iv is not None,"iv_admissible":isinstance(iv,(int,float)) and math.isfinite(iv) and 0<iv<=3}),flush=True)
-          print("BUSINESS_VALUES_PRINTED=NONE",flush=True)
-          PY
-      - name: Check current provider IV field availability without logging values
-        env:
-          PYTHONPATH: ${{ github.workspace }}/src
-        run: |
-          /opt/b3-investment-options-agent/.venv/bin/python - <<'PY'
-          import os,json,subprocess
-          from pathlib import Path
-          pid=subprocess.check_output(["systemctl","show","b3-runtime.service","--property=MainPID","--value"],text=True,timeout=10).strip()
-          for field in Path("/proc/"+pid+"/environ").read_bytes().split(b"\0"):
-              key,sep,value=field.partition(b"=");name=key.decode()
-              if sep and (name.startswith("B3_") or name=="OPLAB_API_TOKEN"):os.environ[name]=value.decode()
-          from b3_agent.providers.oplab.options import OplabOptionsAdapter
-          payload=OplabOptionsAdapter()._get_payload("PETR4")
-          keys=sorted({key for row in payload for key in row if "vol" in key.lower() or "greek" in key.lower() or key.lower() in {"iv","implied_volatility","delta","gamma","theta","vega","rho"}})
-          print(json.dumps({"scope":"actual current provider schema only","risk_field_names":keys,"iv_value_present_any_row":any(row.get("iv") is not None or row.get("implied_volatility") is not None for row in payload),"business_values_logged":False}),flush=True)
+          rows = pair["rows"]
+          assert len(rows) == 2 and {row["ticker"] for row in rows} == {"ITUB4","BBDC4"}
+          assert all(row["current_price_brl"] is not None and row["capital_required_brl"] == 10000 for row in rows)
+          assert all(row["fundamental_metrics"] for row in rows), "Expected previously validated available fundamentals"
+          assert all(row["expected_return"] is None and row["future_dividend_per_share"] is None for row in rows)
+          assert {row["alternative_id"] for row in rows} == {row["alternative_id"] for row in result["strategy_comparison"]["alternatives"]}
+          print(json.dumps({"case":"ACTIVE_STOCK_PURCHASE","http":200,"elapsed_ms":response["elapsed_ms"],"fundamental_counts":[len(row["fundamental_metrics"]) for row in rows],"llm_calls":0}),flush=True)
+          print("ACTIVE_STOCK_PURCHASE=PASS RUNTIME_MUTATIONS=NONE",flush=True)
           PY
