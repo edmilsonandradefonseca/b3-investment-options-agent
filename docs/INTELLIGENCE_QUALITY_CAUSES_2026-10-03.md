@@ -32,3 +32,18 @@ Next quality work must close the deterministic ranking and financed-comparison
 gaps, then inspect real output for specificity, contradiction analysis, actionability,
 coverage, provenance and unknown handling. A comparison with direct ChatGPT
 requires the same question and evidence; no superiority claim is made yet.
+
+## Explicit Copilot stock comparison follow-up
+
+A bounded grammar accepts only an explicit two-stock BUY comparison, e.g.
+“Compare comprar ações ITUB4 e comprar ações BBDC4.” It produces the existing
+structured UC-04 request and clears the unrelated sidebar selection for this
+request. Structured form metadata wins; negated, three-asset, mixed-action,
+option and monetary-budget questions do not match. Research mode, PIT cutoff
+and original question remain intact. It does not infer monetary sizing.
+The Ubuntu no-model gate now verifies this case produces two canonical
+alternatives and excludes stale PETR4 selection. Shared Copilot output offers
+an explicit button to open an existing canonical comparison centrally in
+Strategy Lab, preserving the response snapshot without another request.
+Opportunities' continuation pre-fills its selected ticker, but full AC-27/28
+continuity of all objectives/restrictions and multi-leg orchestration remains open.

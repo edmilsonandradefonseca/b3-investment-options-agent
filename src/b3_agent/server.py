@@ -51,6 +51,7 @@ from b3_agent.intelligence.observability import (
     local_intelligence_status,
     local_ticker_intelligence,
 )
+from b3_agent.routing.decision_intent import explicit_stock_comparison
 from b3_agent.intelligence.workspace_context import (
     WorkspaceIntelligenceContextService,
 )
@@ -1055,6 +1056,7 @@ def orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
             ticker=request.ticker,
             context=request.context,
         )
+        normalized = explicit_stock_comparison(normalized)
         fast_response = _dispatch_fast_route(normalized)
         if _uses_workspace_intelligence(normalized):
             response = _workspace_intelligence_response(

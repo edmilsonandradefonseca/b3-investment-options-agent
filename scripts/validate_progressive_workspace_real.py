@@ -107,6 +107,19 @@ def main() -> int:
             assert len(result["strategy_comparison"]["alternatives"]) == 2
             assert set(result["asset_evidence"]) == {"ITUB4", "BBDC4"}
         print(json.dumps({"case": workspace, "status": "PASS", "elapsed_ms": round((monotonic()-started)*1000, 1), "candidate_count": count, "ranking_status": result.get("opportunity_ranking_status"), "llm_calls": 0}), flush=True)
+    from validate_live_workspace_outputs import make_cases
+    copilot = next(item for item in make_cases() if item['id'] == 'copilot_natural_language_compare')['request']
+    copilot['context']['analysis_mode'] = 'deterministic'
+    copilot['context']['research_mode'] = 'stored_only'
+    response = client.post('/orchestrate', json=copilot)
+    assert response.status_code == 200
+    data = response.json()
+    assert not data['error']
+    assert len(data['result']['strategy_comparison']['alternatives']) == 2
+    assert set(data['result']['asset_evidence']) == {'ITUB4', 'BBDC4'}
+    assert data['result']['workspace_intelligence']['workspace'] == 'Strategy Lab'
+    assert data['result']['telemetry']['llm_calls'] == 0
+    print('COPILOT_EXPLICIT_COMPARE=PASS stale_sidebar_ticker_excluded=YES llm_calls=0', flush=True)
     print("INSTANCE=isolated ASGI app using actual Ubuntu provider configuration and runtime data", flush=True)
     return 0
 
