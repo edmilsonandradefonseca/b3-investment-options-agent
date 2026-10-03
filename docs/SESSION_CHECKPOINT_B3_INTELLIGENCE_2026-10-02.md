@@ -193,3 +193,10 @@ Both observed objectives returned PARTIAL_COMPARABLE_UNIVERSE: VALE3 had 86 reco
 Ubuntu checkout is now ad0f738. Active systemd process remains the previous code: sudo restart was BLOCKED because interactive authentication is required. PETR4 active HTTP still PASS: 85 bars through 2026-10-02, b3_cotahist/oplab, zero options, 0.15s. Do not conflate candidate ASGI with active HTTP. Next manual action: restart b3-runtime.service; then verify active /version contains opportunity_screen_policy B3_OBSERVED_STOCK_SCREEN_V1 and validate the new deterministic screen through HTTP. No repeat of all senior requests needed.
 
 Details: docs/OPPORTUNITIES_OBSERVED_SCREEN_2026-10-03.md. Economic valuation/expected-return ranking, complete financed switching, stronger model routing and desktop visual acceptance remain open. No new ledger; V4.3/UNKNOWN/PIT preserved.
+
+
+## 2026-10-03 — active HTTP acceptance after user restart
+
+User reported restart. Read-only Ubuntu workflow run 37128404693 SUCCESS verifies the actual systemd HTTP service, not candidate ASGI. `/version` exposes B3_OBSERVED_STOCK_SCREEN_V1. Both Opportunities observed objectives PASS: four selected assets, three comparable ranked assets, zero LLM calls, expected return null. Risk 4.32s, liquidity 2.96s; PARTIAL_COMPARABLE_UNIVERSE retained. PETR4 active HTTP PASS: 85 bars through 2026-10-02, b3_cotahist/oplab, zero options. No runtime mutation or repeated senior synthesis.
+
+This supersedes the pending service restart above. No further restart needed for this documentation-only checkpoint. Browser visual acceptance and semantic superiority remain unproven. Next implementation priorities: reduce senior context/latency without weakening evidence, improve objective/constraint-aware economic comparison using existing authoritative data, and complete funded switching gaps. Missing valuation/targets/expected return must remain UNKNOWN, rather than replacing them with historical volatility/liquidity.
