@@ -631,6 +631,7 @@ class LiveStrategyComparisonService:
                 for ticker in assets
             )
 
+        target_evidence = {}
         dividend_evidence = {}
         if normalized_strategies == ("BUY_STOCK", "BUY_STOCK") and as_of is None:
             # Reuse the configured fundamentals adapter; failures are per-asset.
@@ -1184,10 +1185,15 @@ class LiveStrategyComparisonService:
             from b3_agent.put_pair import put_pair_payload
             put_pair = put_pair_payload(comparison.alternatives,option_evidence,packs,effective_as_of,put_objective)
 
+        if normalized_strategies == ("BUY_STOCK", "BUY_STOCK"):
+            from b3_agent.price_target_evidence import StoredPriceTargetService
+            target_service = StoredPriceTargetService()
+            target_evidence = {ticker: target_service.build(ticker, effective_as_of) for ticker in dict.fromkeys(assets)}
+
         stock_purchase = None
         if normalized_strategies == ("BUY_STOCK", "BUY_STOCK"):
             from b3_agent.stock_purchase import stock_purchase_payload
-            stock_purchase = stock_purchase_payload(comparison.alternatives, packs, effective_as_of, dividend_evidence)
+            stock_purchase = stock_purchase_payload(comparison.alternatives, packs, effective_as_of, dividend_evidence, target_evidence)
 
         return {
             "as_of": effective_as_of,

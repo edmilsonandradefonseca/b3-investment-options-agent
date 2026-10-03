@@ -170,3 +170,30 @@ def test_financial_data_403_falls_back_to_authenticated_quote_basics(monkeypatch
         "https://brapi.dev/api/v2/stocks/financial-data?"
     )
     assert calls[1] == "https://brapi.dev/api/quote/WEGE3"
+
+
+def test_dividend_403_uses_documented_quote_module_with_same_auth(monkeypatch):
+    monkeypatch.setenv("BRAPI_TOKEN", "test-token")
+    calls=[]
+    def get(request, timeout):
+        calls.append(request)
+        if len(calls)==1: raise HTTPError(request.full_url,403,"Forbidden",None,None)
+        return FakeResponse({"results":[{"symbol":"BBDC4","dividendsData":{"cashDividends":[{"rate":.1,"approvedOn":"2026-09-01","lastDatePrior":"2026-10-01","paymentDate":"2026-10-15","label":"JCP"}]}}]})
+    monkeypatch.setattr("urllib.request.urlopen",get)
+    records=BrapiFundamentalsAdapter().get_dividends("BBDC4")
+    assert records[0].gross_amount==.1
+    assert calls[1].full_url.endswith("/BBDC4?dividends=true")
+    assert calls[1].get_header("Authorization")=="Bearer test-token"
+
+
+def test_dividend_fallback_rejects_sibling_ticker_and_missing_module(monkeypatch):
+    import pytest
+    for result in ({"symbol":"ITUB4","dividendsData":{}},{"symbol":"BBDC4"}):
+        calls=[]
+        def get(request,timeout):
+            calls.append(request)
+            if len(calls)==1: raise HTTPError(request.full_url,403,"Forbidden",None,None)
+            return FakeResponse({"results":[result]})
+        monkeypatch.setattr("urllib.request.urlopen",get)
+        with pytest.raises(ValueError,match="exact ticker"):
+            BrapiFundamentalsAdapter().get_dividends("BBDC4")

@@ -182,7 +182,24 @@ class BrapiFundamentalsAdapter:
         if end is not None:
             params["endDate"] = end.isoformat()
 
-        payload = self._get("dividends", params)
+        try:
+            payload = self._get("dividends", params)
+        except HTTPError as exc:
+            if exc.code != 403:
+                raise
+            # Documented legacy quote module, with the same Bearer credential.
+            query = urllib.parse.urlencode({"dividends": "true"})
+            request = urllib.request.Request(
+                f"{self.QUOTE_URL}/{urllib.parse.quote(normalized)}?{query}",
+                headers=self._headers(),
+            )
+            with urllib.request.urlopen(request, timeout=20) as response:
+                legacy = json.loads(response.read().decode("utf-8"))
+            exact = next((item for item in legacy.get("results", []) if str(item.get("symbol", "")).upper() == normalized), None)
+            if exact is None or not isinstance(exact.get("dividendsData"), dict):
+                raise ValueError("BRAPI quote dividend module unavailable for exact ticker")
+            payload = {"results": [{"symbol": normalized, "data": exact["dividendsData"]}]}
+
         results = payload.get("results") or []
         if not results:
             raise ValueError(

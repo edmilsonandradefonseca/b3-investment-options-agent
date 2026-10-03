@@ -17,7 +17,7 @@ def _timestamp(value):
         return None
 
 
-def stock_purchase_payload(alternatives, packs, cutoff, dividend_evidence=None):
+def stock_purchase_payload(alternatives, packs, cutoff, dividend_evidence=None, target_evidence=None):
     rows = []
     for alternative, pack in zip(alternatives, packs, strict=True):
         quote = pack.market.get("current_quote") or {}
@@ -48,6 +48,7 @@ def stock_purchase_payload(alternatives, packs, cutoff, dividend_evidence=None):
             "capital_required_brl": alternative.capital_required,
             "fundamental_metrics": admitted, "excluded_metrics": excluded,
             "dividends": dividends,
+            "institution_targets": (target_evidence or {}).get(pack.ticker, {"status":"UNKNOWN_NO_ADMISSIBLE_TARGETS", "rows":[]}),
             "observed_risk": {name: pack.quant.get(name) for name in
                 ("volatility_60d", "max_drawdown", "average_dollar_volume_20d")},
             "history_start": pack.market.get("history_start"),

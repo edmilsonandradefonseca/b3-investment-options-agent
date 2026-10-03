@@ -12,6 +12,8 @@ on:
       - src/b3_agent/opportunity_screen.py
       - scripts/validate_stock_screen_real.py
       - scripts/validate_put_pair_real.py
+      - src/b3_agent/price_target_evidence.py
+      - src/b3_agent/providers/brapi/fundamentals.py
       - src/b3_agent/dividend_evidence.py
       - src/b3_agent/stock_purchase.py
       - scripts/validate_stock_purchase_real.py
