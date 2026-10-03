@@ -1082,6 +1082,24 @@ def orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
             context=request.context,
         )
         normalized = explicit_stock_comparison(normalized)
+        if normalized.context.get('funded_switch') is not None:
+            if _workspace_name(normalized) != 'Strategy Lab' or normalized.context.get('as_of') is not None:
+                raise ValueError('Funded switch supports current Strategy Lab requests only')
+            from b3_agent.funded_switch import build_funded_switch
+            inputs = normalized.context['funded_switch']
+            assets = normalized.context.get('comparison_assets')
+            if not isinstance(inputs, dict) or not isinstance(assets, list) or len(assets) != 2 or any(not isinstance(item,str) for item in assets):
+                raise ValueError('Funded switch requires an explicit input object and two stock assets')
+            from b3_agent.strategy_live import _validated_equity_ticker
+            assets = [_validated_equity_ticker(item) for item in assets]
+            result = build_funded_switch(assets, inputs)
+            fast_response = OrchestratorResponse(status='COMPLETED', result=result, sources=tuple(result['source_refs']))
+            normalized = OrchestratorRequest(task=normalized.task,ticker=None,context={**normalized.context,'selected_ticker':None})
+            if normalized.context.get('analysis_mode') == 'deterministic':
+                result['telemetry'] = {'llm_calls':0}
+                result['derived_synthesis_status'] = 'NOT_REQUESTED'
+                return _response_to_model(fast_response)
+            return _response_to_model(_workspace_intelligence_response(normalized, deterministic_response=fast_response))
         fast_response = _dispatch_opportunity_screen(normalized)
         if fast_response is not None:
             if normalized.context.get('analysis_mode') == 'deterministic' or normalized.context.get('as_of') is not None:

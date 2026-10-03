@@ -95,6 +95,7 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
   const workspaceMacro = asObject(workspaceMarket?.macro);
   const broadMarketResearch = asArray(workspaceMarket?.market_overview_research);
   const broadMarketDiagnostics = asArray(workspaceMarket?.market_overview_diagnostics);
+  const fundedSwitch = asObject(result.funded_switch);
   const opportunityScreen = asObject(result.opportunity_screen);
   const screenedRows = asArray(opportunityScreen?.rows).map(asObject).filter((item): item is Obj => item !== null);
   const screeningReasons: Record<string, string> = {
@@ -296,7 +297,8 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
       </p>}
     </section>}
 
-    {opportunityScreen && <section className="analysis-section">
+    {fundedSwitch&&<section><h3>Troca financiada · {stringValue(fundedSwitch.sell_ticker)} → {stringValue(fundedSwitch.buy_ticker)}</h3><p>Modelo pelo preço de referência; ordens não executadas. {stringValue(fundedSwitch.status)}</p><div className="table-wrap"><table><tbody>{[['Quantidade vendida','sell_quantity'],['Quantidade comprável','buy_quantity'],['Quantidade restante na origem','remaining_source_stock_quantity']].map(([label,key])=><tr key={key}><th>{label}</th><td>{numberValue(fundedSwitch[key])??'UNKNOWN'}</td></tr>)}{[['Venda bruta','gross_sale_proceeds_brl'],['Custos informados','fees_brl'],['Impostos informados','taxes_brl'],['Venda líquida','net_sale_proceeds_brl'],['Compra modelada','purchase_notional_brl'],['Caixa residual','residual_cash_brl']].map(([label,key])=><tr key={key}><th>{label}</th><td>{numberValue(fundedSwitch[key])===null?'UNKNOWN':brl(numberValue(fundedSwitch[key]))}</td></tr>)}</tbody></table></div>{fundedSwitch.related_option_positions_present&&<p className="muted">Há opções relacionadas: a troca pode alterar cobertura ou garantias e exige análise específica.</p>}</section>}
+      {opportunityScreen && <section className="analysis-section">
       <h4>Comparação de ações · risco e liquidez observados</h4>
       <p>{screenStatus[asText(opportunityScreen.status) ?? ''] ?? 'Estado indisponível'}</p>
       <p className="muted">Objetivo: {asText(opportunityScreen.objective) === 'LOWEST_REALIZED_VOLATILITY_60D' ? 'menor volatilidade realizada em 60 retornos' : asText(opportunityScreen.objective) === 'HIGHEST_OBSERVED_LIQUIDITY_20D' ? 'maior proxy de liquidez em 20 observações' : 'comparar sem ordenar'}.

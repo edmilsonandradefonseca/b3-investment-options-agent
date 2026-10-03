@@ -40,6 +40,23 @@ def main():
         assert all(row['expected_return'] is None for row in screen['rows'])
         print(json.dumps({'case':'stock_screen','objective':objective,'status':screen['status'],'elapsed_ms':round((monotonic()-started)*1000,1),'ranked_count':screen['ranked_count'],'rows':[{'ticker':r['ticker'],'history_count':r['history_count'],'rank_present':r['rank'] is not None,'exclusions':r['exclusions']} for r in screen['rows']],'llm_calls':0}),flush=True)
         write_private_report(Path.home()/'.local/share/b3-investment-options-agent/live-validation/stock-screen'/objective,{'instance':'candidate ASGI with real production inputs','request':request,'response':data})
+    from b3_agent.config import settings
+    from b3_agent.portfolio.snapshot import load_active_snapshots
+    portfolio=load_active_snapshots(settings.data_dir).get('portfolio_context')
+    assert portfolio is not None, 'Real portfolio unavailable for funded switch acceptance'
+    long_position=next((position for position in portfolio.positions if position.instrument_type.upper()=='STOCK' and position.quantity>=1), None)
+    assert long_position is not None, 'No admissible long stock position for funded switch acceptance'
+    sell=long_position.ticker
+    buy='BBAS3' if sell!='BBAS3' else 'ITUB4'
+    funded_request={'task':'Model one-share financing with explicitly hypothetical zero costs; no execution or investment winner.', 'context':{'workspace':'Strategy Lab','comparison_assets':[sell,buy],'funded_switch':{'quantity':1,'fees_brl':0,'taxes_brl':0},'analysis_mode':'deterministic'}}
+    funded_response=client.post('/orchestrate',json=funded_request)
+    funded_data=funded_response.json()
+    assert funded_response.status_code==200 and not funded_data.get('error')
+    funded=funded_data['result']['funded_switch']
+    assert abs(funded['purchase_notional_brl']+funded['residual_cash_brl']-funded['net_sale_proceeds_brl'])<1e-7
+    assert funded_data['result']['telemetry']['llm_calls']==0
+    write_private_report(Path.home()/'.local/share/b3-investment-options-agent/live-validation/funded-switch',{'instance':'candidate ASGI with real portfolio and quotes, hypothetical explicit zero fees/taxes','response':funded_data})
+    print('FUNDED_SWITCH_REAL=PASS cash_conservation=YES execution=NONE',flush=True)
     if args.senior:
         request['context'].pop('analysis_mode')
         request['task']='Compare VALE3, RENT3, VIVT3 e BBAS3 pelo objetivo explícito observado. Explique evidências favoráveis e contrárias por ativo, impacto e custo de oportunidade quando conhecidos; preserve UNKNOWN em valuation e retorno futuro. Não recomende compra apenas por menor risco/maior liquidez históricos.'
