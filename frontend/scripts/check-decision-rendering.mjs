@@ -1,4 +1,4 @@
-import { build } from 'esbuild';
+import { build } from 'vite';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 const directory = await mkdtemp(join(process.cwd(), '.decision-render-'));
 try {
   const output = join(directory, 'output.mjs');
-  await build({entryPoints:['src/components/AnalysisOutput.tsx'], outfile:output, bundle:true, platform:'node', format:'esm', jsx:'automatic', external:['react','react-dom']});
+  await build({logLevel:'error',build:{ssr:'src/components/AnalysisOutput.tsx',outDir:directory,emptyOutDir:false,rollupOptions:{output:{entryFileNames:'output.mjs'}}}});
   const { default: AnalysisOutput } = await import(pathToFileURL(output).href);
   const data = {status:'PASS', error:null, sources:[], audit:[], result:{
     workspace_intelligence:{workspace:'Strategy Lab'},
