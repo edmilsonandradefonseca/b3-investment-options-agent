@@ -27,6 +27,60 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
+      - name: Update and restart the authorized Ubuntu runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_dir=/opt/b3-investment-options-agent
+          test "$(git -C "$runtime_dir" branch --show-current)" = "feature/react-functional-v43-integration"
+          test -z "$(git -C "$runtime_dir" status --porcelain --untracked-files=no)"
+          git -C "$runtime_dir" fetch origin feature/react-functional-v43-integration
+          git -C "$runtime_dir" merge --ff-only "$GITHUB_SHA"
+          test "$(git -C "$runtime_dir" rev-parse HEAD)" = "$GITHUB_SHA"
+          sudo -n systemctl restart b3-runtime.service
+          ready=0
+          for attempt in {1..20}; do
+            if curl -fsS --max-time 2 http://127.0.0.1:8000/health >/dev/null; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          test "$ready" -eq 1
+
+      - name: Accept PETR4 HTTP history and chart payload
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import time
+          from datetime import datetime
+          from urllib.request import urlopen
+          started = time.monotonic()
+          with urlopen("http://127.0.0.1:8000/analysis/live/PETR4", timeout=20) as response:
+              data = json.load(response)
+          market = data["market"]
+          latest = market["latest"]
+          sources = data["source_refs"]
+          result = {
+              "ticker": data["ticker"],
+              "history_count": market["history_count"],
+              "latest_source": latest["source"],
+              "latest_date": latest["observation_timestamp"],
+              "sources": sources,
+              "options_count": data["options"]["contract_count"],
+              "market_fields": sorted(market),
+              "elapsed_ms": round((time.monotonic() - started) * 1000, 1),
+          }
+          print(json.dumps(result, ensure_ascii=False), flush=True)
+          assert data["ticker"] == "PETR4"
+          assert str(latest["observation_timestamp"]).startswith("2026-10-02"), "Expected 02/10 candle"
+          assert market["history_count"] >= 85, "History coverage regressed"
+          assert "b3_cotahist" in sources and "oplab" in sources, "Missing required source"
+          assert data["options"]["contract_count"] == 0, "History route must not request options"
+          print("PETR4_HTTP_ACCEPTANCE=PASS", flush=True)
+          PY
+
       - name: Identify deployed runtime checkout
         run: |
           git -C /opt/b3-investment-options-agent rev-parse HEAD
