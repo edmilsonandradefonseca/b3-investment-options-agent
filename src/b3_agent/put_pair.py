@@ -12,6 +12,8 @@ def put_pair_payload(alternatives, evidence, packs, cutoff, objective='COMPARE_O
         item=evidence[alternative.subject_id]; contract=item['contract']; quote=item['current_quote']
         pack=next(pack for pack in packs if pack.ticker==item['underlying_ticker'])
         underlying=pack.market.get('current_quote')
+        if underlying and (cutoff.date()-underlying['observation_timestamp'].date()).days>7:
+            underlying=None
         spot=underlying.get('close') if underlying else None
         expiry=contract['expiration_date']; days=(expiry-cutoff.date()).days
         strike=float(contract['strike']); multiplier=float(contract['contract_multiplier']); bid=float(quote['bid'])

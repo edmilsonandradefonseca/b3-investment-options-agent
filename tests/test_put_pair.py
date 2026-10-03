@@ -66,3 +66,21 @@ def test_common_terminal_horizon_cannot_rank_different_expiries():
     result=compare(scenario_horizon='2026-11-20',scenario_shocks_pct=[-10,0,10],scenario_objective='MAXIMIZE_WORST_CASE_RETURN_ON_CAPITAL')
     assert result['scenario_analysis']['status']=='PARTIAL'
     assert result['scenario_analysis']['objective_policy']['ranked_alternative_id'] is None
+
+
+def test_historical_http_pair_rejects_before_current_acquisition():
+    from fastapi.testclient import TestClient
+    from b3_agent.server import app
+    response=TestClient(app).post('/orchestrate',json={'task':'Compare exact PUTs','context':{'workspace':'Strategy Lab','comparison_assets':['WEGE3','WEGE3'],'strategy_a':'Vender PUT','strategy_b':'Vender PUT','option_a':'WEGEV500','option_b':'WEGEV490','as_of':'2026-10-01T00:00:00Z','analysis_mode':'deterministic'}})
+    assert response.status_code==400
+    assert 'historical contract availability' in response.json()['detail']
+
+
+def test_future_underlying_availability_does_not_supply_risk_probability():
+    class FutureSpot(FakeCurrentQuoteProvider):
+        def get_current_quote(self,ticker):
+            return replace(super().get_current_quote(ticker),available_timestamp=datetime.now(timezone.utc)+timedelta(days=1))
+    engine=LiveStrategyComparisonService(evidence_service=StrategyEvidenceService(market_provider=FakeMarketProvider(),fundamentals_provider=FakeFundamentalsProvider(),current_quote_provider=FutureSpot()),options_provider=DifferentExpiryOptions())
+    result=engine.compare(assets=('WEGE3','WEGE3'),strategies=('Vender PUT','Vender PUT'),option_ids=('WEGEV500','WEGEV490'),put_objective='LOWEST_MODEL_EXPIRY_ITM')
+    assert result['put_pair_comparison']['ranking']=='UNKNOWN_OBJECTIVE_INPUTS'
+    assert all(row['expiry_itm_probability'] is None for row in result['put_pair_comparison']['rows'])

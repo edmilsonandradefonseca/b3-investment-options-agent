@@ -277,6 +277,9 @@ class FastRouteDispatcher:
             str(context.get("strategy_b") or "").strip(),
         )
 
+        if context.get('as_of') is not None and all(LiveStrategyComparisonService.normalize_strategy(strategy)=='SELL_PUT' for strategy in strategies):
+            raise ValueError('Two-PUT comparison requires current chain evidence; historical contract availability is not established')
+
         raw_amount = context.get("comparison_amount")
         amount = None
         if raw_amount not in (None, ""):
