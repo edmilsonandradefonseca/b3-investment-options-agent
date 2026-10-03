@@ -1,0 +1,43 @@
+name: Yahoo daily history pilot (Ubuntu)
+
+on:
+  push:
+    branches:
+      - feature/react-functional-v43-integration
+    paths:
+      - .github/workflows/yfinance-history-pilot.yml
+      - scripts/validate_yfinance_history.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: b3-yahoo-history-pilot
+  cancel-in-progress: false
+
+jobs:
+  yahoo-history:
+    name: Compare Yahoo daily candles with local COTAHIST
+    runs-on: self-hosted
+    timeout-minutes: 12
+    steps:
+      - name: Checkout tested branch
+        uses: actions/checkout@v4
+
+      - name: Install isolated Yahoo client
+        shell: bash
+        run: |
+          python3 -m pip install --disable-pip-version-check \
+            --target "$RUNNER_TEMP/yfinance-pilot" "yfinance==1.6.0"
+
+      - name: Run read-only comparison
+        shell: bash
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src:${{ runner.temp }}/yfinance-pilot
+        run: |
+          test -x /opt/b3-investment-options-agent/.venv/bin/python
+          /opt/b3-investment-options-agent/.venv/bin/python \
+            scripts/validate_yfinance_history.py \
+            --market-root /opt/b3-runtime/data/archive/cotahist_raw \
+            --tickers PETR4 VALE3 ITUB4 BBDC4 WEGE3 \
+            --days 365
