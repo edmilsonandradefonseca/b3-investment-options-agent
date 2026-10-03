@@ -640,9 +640,9 @@ class LiveStrategyComparisonService:
                 if getter is None:
                     return {"status": "UNSUPPORTED_PROVIDER", "records": []}
                 try:
-                    return {"status": "READ_OK", "records": [asdict(row) for row in getter(ticker)]}
+                    return {"status": "READ_OK", "records": [asdict(row) for row in getter(ticker, start=datetime.now(timezone.utc).date()-timedelta(days=366))]}
                 except (OSError, RuntimeError, ValueError) as exc:
-                    return {"status": "PROVIDER_UNAVAILABLE", "records": [], "error_type": type(exc).__name__}
+                    return {"status": "PROVIDER_UNAVAILABLE", "records": [], "error_type": type(exc).__name__, "http_status": getattr(exc, "code", None)}
             with ThreadPoolExecutor(max_workers=2) as executor:
                 tickers = tuple(dict.fromkeys(assets))
                 dividend_evidence = dict(zip(tickers, executor.map(collect_dividends, tickers), strict=True))

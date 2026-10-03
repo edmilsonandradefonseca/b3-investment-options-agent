@@ -44,3 +44,10 @@ def test_brazil_date_controls_entitlement_across_utc_midnight():
     cutoff=datetime(2026,10,4,1,tzinfo=timezone.utc)
     result=dividend_payload("ITUB4",{"status":"READ_OK","records":[event(record_date="2026-10-04",ex_date="2026-10-05")]},cutoff)
     assert result["events"][0]["new_purchase_entitlement"]=="CONDITIONAL_FUTURE_RECORD_DATE"
+
+
+def test_old_payments_outside_year_are_counted_without_loading_events():
+    result=project(event(announcement_date="2024-01-01",payment_date="2024-02-01",record_date="2024-01-02",ex_date="2024-01-03"))
+    assert result["outside_window_count"]==1
+    assert result["events"]==[]
+    assert result["observed_paid_365d_gross_per_share_brl"] is None

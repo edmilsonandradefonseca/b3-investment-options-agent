@@ -15,6 +15,7 @@ def _date(value):
 def dividend_payload(ticker, evidence, cutoff):
     today = cutoff.astimezone(timezone(timedelta(hours=-3))).date()
     events, exclusions, seen = [], [], set()
+    outside_window_count = 0
     for raw in evidence.get("records", []):
         amount = _number(raw.get("gross_amount"))
         observed = _timestamp(raw.get("observation_timestamp"))
@@ -32,6 +33,9 @@ def dividend_payload(ticker, evidence, cutoff):
                 or (announced and announced > today)
                 or (record and ex_date and record >= ex_date)):
             exclusions.append({"source_record_id": raw.get("source_record_id"), "reason": "UNQUALIFIED_OR_INCONSISTENT_DISTRIBUTION"})
+            continue
+        if payment and payment <= today-timedelta(days=365):
+            outside_window_count += 1
             continue
         key = (ticker, raw.get("payment_type"), announced, payment, record, ex_date, amount, raw.get("currency"))
         if key in seen:
@@ -58,7 +62,8 @@ def dividend_payload(ticker, evidence, cutoff):
     trailing = [event for event in events if event["payment_date"] and today-timedelta(days=365) < event["payment_date"] <= today]
     possible = [event for event in events if event["payment_status"] == "ANNOUNCED_FUTURE_PAYMENT" and event["new_purchase_entitlement"] == "CONDITIONAL_FUTURE_RECORD_DATE"]
     return {"policy_version": "issuer-dividends-v1", "collection_status": evidence.get("status", "UNKNOWN"),
-        "events": events, "exclusions": exclusions,
+        "events": events, "exclusions": exclusions, "outside_window_count": outside_window_count,
+        "provider_error_type": evidence.get("error_type"), "provider_http_status": evidence.get("http_status"),
         "observed_paid_365d_gross_per_share_brl": sum(event["gross_amount_per_share_brl"] for event in trailing) if trailing else None,
         "announced_conditional_gross_per_share_brl": sum(event["gross_amount_per_share_brl"] for event in possible) if possible else None,
         "coverage_status": "UNKNOWN_PROVIDER_COMPLETENESS", "net_amount": None,
