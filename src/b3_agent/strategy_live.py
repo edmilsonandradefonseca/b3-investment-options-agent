@@ -548,6 +548,7 @@ class LiveStrategyComparisonService:
         scenario_horizon: date | str | None = None,
         scenario_shocks_pct: list[float] | tuple[float, ...] | None = None,
         scenario_objective: str = "COMPARE_ONLY",
+        put_objective: str = "COMPARE_ONLY",
         portfolio: PortfolioContext | None = None,
         as_of: datetime | None = None,
     ) -> dict[str, Any]:
@@ -604,18 +605,34 @@ class LiveStrategyComparisonService:
         if effective_as_of.tzinfo is None or effective_as_of.utcoffset() is None:
             raise ValueError("as_of must be timezone-aware")
 
-        packs = tuple(
-            self.evidence_service.build(
-                ticker,
-                as_of=effective_as_of,
-                portfolio=portfolio,
+        is_put_pair = normalized_strategies == ('SELL_PUT','SELL_PUT')
+        if put_objective not in {'COMPARE_ONLY','LOWEST_MODEL_EXPIRY_ITM','HIGHEST_GROSS_PREMIUM_PER_CAPITAL_30D'} or (not is_put_pair and put_objective != 'COMPARE_ONLY'):
+            raise ValueError('A two-PUT objective requires exactly two PUT sale alternatives')
+        prefetched_options = {}
+        if is_put_pair:
+            if as_of is not None:
+                raise ValueError('Two-PUT comparison requires current chain evidence; historical contract availability is not established')
+            if str(option_ids[0]).upper().strip() == str(option_ids[1]).upper().strip():
+                raise ValueError('Select two distinct PUT contract identifiers')
+            from b3_agent.opportunity_screen import StockOpportunityScreenService
+            screen = StockOpportunityScreenService(self.evidence_service).build(assets, portfolio=portfolio, as_of=as_of)
+            for ticker in dict.fromkeys(assets):
+                prefetched_options[ticker] = self.options_provider.get_snapshot(ticker,effective_as_of)
+            effective_as_of = as_of or datetime.now(timezone.utc)
+            packs = tuple(AssetEvidencePack(**{**screen['asset_evidence'][ticker], 'as_of':effective_as_of}) for ticker in assets)
+        else:
+            packs = tuple(
+                self.evidence_service.build(
+                    ticker,
+                    as_of=effective_as_of,
+                    portfolio=portfolio,
+                )
+                for ticker in assets
             )
-            for ticker in assets
-        )
 
         alternatives: list[StrategyAlternative] = []
         option_evidence: dict[str, dict[str, Any]] = {}
-        option_snapshots: dict[str, tuple[list[Any], list[Any]]] = {}
+        option_snapshots: dict[str, tuple[list[Any], list[Any]]] = prefetched_options
         all_sources: list[str] = [
             source for pack in packs for source in pack.source_refs
         ]
@@ -739,6 +756,17 @@ class LiveStrategyComparisonService:
                     raise ValueError(
                         f"{normalized_option} has no executable current bid"
                     )
+                if is_put_pair:
+                    if sum(item.option_id.upper()==normalized_option for item in contracts)!=1 or sum(item.option_id.upper()==normalized_option for item in quotes)!=1:
+                        raise ValueError('Each selected PUT must have exactly one contract and quote')
+                    if contract.underlying_ticker.upper()!=pack.ticker or quote.ticker.upper()!=pack.ticker:
+                        raise ValueError('PUT contract/quote identity does not match the selected underlying')
+                    if (effective_as_of.date()-quote.observation_timestamp.date()).days>7:
+                        raise ValueError('PUT quote is older than the seven-calendar-day policy')
+                    if quote.observation_timestamp>effective_as_of or quote.available_timestamp>effective_as_of or quote.quality_status in {'REJECTED','INVALID'} or not quote.source:
+                        raise ValueError('PUT quote is not admissible at the common PIT cutoff')
+                    if any(not math.isfinite(float(value)) or float(value)<=0 for value in (contract.strike,contract.contract_multiplier,quote.bid)) or quote.bid>=contract.strike:
+                        raise ValueError('Invalid PUT strike, multiplier or premium')
                 option_contract = contract
                 option_quote = quote
 
@@ -1128,6 +1156,11 @@ class LiveStrategyComparisonService:
             limitations.append("Deterministic ranking was not requested; alternatives remain unranked.")
         limitations = list(dict.fromkeys(limitations))
 
+        put_pair = None
+        if is_put_pair:
+            from b3_agent.put_pair import put_pair_payload
+            put_pair = put_pair_payload(comparison.alternatives,option_evidence,packs,effective_as_of,put_objective)
+
         return {
             "as_of": effective_as_of,
             "quality_status": comparison.quality_status,
@@ -1148,6 +1181,7 @@ class LiveStrategyComparisonService:
                 pack.ticker: asdict(pack)
                 for pack in packs
             },
+            **({'put_pair_comparison':put_pair} if put_pair else {}),
             "option_evidence": option_evidence,
             "limitations": limitations,
             "source_refs": list(dict.fromkeys(all_sources)),

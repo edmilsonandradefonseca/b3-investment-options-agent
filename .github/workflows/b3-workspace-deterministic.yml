@@ -11,6 +11,9 @@ on:
       - src/b3_agent/agents/**
       - src/b3_agent/opportunity_screen.py
       - scripts/validate_stock_screen_real.py
+      - scripts/validate_put_pair_real.py
+      - src/b3_agent/put_pair.py
+      - src/b3_agent/strategy_live.py
       - src/b3_agent/server.py
       - frontend/src/App.tsx
       - frontend/src/components/AnalysisOutput.tsx
@@ -67,7 +70,8 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/src
         run: |
-          timeout 300s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_stock_screen_real.py --senior
+          timeout 300s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_stock_screen_real.py
+          timeout 300s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_put_pair_real.py --senior
 
       - name: Update and restart the authorized Ubuntu runtime
         shell: bash

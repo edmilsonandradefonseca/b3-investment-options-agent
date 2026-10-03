@@ -312,6 +312,7 @@ class FastRouteDispatcher:
             scenario_horizon=scenario_horizon,
             scenario_shocks_pct=scenario_shocks,
             scenario_objective=scenario_objective,
+            put_objective=str(context.get('put_objective') or 'COMPARE_ONLY'),
             portfolio=portfolio,
         )
         sources = tuple(str(item) for item in result.pop("source_refs", ()))
