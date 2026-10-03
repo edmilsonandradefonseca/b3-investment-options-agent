@@ -31,6 +31,7 @@ def test_version_endpoint() -> None:
     assert response.json() == {
         "service": "b3-orchestrator-server",
         "version": server.app.version,
+        "opportunity_screen_policy": "B3_OBSERVED_STOCK_SCREEN_V1",
     }
 
 

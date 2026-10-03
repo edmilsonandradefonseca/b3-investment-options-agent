@@ -322,6 +322,7 @@ def _workspace_intelligence_response(
             and "asset_evidence" not in deterministic_result
             else {}
         ),
+        "derived_synthesis_status": "FAILED" if senior.error else "COMPLETED",
         "personal_history": context_payload.get("deterministic_context", {}).get("personal_history", {}),
         "research_context": market_context,
         "stored_research": context_payload.get("deterministic_context", {}).get("stored_research", {}),
