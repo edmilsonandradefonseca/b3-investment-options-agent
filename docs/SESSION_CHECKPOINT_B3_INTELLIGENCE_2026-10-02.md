@@ -182,3 +182,14 @@ Usuário informou “feito”. Validação [37122133861 SUCCESS](https://github.
 - CI do commit de validação `2e4a0d5` SUCCESS. Backend validado anteriormente `2d18f51` não foi alterado por esse commit (somente workflow de verificação).
 
 **Este aceite substitui o estado “reinício pendente” do bloco anterior.** O novo contrato está confirmado no processo ativo. Não confirma visualmente a instalação Windows nem qualidade semântica superior ao ChatGPT. Ranking econômico amplo, alvos/valuation verificados, comparação financiada e AC-27/28 completos continuam como próximos blocos. Não repetir as quatro chamadas senior nem pedir outro reinício sem nova mudança de runtime.
+
+
+## 2026-10-03 — observed Opportunities screen accepted on candidate Ubuntu
+
+Code `ad0f738f7e1624749103bd3db3162e2f666eb2fb`. GitHub CI run 37125688641 SUCCESS: 829 Python tests, React build and SSR decision rendering regression. Real self-hosted Ubuntu run 37125685987 SUCCESS: new explicit stock screen validated against actual production providers and portfolio, then one actual senior request.
+
+Both observed objectives returned PARTIAL_COMPARABLE_UNIVERSE: VALE3 had 86 records and a different observation window, while RENT3/VIVT3/BBAS3 had 85 and a common window. Three assets ranked; VALE3 visibly excluded from ordering, still retained in comparison/senior interpretation. Deterministic requests: 3.67s risk and 2.67s liquidity; zero LLM calls. Senior: HTTP 200, no API error, four alternative assessments with implications and unknowns, 81.15s. This is structural/real-provider acceptance, not semantic proof of ChatGPT superiority, expected-return ranking or complete AC acceptance.
+
+Ubuntu checkout is now ad0f738. Active systemd process remains the previous code: sudo restart was BLOCKED because interactive authentication is required. PETR4 active HTTP still PASS: 85 bars through 2026-10-02, b3_cotahist/oplab, zero options, 0.15s. Do not conflate candidate ASGI with active HTTP. Next manual action: restart b3-runtime.service; then verify active /version contains opportunity_screen_policy B3_OBSERVED_STOCK_SCREEN_V1 and validate the new deterministic screen through HTTP. No repeat of all senior requests needed.
+
+Details: docs/OPPORTUNITIES_OBSERVED_SCREEN_2026-10-03.md. Economic valuation/expected-return ranking, complete financed switching, stronger model routing and desktop visual acceptance remain open. No new ledger; V4.3/UNKNOWN/PIT preserved.

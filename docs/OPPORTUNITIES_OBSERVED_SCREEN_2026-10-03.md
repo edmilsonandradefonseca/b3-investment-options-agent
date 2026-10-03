@@ -11,3 +11,7 @@ The backend owns all calculations and ordering. React displays objective, scope,
 Validation pending at publication: GitHub full CI, SSR rendering regression, two objective screens and one focused senior interpretation on the Ubuntu runner with real production inputs. Candidate ASGI validation is distinct from the active systemd HTTP process. Runtime update follows green CI and candidate acceptance; any blocked service restart must be reported rather than claimed successful.
 
 Still open: objective/constraint-aware economic ranking, valuation and expected-return evidence, financed sell-to-buy completeness, advanced model routing, actual browser visual acceptance, and the broader delivery-plan acceptance cases.
+
+## Real validation result
+
+Code ad0f738: [CI SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37125688641), 829 tests plus React/SSR. [Ubuntu candidate SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37125685987): risk 3.67s, liquidity 2.67s, three comparable assets; VALE3 excluded because its observation dates differ. Senior 81.15s, four assessments, HTTP 200. Full responses retained privately on Ubuntu. Checkout updated; service restart blocked by interactive sudo. Active new-code HTTP and browser visual acceptance pending. This is not proof of financial superiority or completed economic ranking.
