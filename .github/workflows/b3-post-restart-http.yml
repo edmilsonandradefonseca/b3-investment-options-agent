@@ -36,31 +36,19 @@ jobs:
           version = call_json(base + "/version", None, 15)
           assert version["http_status"] == 200
           assert version["response"].get("opportunity_screen_policy") == "B3_OBSERVED_STOCK_SCREEN_V1", "Active process did not load the observed screen"
-          assets = ["VALE3", "RENT3", "VIVT3", "BBAS3"]
-          for objective in ("LOWEST_REALIZED_VOLATILITY_60D", "HIGHEST_OBSERVED_LIQUIDITY_20D"):
-              request = {"task": "Compare explicit assets by observed objective; no future return inference.", "ticker": None, "context": {"workspace": "Opportunities", "opportunity_assets": assets, "opportunity_objective": objective, "analysis_mode": "deterministic", "research_mode": "stored_only"}}
-              response = call_json(base + "/orchestrate", request, 90)
-              write_private_report(Path.home() / ".local/share/b3-investment-options-agent/live-validation/active-stock-screen" / objective, {"instance": "ACTIVE HTTP systemd process", "request": request, "response": response})
-              body = response.get("response") or {}
-              result = body.get("result") or {}
-              screen = result.get("opportunity_screen") or {}
-              assert response["http_status"] == 200 and not body.get("error") and not response["transport_error_type"]
-              assert screen.get("policy_version") == "B3_OBSERVED_STOCK_SCREEN_V1"
-              assert set(result.get("asset_evidence") or {}) == set(assets)
-              assert screen["ranked_count"] >= 2 and len(screen["rows"]) == 4
-              assert result["telemetry"]["llm_calls"] == 0
-              assert result["derived_synthesis_status"] == "NOT_REQUESTED"
-              assert all(row["expected_return"] is None for row in screen["rows"])
-              print(json.dumps({"instance": "ACTIVE HTTP systemd process", "objective": objective, "status": screen["status"], "ranked_count": screen["ranked_count"], "elapsed_ms": response["elapsed_ms"], "llm_calls": 0}), flush=True)
-          request["context"].pop("analysis_mode")
-          response = call_json(base + "/orchestrate", request, 240)
-          write_private_report(Path.home() / ".local/share/b3-investment-options-agent/live-validation/active-senior-projection", {"instance": "ACTIVE HTTP systemd", "response": response})
+          portfolio = call_json(base + "/portfolio/current", None, 30)["response"]
+          position = next(row for row in portfolio["positions"] if row["instrument_type"] == "STOCK" and row["quantity"] >= 1)
+          sell = position["ticker"]
+          buy = "BBAS3" if sell != "BBAS3" else "ITUB4"
+          request = {"task":"Compare one-share financed switch with explicit hypothetical zero costs.", "context":{"workspace":"Strategy Lab","comparison_assets":[sell,buy],"funded_switch":{"quantity":1,"fees_brl":0,"taxes_brl":0},"analysis_mode":"deterministic"}}
+          response = call_json(base + "/orchestrate", request, 90)
+          write_private_report(Path.home()/".local/share/b3-investment-options-agent/live-validation/active-funded-switch", {"instance":"ACTIVE HTTP systemd","response":response})
           body = response.get("response") or {}
-          result = body.get("result") or {}
-          assessments = (result.get("proposal") or {}).get("alternative_assessments") or []
           assert response["http_status"] == 200 and not body.get("error")
-          assert {row["alternative_id"] for row in assessments} == set(assets)
-          assert all(row["decision_implications"] and row["unknowns"] for row in assessments)
-          print(json.dumps({"instance":"ACTIVE HTTP systemd", "senior_http":response["http_status"], "elapsed_ms":response["elapsed_ms"], "assessments":len(assessments), "stages":result.get("telemetry",{}).get("stages",{})}), flush=True)
-          print("ACTIVE_STOCK_SCREEN_AND_SENIOR=PASS RUNTIME_MUTATIONS=NONE", flush=True)
+          result = body["result"]; funded = result["funded_switch"]
+          assert result["telemetry"]["llm_calls"] == 0
+          assert abs(funded["purchase_notional_brl"]+funded["residual_cash_brl"]-funded["net_sale_proceeds_brl"]) < 1e-7
+          assert len(result["strategy_comparison"]["alternatives"]) == 2
+          print(json.dumps({"case":"ACTIVE_FUNDED_SWITCH","http":200,"elapsed_ms":response["elapsed_ms"],"cash_conservation":"PASS","llm_calls":0}),flush=True)
+          print("ACTIVE_FUNDED_SWITCH=PASS RUNTIME_MUTATIONS=NONE",flush=True)
           PY
