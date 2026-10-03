@@ -68,3 +68,19 @@ jobs:
               print(json.dumps({"scope":"candidate private report, no active PUT acceptance","reason":row["probability_estimates"].get("reason"),"underlying_quote_present":bool(pack["market"].get("current_quote")),"iv_present":iv is not None,"iv_admissible":isinstance(iv,(int,float)) and math.isfinite(iv) and 0<iv<=3}),flush=True)
           print("BUSINESS_VALUES_PRINTED=NONE",flush=True)
           PY
+      - name: Check current provider IV field availability without logging values
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: |
+          /opt/b3-investment-options-agent/.venv/bin/python - <<'PY'
+          import os,json,subprocess
+          from pathlib import Path
+          pid=subprocess.check_output(["systemctl","show","b3-runtime.service","--property=MainPID","--value"],text=True,timeout=10).strip()
+          for field in Path("/proc/"+pid+"/environ").read_bytes().split(b"\0"):
+              key,sep,value=field.partition(b"=");name=key.decode()
+              if sep and (name.startswith("B3_") or name=="OPLAB_API_TOKEN"):os.environ[name]=value.decode()
+          from b3_agent.providers.oplab.options import OplabOptionsAdapter
+          payload=OplabOptionsAdapter()._get_payload("PETR4")
+          keys=sorted({key for row in payload for key in row if "vol" in key.lower() or "greek" in key.lower() or key.lower() in {"iv","implied_volatility","delta","gamma","theta","vega","rho"}})
+          print(json.dumps({"scope":"actual current provider schema only","risk_field_names":keys,"iv_value_present_any_row":any(row.get("iv") is not None or row.get("implied_volatility") is not None for row in payload),"business_values_logged":False}),flush=True)
+          PY
