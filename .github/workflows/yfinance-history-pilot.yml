@@ -24,11 +24,12 @@ jobs:
       - name: Checkout tested branch
         uses: actions/checkout@v4
 
-      - name: Install isolated Yahoo client
+      - name: Install isolated Yahoo client within app dependency bounds
         shell: bash
         run: |
           python3 -m pip install --disable-pip-version-check \
-            --target "$RUNNER_TEMP/yfinance-pilot" "yfinance==1.6.0"
+            --target "$RUNNER_TEMP/yfinance-pilot" \
+            "yfinance==1.6.0" "pandas>=2.2,<3" "websockets>=14,<17"
 
       - name: Run read-only comparison
         shell: bash
