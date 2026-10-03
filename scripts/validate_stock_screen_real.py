@@ -58,16 +58,19 @@ def main():
     write_private_report(Path.home()/'.local/share/b3-investment-options-agent/live-validation/funded-switch',{'instance':'candidate ASGI with real portfolio and quotes, hypothetical explicit zero fees/taxes','response':funded_data})
     print('FUNDED_SWITCH_REAL=PASS cash_conservation=YES execution=NONE',flush=True)
     if args.senior:
+        request=funded_request
         request['context'].pop('analysis_mode')
-        request['task']='Compare VALE3, RENT3, VIVT3 e BBAS3 pelo objetivo explícito observado. Explique evidências favoráveis e contrárias por ativo, impacto e custo de oportunidade quando conhecidos; preserve UNKNOWN em valuation e retorno futuro. Não recomende compra apenas por menor risco/maior liquidez históricos.'
+        request['task']='Compare manter as ações selecionadas versus vender para financiar a compra descrita. Explique evidências favoráveis e contrárias, fluxo de caixa, custo de oportunidade, restrições de opções relacionadas, incerteza de execução e dividendos/retorno futuro UNKNOWN. Os custos zero são hipóteses explícitas deste teste, não impostos reais. Não recomende trocar apenas por risco histórico.'
         started=monotonic()
         response=client.post('/orchestrate',json=request); data=response.json()
         result=data.get('result') or {}; proposal=result.get('proposal') or {}
         assessments=proposal.get('alternative_assessments') or []
         write_private_report(Path.home()/'.local/share/b3-investment-options-agent/live-validation/stock-screen/senior',{'instance':'candidate ASGI with actual senior routing','request':request,'response':data})
-        print(json.dumps({'case':'stock_screen_senior','http':response.status_code,'api_error':bool(data.get('error')),'elapsed_ms':round((monotonic()-started)*1000,1),'assessment_count':len(assessments),'source_count':len(data.get('sources') or []),'stages':result.get('telemetry',{}).get('stages',{})}),flush=True)
+        print(json.dumps({'case':'funded_switch_senior','http':response.status_code,'api_error':bool(data.get('error')),'elapsed_ms':round((monotonic()-started)*1000,1),'assessment_count':len(assessments),'source_count':len(data.get('sources') or []),'stages':result.get('telemetry',{}).get('stages',{})}),flush=True)
         assert response.status_code==200 and not data.get('error')
-        assert {r['alternative_id'] for r in assessments}==set(assets)
+        assert {r['alternative_id'] for r in assessments}=={r['alternative_id'] for r in result['strategy_comparison']['alternatives']}
+        assert len(assessments)==2
+        assert 'funded_switch' in result
         assert all(r['decision_implications'] and r['unknowns'] for r in assessments)
     print('STOCK_SCREEN_REAL=PASS instance=candidate-ASGI not-systemd',flush=True)
     return 0
