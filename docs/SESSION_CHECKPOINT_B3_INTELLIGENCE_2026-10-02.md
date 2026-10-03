@@ -6,6 +6,18 @@
 **Último HEAD de código validado:** `34c1fe6cb2669a7a115e17558dc4e3aa10c2698b`; este checkpoint será o commit mais novo da branch.  
 **CI no HEAD:** sucesso — Actions run `37088394248` (Python e frontend build).
 
+## Retomada real pelo runner Ubuntu — 03/10/2026
+
+- HEAD recebido: `5e3815b`; CI #1329 SUCCESS; PR #66 continua aberto/draft.
+- Commit `39329e6` adiciona ao workflow Ubuntu atualização fast-forward do checkout de produção, restart não interativo, readiness e aceite HTTP de PETR4 antes do diferencial determinístico.
+- Runner `ubuntu`, run [37114876417](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37114876417), comprovou atualização de `/opt/b3-investment-options-agent` de `4db5b07` para `39329e6`.
+- **Restart bloqueado:** `sudo: interactive authentication is required`. Nenhuma tentativa de contornar autenticação, alterar sudoers ou terminar o processo do serviço foi feita.
+- Aceite HTTP, gráfico em runtime e diferencial foram SKIPPED por dependência desse restart. O checkout atualizado não comprova que o processo ativo carregou a correção.
+- CI #1330 [37114878300](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37114878300): testes Python e build React SUCCESS. O workflow de aceite Ubuntu falhou no restart; não confundir com CI de regressão.
+- Próximo desbloqueio mínimo no terminal Ubuntu: `sudo systemctl restart b3-runtime.service`. Após autenticação, executar o aceite HTTP do checkpoint antes de avançar às telas.
+- Revisão estática confirmou gráfico consumindo série do backend e os gaps documentados de ranking, comparação financiada e orquestração; não equivale a aceite visual ou entrega dessas funções.
+- Preservados V4.3, UNKNOWN, autoridade determinística, PIT e os stores existentes. Nenhuma mudança funcional ou ledger novo nesta retomada.
+
 ## Estado ao encerrar
 
 O usuário atualizou o Ubuntu até `4db5b07`, reiniciou `b3-runtime.service` e consultou `/analysis/live/PETR4`. A resposta teve `history_count=80`, último candle COTAHIST em `2026-09-25`, `source_refs` incluindo `oplab` e `options_count=0`. Isso revelou que OPLAB estava sendo buscado, mas os candles não entravam no histórico elegível da rota.
