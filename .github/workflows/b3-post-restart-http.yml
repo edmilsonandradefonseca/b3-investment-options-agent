@@ -1,0 +1,63 @@
+name: B3 active runtime post-restart (Ubuntu)
+on:
+  push:
+    branches: [feature/react-functional-v43-integration]
+    paths: [.github/workflows/b3-post-restart-http.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: b3-post-restart-http
+  cancel-in-progress: false
+jobs:
+  active-http:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify the active HTTP process and structured comparison
+        run: |
+          python3 - <<'PY'
+          import json, sys, time, subprocess
+          from pathlib import Path
+          sys.path.insert(0, str(Path("scripts").resolve()))
+          from validate_live_workspace_outputs import call_json, make_cases, write_private_report
+          base = "http://127.0.0.1:8000"
+          health = call_json(base + "/health", None, 15)
+          assert health["http_status"] == 200 and not health["transport_error_type"], "Runtime health failed"
+          chart = call_json(base + "/analysis/live/PETR4", None, 20)
+          assert chart["http_status"] == 200
+          data = chart["response"]
+          assert data["market"]["history_count"] >= 85
+          assert str(data["market"]["latest"]["observation_timestamp"]).startswith("2026-10-02")
+          assert {"b3_cotahist", "oplab"} <= set(data["source_refs"])
+          assert data["options"]["contract_count"] == 0
+          print("ACTIVE_PETR4_HTTP=PASS bars=" + str(data["market"]["history_count"]) + " options=0", flush=True)
+          case = next(case for case in make_cases() if case["id"] == "copilot_natural_language_compare")
+          response = call_json(base + "/orchestrate", case["request"], 240)
+          write_private_report(Path.home() / ".local/share/b3-investment-options-agent/live-validation", {
+              "instance": "ACTIVE HTTP systemd process; no candidate app, update or restart",
+              "case": case, "response": response,
+          })
+          body = response.get("response") or {}
+          result = body.get("result") or {}
+          proposal = result.get("proposal") or result.get("decision_proposal") or {}
+          alternatives = (result.get("strategy_comparison") or {}).get("alternatives") or []
+          assessments = proposal.get("alternative_assessments") or []
+          print(json.dumps({
+              "instance": "active HTTP systemd process",
+              "http": response["http_status"], "elapsed_ms": response["elapsed_ms"],
+              "api_error": bool(body.get("error")),
+              "alternatives": len(alternatives), "structured_assessments": len(assessments),
+              "source_count": len(body.get("sources") or []),
+              "transport_error": response["transport_error_type"],
+          }), flush=True)
+          assert response["http_status"] == 200 and not response["transport_error_type"] and not body.get("error")
+          assert len(alternatives) == len(assessments) == 2
+          assert {row["alternative_id"] for row in alternatives} == {row["alternative_id"] for row in assessments}
+          assert all(row["decision_implications"] for row in assessments)
+          assert set(result.get("asset_evidence") or {}) == {"ITUB4", "BBDC4"}
+          assert result["workspace_intelligence"]["workspace"] == "Strategy Lab"
+          print("ACTIVE_STRUCTURED_COMPARE=PASS stale_sidebar_selection_excluded=YES", flush=True)
+          print("RUNTIME_MUTATIONS=NONE", flush=True)
+          PY
