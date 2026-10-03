@@ -316,6 +316,7 @@ class FastRouteDispatcher:
             scenario_shocks_pct=scenario_shocks,
             scenario_objective=scenario_objective,
             put_objective=str(context.get('put_objective') or 'COMPARE_ONLY'),
+            economic_inputs=context.get('economic_inputs'),
             portfolio=portfolio,
         )
         sources = tuple(str(item) for item in result.pop("source_refs", ()))

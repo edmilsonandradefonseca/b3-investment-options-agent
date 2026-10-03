@@ -550,6 +550,7 @@ class LiveStrategyComparisonService:
         scenario_shocks_pct: list[float] | tuple[float, ...] | None = None,
         scenario_objective: str = "COMPARE_ONLY",
         put_objective: str = "COMPARE_ONLY",
+        economic_inputs: dict[str, Any] | None = None,
         portfolio: PortfolioContext | None = None,
         as_of: datetime | None = None,
     ) -> dict[str, Any]:
@@ -606,6 +607,8 @@ class LiveStrategyComparisonService:
         if effective_as_of.tzinfo is None or effective_as_of.utcoffset() is None:
             raise ValueError("as_of must be timezone-aware")
 
+        if economic_inputs is not None and normalized_strategies != ('BUY_STOCK','BUY_STOCK'):
+            raise ValueError('Economic stock scenarios require two BUY_STOCK alternatives')
         is_put_pair = normalized_strategies == ('SELL_PUT','SELL_PUT')
         if put_objective not in {'COMPARE_ONLY','LOWEST_MODEL_EXPIRY_ITM','HIGHEST_GROSS_PREMIUM_PER_CAPITAL_30D'} or (not is_put_pair and put_objective != 'COMPARE_ONLY'):
             raise ValueError('A two-PUT objective requires exactly two PUT sale alternatives')
@@ -1195,6 +1198,11 @@ class LiveStrategyComparisonService:
             from b3_agent.stock_purchase import stock_purchase_payload
             stock_purchase = stock_purchase_payload(comparison.alternatives, packs, effective_as_of, dividend_evidence, target_evidence)
 
+        economic = None
+        if stock_purchase:
+            from b3_agent.economic_decision import economic_decision
+            economic = economic_decision(stock_purchase, economic_inputs, effective_as_of)
+
         return {
             "as_of": effective_as_of,
             "quality_status": comparison.quality_status,
@@ -1217,6 +1225,7 @@ class LiveStrategyComparisonService:
             },
             **({'put_pair_comparison':put_pair} if put_pair else {}),
             **({'stock_purchase_comparison': stock_purchase} if stock_purchase else {}),
+            **({'economic_decision': economic} if economic else {}),
             "option_evidence": option_evidence,
             "limitations": limitations,
             "source_refs": list(dict.fromkeys(all_sources)),
