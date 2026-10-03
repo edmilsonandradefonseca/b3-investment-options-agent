@@ -21,7 +21,9 @@ def put_pair_payload(alternatives, evidence, packs, cutoff, objective='COMPARE_O
         collateral=strike*multiplier; premium=bid*multiplier
         style=_normalize_exercise_style(str(contract.get('exercise_style') or ''))
         rows.append({'alternative_id':alternative.alternative_id,'option_id':alternative.subject_id,'underlying_ticker':pack.ticker,
-            'expiration_date':expiry,'days_to_expiration':days,'bid':bid,'ask':quote.get('ask'),'volume':quote.get('volume'),'open_interest':quote.get('open_interest'),
+            'expiration_date':expiry,'days_to_expiration':days,'underlying_price':spot,'strike':strike,
+            'downside_to_strike_fraction':(spot-strike)/spot if spot else None,
+            'breakeven_cushion_fraction':(spot-(strike-bid))/spot if spot else None,'bid':bid,'ask':quote.get('ask'),'volume':quote.get('volume'),'open_interest':quote.get('open_interest'),
             'contract_multiplier':multiplier,'premium_total_one_contract_brl':premium,'capital_required_one_contract_brl':collateral,
             'maximum_loss_one_contract_before_costs_brl':(strike-bid)*multiplier,'breakeven_price':strike-bid,
             'gross_premium_per_capital_pct':premium/collateral*100,
@@ -47,6 +49,7 @@ def put_pair_payload(alternatives, evidence, packs, cutoff, objective='COMPARE_O
         'limitations':['Each risk estimate uses its own expiry. Different expiry risks are different exposure horizons, not equal-period probabilities.',
             'Expiry ITM and touch are uncalibrated zero-rate/carry lognormal proxies, not verified assignment probabilities or expected return.',
             '30-day gross premium normalization is simple arithmetic; it assumes neither reinvestment nor repeated achievable trades.',
+            'Price distance to strike/break-even is an observed cushion, not a probability; negative values mean the reference price is already below that threshold.',
             'Costs, taxes, early assignment behavior and personal eligible exercise frequency remain UNKNOWN.',
             'One contract per alternative uses the provider multiplier; this does not imply equal capital, portfolio margin or actual execution.',
             'Bid, volume and open interest are provider indications; fill size, stale quotes and liquidity constraints require human review.',

@@ -40,7 +40,7 @@ def main():
         assert all(row['net_expected_return'] is None for row in pair['rows'])
         if objective=='HIGHEST_GROSS_PREMIUM_PER_CAPITAL_30D':assert pair['ranking'] in {'CONDITIONAL_OBJECTIVE_ONLY','TIE'}
         write_private_report(Path.home()/'.local/share/b3-investment-options-agent/live-validation/put-pair'/objective,{'instance':'candidate ASGI actual chain','request':request,'response':data})
-        print(json.dumps({'case':'different_expiry_put_pair','http':200,'objective':objective,'ranking':pair['ranking'],'elapsed_ms':round((monotonic()-started)*1000,1),'contracts':2,'llm_calls':0}),flush=True)
+        print(json.dumps({'case':'different_expiry_put_pair','http':200,'objective':objective,'ranking':pair['ranking'],'elapsed_ms':round((monotonic()-started)*1000,1),'contracts':2,'llm_calls':0,'risk_gap_reasons':[row['probability_estimates'].get('reason') for row in pair['rows']],'observed_cushion_available':[row['breakeven_cushion_fraction'] is not None for row in pair['rows']]}),flush=True)
     if args.senior:
         request['context'].pop('analysis_mode');request['task']='Compare as duas PUTs selecionadas: prêmio por capital e prazo, break-even, perda máxima, liquidez, risco no próprio vencimento, estimativas ITM e toque não calibradas e exercício antecipado separado. Explique vantagens e desvantagens de cada contrato; não transforme prêmio bruto em retorno esperado nem probabilidade de modelo em frequência pessoal. Cite as fontes e preserve UNKNOWN nos custos e nas estimativas ausentes.'
         started=monotonic();response=client.post('/orchestrate',json=request);data=response.json()

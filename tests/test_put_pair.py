@@ -27,6 +27,8 @@ def test_different_expiries_keep_own_horizon_and_distinguish_risk_models():
     assert rows[1]['days_to_expiration']>rows[0]['days_to_expiration']
     assert all(row['touch_probability']>=row['expiry_itm_probability'] for row in rows)
     assert all(row['net_expected_return'] is None and row['rank'] is None for row in rows)
+    assert rows[0]['downside_to_strike_fraction']==pytest.approx((49.74-50)/49.74)
+    assert rows[0]['breakeven_cushion_fraction']==pytest.approx((49.74-48.8)/49.74)
     assert rows[0]['early_assignment_status']=='UNKNOWN'
     assert rows[1]['exercise_style']=='EUROPEAN'
 
