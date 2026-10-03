@@ -23,7 +23,7 @@ def main():
     from b3_agent.server import app
     from validate_live_workspace_outputs import write_private_report
     client=TestClient(app)
-    request={'task':'Compare a compra de ITUB4 e BBDC4 por fundamentos, valorização e dividendos futuros. Use evidência qualificada, destaque lacunas e não invente estimativas.', 'context':{'workspace':'Strategy Lab','comparison_assets':['ITUB4','BBDC4'],'strategy_a':'Comprar ação','strategy_b':'Comprar ação','amount':10000,'analysis_mode':'deterministic','research_mode':'stored_only'}}
+    request={'task':'Compare a compra de ITUB4 e BBDC4 por fundamentos, valorização e dividendos futuros. Use evidência qualificada, destaque lacunas e não invente estimativas.', 'context':{'workspace':'Strategy Lab','comparison_assets':['ITUB4','BBDC4'],'strategy_a':'Comprar ação','strategy_b':'Comprar ação','comparison_amount':10000,'analysis_mode':'deterministic','research_mode':'stored_only'}}
     started=monotonic();response=client.post('/orchestrate',json=request);data=response.json()
     assert response.status_code==200 and not data.get('error'), 'BUY pair HTTP failed'
     result=data['result'];pair=result['stock_purchase_comparison']
