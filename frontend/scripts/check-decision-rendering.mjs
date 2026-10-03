@@ -30,6 +30,9 @@ try {
   assert.ok(screenHTML.includes('Janela de observações diferente'));
   assert.ok(screenHTML.includes('source:screen'));
   assert.ok(!screenHTML.includes('Sem ranking disponível'));
+  const buyData={...data,result:{stock_purchase_comparison:{rows:[{alternative_id:'BUY:A',ticker:'ITUB4',source_refs:['verified-buy-source'],fundamental_metrics:{priceEarnings:{value:9,unit:'ratio',report_date:'2026-09-30',period_type:'TTM',source:'qualified-fundamental',quality_status:'WARNING'}},observed_risk:{},excluded_metrics:[]}],limitations:['No qualified forward dividend forecast']}}};
+  const buyHTML=renderToStaticMarkup(createElement(AnalysisOutput,{data:buyData})).split('<details class="technical-output">')[0];
+  for(const value of ['Compra entre ações','ITUB4','verified-buy-source','qualified-fundamental','TTM','No qualified forward dividend forecast','UNKNOWN']) assert.ok(buyHTML.includes(value),`BUY comparison lost: ${value}`);
   console.log('Decision rendering: PASS (human-facing evidence and tradeoffs)');
 } finally {
   await rm(directory,{recursive:true,force:true});

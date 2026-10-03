@@ -156,6 +156,7 @@ class StrategyEvidenceService:
             row.metric: {
                 "value": row.value,
                 "unit": row.unit,
+                "period_type": row.period_type,
                 "report_date": row.report_date,
                 "available_timestamp": row.available_timestamp,
                 "quality_status": row.quality_status,
@@ -1161,6 +1162,11 @@ class LiveStrategyComparisonService:
             from b3_agent.put_pair import put_pair_payload
             put_pair = put_pair_payload(comparison.alternatives,option_evidence,packs,effective_as_of,put_objective)
 
+        stock_purchase = None
+        if normalized_strategies == ("BUY_STOCK", "BUY_STOCK"):
+            from b3_agent.stock_purchase import stock_purchase_payload
+            stock_purchase = stock_purchase_payload(comparison.alternatives, packs, effective_as_of)
+
         return {
             "as_of": effective_as_of,
             "quality_status": comparison.quality_status,
@@ -1182,6 +1188,7 @@ class LiveStrategyComparisonService:
                 for pack in packs
             },
             **({'put_pair_comparison':put_pair} if put_pair else {}),
+            **({'stock_purchase_comparison': stock_purchase} if stock_purchase else {}),
             "option_evidence": option_evidence,
             "limitations": limitations,
             "source_refs": list(dict.fromkeys(all_sources)),
