@@ -64,7 +64,7 @@ const joaoPerspective=assetSynthesis.result.workspace_intelligence?.derived_inte
 assert.ok(joaoPerspective?.status==='READY'||joaoPerspective?.status==='UNAVAILABLE','Asset analysis must attempt the João perspective');
 await page.getByRole('heading',{name:'Market Intelligence',exact:true}).waitFor();
 await page.getByRole('button',{name:'Ativo · gráfico e indicadores',exact:true}).waitFor();
-await page.getByRole('img',{name:/Preço e volume em/}).waitFor({timeout:30000});
+const priceHistory=page.locator('section.panel').filter({has:page.getByRole('heading',{name:/Histórico de preços/})});await priceHistory.getByText(/\d+ de \d+ registros/).waitFor({timeout:30000});await priceHistory.getByRole('img',{name:/Preço e volume em/}).waitFor({timeout:30000});
 await screenshot('opportunities-petr4-asset-analysis');
 await page.getByRole('heading',{name:'Leitura técnica',exact:true}).waitFor();
 const technicalRead=page.locator('.analysis-summary').filter({has:page.getByRole('heading',{name:'Leitura técnica',exact:true})});
