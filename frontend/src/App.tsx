@@ -211,7 +211,7 @@ export default function App(){
   if(!/^[A-Z0-9]{4,12}$/.test(v)){setNotice('Informe um ticker B3 válido.');return}
   const sequence=++inspectionSequence.current;
   const current=()=>inspectionSequence.current===sequence;
-  setTicker(v);setAsset(v);setLive(null);setNews(null);setNewsError('');setFundamentals(null);setFundamentalsError('');setPilot(null);setAnalysis(null,'asset');setPersonalHistory(null);setNotice('');setBusy(true);
+  setTicker(v);setAsset(v);setLive(null);setNews(null);setNewsError('');setFundamentals(null);setFundamentalsError('');setPilot(null);setMarketResults(v=>({...v,asset:null}));setPersonalHistory(null);setNotice('');setBusy(true);
   // Publish independent evidence immediately. Stored research wins unless refresh was requested;
   // external news fills a real evidence gap without waiting for senior synthesis.
   const loadResearch=async()=>{
@@ -229,11 +229,13 @@ export default function App(){
     loadResearch(),
     b3Api.pilotAnalysis(v).then(value=>{if(current())setPilot(value)}),
     b3Api.orchestrate({task:`UC-05/06/10: analise ${v} integrando preço atual, histórico, fundamentos, regime/fatores disponíveis, notícias/eventos e inteligência derivada B3/João. Preserve fatos canônicos, as_of, riscos, contradições, limitações e fontes.`,ticker:v,context:{workspace:'Market Intelligence',selected_ticker:v,asset_view:true,horizon,research_mode:researchMode,analysis_mode:'deterministic'}})
-      .then(value=>{if(current()){setAnalysis(value,'asset');const context=value.result.research_context as {as_of?:string;tickers?:Record<string,{research_events?:ResearchNewsResponse['events']}>}|undefined;const events=context?.tickers?.[v]?.research_events;if(events)setNews({ticker:v,as_of:context?.as_of||'',events,source_refs:events.map(e=>e.source_ref).filter((ref):ref is string=>typeof ref==='string')})}})
+      .then(value=>{if(current()){setMarketResults(v=>({...v,asset:value}));const context=value.result.research_context as {as_of?:string;tickers?:Record<string,{research_events?:ResearchNewsResponse['events']}>}|undefined;const events=context?.tickers?.[v]?.research_events;if(events)setNews({ticker:v,as_of:context?.as_of||'',events,source_refs:events.map(e=>e.source_ref).filter((ref):ref is string=>typeof ref==='string')})}})
       .catch(error=>{if(current())setNotice(`Inteligência integrada indisponível: ${err(error)}`)}),
   ]);
   if(current())setBusy(false);
  }
+
+ function openAssetAnalysis(symbol:string){const requested=symbol.trim().toUpperCase();if(!/^[A-Z0-9]{4,12}$/.test(requested)){setNotice('Informe um ticker B3 válido.');return}navigate('Market Intelligence',requested);setAssetView(true);void inspect(requested)}
 
  const stocks=(portfolio?.positions||[]).filter(p=>p.instrument_type==='STOCK').sort((a,b)=>Math.abs(b.market_value||0)-Math.abs(a.market_value||0));const options=(portfolio?.positions||[]).filter(p=>p.instrument_type==='OPTION');
  const receivedIncomeCell=(symbol:string)=>{
@@ -260,7 +262,7 @@ export default function App(){
  {<div hidden={page!=='Options'}><OptionsWorkspace positions={options} operations={brokerage} ledgerAvailable={ledgerAvailable} onSelect={(contract,underlying)=>{setSelectedOption(contract);setTicker(underlying??contract)}} portfolio={portfolio} pnl={workspaceResults.Portfolio??null} result={workspaceResults.Options??null}/><button disabled={busy} onClick={()=>void run('UC-02 snapshot de opções com DTE.',false,{context:{analysis_mode:'deterministic'}})}>Atualizar DTE canônico</button></div>}
  {<div hidden={page!=='History & Learning'}><HistoryWorkspace ticker={ticker} onSelect={setTicker}/></div>}
  {page==='Risk & Stress'&&<RiskWorkspace ticker={ticker} result={analysis} busy={busy} onRun={(task,context)=>void run(task,false,{ticker:null,context})}/>}
- {<div hidden={page!=='Opportunities'}><div className="toolbar"><form onSubmit={e=>{e.preventDefault();const requested=asset.toUpperCase();setTicker(requested);void run(`UC-03: analise ${requested} sob demanda, elegibilidade, risco, evidências e ranking canônico disponível.`,false,{ticker:requested,context:{selected_ticker:requested}})}}><label>Analisar ativo <input required value={asset} onChange={e=>setAsset(e.target.value)} placeholder="PETR4"/></label><button>Analisar</button></form><form onSubmit={e=>{e.preventDefault();runOpportunityScreen()}}>
+ {<div hidden={page!=='Opportunities'}><div className="toolbar"><form onSubmit={e=>{e.preventDefault();openAssetAnalysis(asset)}}><label>Ativo para análise detalhada <input required value={asset} onChange={e=>setAsset(e.target.value)} placeholder="PETR4"/></label><button>Ver gráfico e análise</button></form><form onSubmit={e=>{e.preventDefault();runOpportunityScreen()}}>
  <label>Universo de ações (até 20)<input required value={opportunityAssets} onChange={e=>setOpportunityAssets(e.target.value)} placeholder="VALE3, RENT3, VIVT3, BBAS3"/></label>
  <label>Objetivo da comparação<select value={opportunityObjective} onChange={e=>setOpportunityObjective(e.target.value)}><option value="COMPARE_ONLY">Comparar sem ranking</option><option value="LOWEST_REALIZED_VOLATILITY_60D">Menor volatilidade realizada · 60 retornos</option><option value="HIGHEST_OBSERVED_LIQUIDITY_20D">Maior proxy de liquidez · 20 observações</option></select></label>
  <label><input type="checkbox" checked={includePortfolioStocks} onChange={e=>setIncludePortfolioStocks(e.target.checked)}/> Incluir ações da carteira (união até 20)</label>
