@@ -4,10 +4,21 @@ import type {BrokerageOperation,PortfolioPosition,CurrentOptionRow,OrchestrateRe
 import {money,rows,obj,percent,date,Metric,State,Source} from './components/cockpit';
 
 type ClosedOptionCycle={ticker:string;underlying:string;kind:'PUT'|'CALL'|'UNKNOWN';month:string;cash:number;trades:number;quantity:number;broker:string};
+type MonthlyStockFlow={ticker:string;month:string;cash:number;trades:number};
+function monthlyStockFlows(operations:BrokerageOperation[]):MonthlyStockFlow[]{
+ const grouped=new Map<string,MonthlyStockFlow>();
+ for(const op of operations){
+  if(op.instrument_type!=='STOCK'||op.cash_flow==null||!Number.isFinite(op.cash_flow)||!op.trade_date)continue;
+  const ticker=op.option_ticker.toUpperCase(),month=op.trade_date.slice(0,7),key=`${ticker}|${month}`;
+  const current=grouped.get(key)||{ticker,month,cash:0,trades:0};
+  current.cash+=op.cash_flow;current.trades+=1;grouped.set(key,current);
+ }
+ return [...grouped.values()].sort((a,b)=>a.month.localeCompare(b.month)||a.ticker.localeCompare(b.ticker));
+}
 const optionClass=(ticker:string):'PUT'|'CALL'|'UNKNOWN'=>{const c=ticker.toUpperCase()[4]||'';return c>='A'&&c<='L'?'CALL':c>='M'&&c<='X'?'PUT':'UNKNOWN'};
 function closedOptionCycles(operations:BrokerageOperation[],knownAssets:string[]):ClosedOptionCycle[]{
  const groups=new Map<string,BrokerageOperation[]>();
- for(const op of operations){const key=`${op.broker}|${op.option_ticker}`;groups.set(key,[...(groups.get(key)||[]),op])}
+ for(const op of operations){if(op.instrument_type==='STOCK')continue;const key=`${op.broker}|${op.option_ticker}`;groups.set(key,[...(groups.get(key)||[]),op])}
  const out:ClosedOptionCycle[]=[];
  for(const rows of groups.values()){
   rows.sort((a,b)=>String(a.trade_date).localeCompare(String(b.trade_date))||a.transaction_id.localeCompare(b.transaction_id));
@@ -37,34 +48,41 @@ function closedOptionCycles(operations:BrokerageOperation[],knownAssets:string[]
  }
  return out.sort((a,b)=>a.month.localeCompare(b.month)||a.underlying.localeCompare(b.underlying)||a.ticker.localeCompare(b.ticker));
 }
-function ResultsPanel({cycles,ledgerAvailable}:{cycles:ClosedOptionCycle[];ledgerAvailable:boolean}){
+function ResultsPanel({cycles,stockFlows,ledgerAvailable}:{cycles:ClosedOptionCycle[];stockFlows:MonthlyStockFlow[];ledgerAvailable:boolean}){
  const [asset,setAsset]=useState(''),[kind,setKind]=useState(''),[month,setMonth]=useState('');
- const assets=[...new Set(cycles.map(x=>x.underlying))].sort(),months=[...new Set(cycles.map(x=>x.month))].sort();
- const visible=cycles.filter(x=>(!asset||x.underlying===asset)&&(!kind||x.kind===kind)&&(!month||x.month===month));
- const byMonth=new Map<string,number>();for(const x of visible)byMonth.set(x.month,(byMonth.get(x.month)||0)+x.cash);
+ const assets=[...new Set([...cycles.map(x=>x.underlying),...stockFlows.map(x=>x.ticker)])].sort();
+ const months=[...new Set([...cycles.map(x=>x.month),...stockFlows.map(x=>x.month)])].sort();
+ const visible=cycles.filter(x=>kind!=='STOCK'&&(!asset||x.underlying===asset)&&(!kind||x.kind===kind)&&(!month||x.month===month));
+ const visibleStocks=stockFlows.filter(x=>(!asset||x.ticker===asset)&&(!kind||kind==='STOCK')&&(!month||x.month===month));
+ const byMonth=new Map<string,number>();
+ for(const x of visible)byMonth.set(x.month,(byMonth.get(x.month)||0)+x.cash);
+ for(const x of visibleStocks)byMonth.set(x.month,(byMonth.get(x.month)||0)+x.cash);
  const values=[...byMonth.entries()].sort(([a],[b])=>a.localeCompare(b));
  const max=Math.max(1,...values.map(([,v])=>Math.abs(v))),zero=110;
  return <section className="panel">
-  <h2>Resultado das opções por ativo e mês</h2>
-  <p className="muted">Saldo das vendas menos recompras dos contratos encerrados e pareados nas notas. O mês é o do encerramento. Valores antes de corretagem, emolumentos e impostos, que não são separados pelo importador atual.</p>
-  {!ledgerAvailable?<State kind="limited" title="Notas de corretagem indisponíveis">Importe as notas para calcular o saldo das operações.</State>:null}
+  <h2>Resultado por ativo e mês</h2>
+  <p className="muted">Opções: saldo de vendas e recompras em ciclos encerrados. Ações: entradas e saídas líquidas de caixa conforme as notas; esse fluxo não representa, por si só, lucro realizado. Os valores ainda não incluem custos e tributos da nota.</p>
+  {!ledgerAvailable?<State kind="limited" title="Notas de corretagem indisponíveis">Importe as notas para calcular os resultados.</State>:null}
   <div className="inline-controls">
    <label>Ativo<select aria-label="Filtrar resultado por ativo" value={asset} onChange={e=>setAsset(e.target.value)}><option value="">Todos</option>{assets.map(x=><option key={x}>{x}</option>)}</select></label>
-   <label>Tipo<select aria-label="Filtrar resultado por tipo" value={kind} onChange={e=>setKind(e.target.value)}><option value="">PUT e CALL</option><option value="PUT">PUT</option><option value="CALL">CALL</option><option value="UNKNOWN">Tipo não identificado</option></select></label>
-   <label>Mês de encerramento<select aria-label="Filtrar resultado por mês" value={month} onChange={e=>setMonth(e.target.value)}><option value="">Todos</option>{months.map(x=><option key={x}>{x}</option>)}</select></label>
+   <label>Tipo<select aria-label="Filtrar resultado por tipo" value={kind} onChange={e=>setKind(e.target.value)}><option value="">Ação, PUT e CALL</option><option value="STOCK">AÇÃO</option><option value="PUT">PUT</option><option value="CALL">CALL</option><option value="UNKNOWN">Tipo não identificado</option></select></label>
+   <label>Mês<select aria-label="Filtrar resultado por mês" value={month} onChange={e=>setMonth(e.target.value)}><option value="">Todos</option>{months.map(x=><option key={x}>{x}</option>)}</select></label>
   </div>
-  {values.length>0&&<div className="panel" role="group" aria-label="Gráfico mensal de resultado das opções">
-   <h3>Saldo mensal · contratos encerrados</h3>
-   <svg viewBox="0 0 900 250" role="img" aria-label="Resultado mensal agregado das opções filtradas" style={{width:'100%',height:'auto'}}>
+  {values.length>0&&<div className="panel" role="group" aria-label="Gráfico mensal de resultado por ativo">
+   <h3>Saldo mensal · filtro atual</h3>
+   <svg viewBox="0 0 900 250" role="img" aria-label="Resultado mensal agregado das operações filtradas" style={{width:'100%',height:'auto'}}>
     <line x1="30" x2="880" y1={zero} y2={zero} stroke="currentColor" opacity=".5"/>
     {values.map(([m,v],i)=>{const slot=820/values.length,x=45+i*slot,w=Math.max(8,slot*.55),h=Math.abs(v)/max*85;return <g key={m}><rect x={x} y={v>=0?zero-h:zero} width={w} height={Math.max(1,h)} fill={v>=0?'#24a36a':'#e05d5d'}><title>{m}: {money(v)}</title></rect><text x={x+w/2} y="224" textAnchor="middle" fontSize="11" fill="currentColor">{m.slice(5)}/{m.slice(0,4)}</text></g>})}
    </svg>
   </div>}
-  <div className="table-wrap"><table><thead><tr><th>Ativo-base</th><th>Contrato</th><th>Tipo</th><th>Mês do encerramento</th><th>Quantidade pareada</th><th>Lançamentos</th><th>Saldo antes dos custos</th></tr></thead><tbody>
+  {kind!=='STOCK'&&<div className="table-wrap"><h3>Ciclos de opções encerrados</h3><table><thead><tr><th>Ativo-base</th><th>Contrato</th><th>Tipo</th><th>Mês do encerramento</th><th>Quantidade pareada</th><th>Lançamentos</th><th>Saldo bruto</th></tr></thead><tbody>
    {visible.map((x,i)=><tr key={x.ticker+':'+x.month+':'+i}><td>{x.underlying}</td><td>{x.ticker}</td><td>{x.kind==='UNKNOWN'?'Não identificado':x.kind}</td><td>{x.month}</td><td>{x.quantity}</td><td>{x.trades}</td><td>{money(x.cash)}</td></tr>)}
-  </tbody></table></div>
-  {visible.length===0&&<State kind={ledgerAvailable?'limited':'loading'} title={ledgerAvailable?'Nenhum ciclo fechado e pareado encontrado':'Carregando dados'}>{ledgerAvailable?'As notas disponíveis ainda não demonstram saldo zero por contrato, ou a ordem de operações no mesmo dia é ambígua. Posições abertas não entram no resultado realizado.':''}</State>}
-  <p className="muted">Ciclos abertos, quantidades sem correspondência e operações no mesmo dia sem horário ficam fora. O código do contrato identifica PUT/CALL; o ativo-base usa o ticker da carteira quando há correspondência pelo prefixo. Taxas e imposto permanecem fora do cálculo.</p>
+  </tbody></table></div>}
+  {(!kind||kind==='STOCK')&&<div className="table-wrap"><h3>Operações com ações · fluxo de caixa</h3><table><thead><tr><th>Ativo</th><th>Mês</th><th>Negócios</th><th>Saldo de caixa (vendas − compras)</th></tr></thead><tbody>
+   {visibleStocks.map((x,i)=><tr key={x.ticker+':'+x.month+':'+i}><td>{x.ticker}</td><td>{x.month}</td><td>{x.trades}</td><td>{money(x.cash)}</td></tr>)}
+  </tbody></table></div>}
+  {visible.length===0&&visibleStocks.length===0&&<State kind={ledgerAvailable?'limited':'loading'} title={ledgerAvailable?'Nenhum resultado compatível com os filtros':'Carregando dados'}>{ledgerAvailable?'Confira os filtros ou importe notas com operações pareadas. Posições abertas não entram no resultado dos ciclos de opções.':''}</State>}
+  <p className="muted">Ciclos de opções abertos ou ambíguos ficam fora. Ação mostra fluxo financeiro mensal das notas, sem inferir preço de custo de ações compradas antes do período importado. Custos, emolumentos e tributos serão conciliados separadamente.</p>
  </section>;
 }
 
@@ -72,7 +90,7 @@ type Props={positions:PortfolioPosition[];operations:BrokerageOperation[];ledger
 export default function OptionsWorkspace({positions,operations,ledgerAvailable,onSelect,result,portfolio,pnl}:Props){
  const [tab,setTab]=useState('Posições'),[query,setQuery]=useState(''),[kind,setKind]=useState(''),[underlying,setUnderlying]=useState(''),[chain,setChain]=useState<CurrentOptionRow[]>([]),[loading,setLoading]=useState(false),[error,setError]=useState(''),[asOf,setAsOf]=useState(''),[page,setPage]=useState(0);
  const knownAssets=(portfolio?.positions||[]).flatMap(p=>p.instrument_type==='STOCK'?[p.ticker]:p.underlying_ticker?[p.underlying_ticker]:[]);
- const completedCycles=closedOptionCycles(operations,knownAssets);
+ const completedCycles=closedOptionCycles(operations,knownAssets),stockFlows=monthlyStockFlows(operations);
  const visible=positions.filter(p=>(!kind||p.option_type===kind)&&p.ticker.toLowerCase().includes(query.toLowerCase()));
  const notes=operations.filter(o=>o.option_ticker.toLowerCase().includes(query.toLowerCase()));
  const canonical=rows(result?.result.option_positions),intelligence=obj(portfolio?.intelligence),risk=obj(intelligence.capital_risk),assessments=rows(intelligence.assessments);
@@ -83,5 +101,5 @@ export default function OptionsWorkspace({positions,operations,ledgerAvailable,o
  {tab==='Posições'&&detail&&<section className="panel"><div className="section-head"><h2>{detail.ticker} · posição e obrigações</h2><button className="ghost" onClick={()=>setSelected('')}>Fechar detalhe</button></div><div className="cards"><Metric label="Capital de assignment" value={money(assessment?.assignment_capital)}/><Metric label="Ações a entregar" value={String(assessment?.deliverable_shares??'Indisponível')}/><Metric label="Cobertura CALL por ativo" value={percent(exposure?.call_coverage_ratio)}/><Metric label="P&L não realizado no snapshot" value={money(pnlRow?.unrealized_pnl)}/></div><Source asOf={portfolio?.as_of} source={detail.source_ref}/><State kind="limited" title="Moneyness e métricas live">IV, Greeks e moneyness desta posição não vieram no snapshot. Consulte a cadeia atual; cotações com outra data não são reconciliadas silenciosamente com o snapshot.</State></section>}
  {tab==='Cadeia de opções' &&<section className="panel"><h2>Cotações e Greeks fornecidos pela OPLAB</h2><form className="inline-controls" onSubmit={e=>{e.preventDefault();void fetchChain()}}><label>Ativo<input required aria-label="Ativo da cadeia" value={underlying} onChange={e=>setUnderlying(e.target.value.toUpperCase())} placeholder="VALE3" pattern="[A-Z]{4}[0-9]{1,2}"/></label><label>Tipo<select value={kind||'PUT'} onChange={e=>setKind(e.target.value)}><option>PUT</option><option>CALL</option></select></label><button disabled={loading}>Consultar cadeia</button></form>{loading&&<State kind="loading" title="Consultando opções">Aguardando o provedor.</State>}{error&&<State kind="error" title="Cadeia indisponível">{error}</State>}<Source asOf={asOf} source="OPLAB"/><div className="table-wrap"><table><thead><tr>{['Contrato','Strike','Vencimento','Bid','Ask','Último','IV','Delta','Gamma','Theta','Vega','Volume','OI'].map(s=><th key={s}>{s}</th>)}</tr></thead><tbody>{chain.filter(r=>r.contract.option_id.toLowerCase().includes(query.toLowerCase())).map(r=><tr key={r.contract.option_id}><td><button className="text-button" onClick={()=>onSelect(r.contract.option_id)}>{r.contract.option_id}</button></td><td>{money(r.contract.strike)}</td><td>{r.contract.expiration_date}</td><td>{money(r.quote.bid)}</td><td>{money(r.quote.ask)}</td><td>{money(r.quote.last)}</td>{['implied_volatility','delta','gamma','theta','vega','volume','open_interest'].map(k=><td key={k}>{k==='implied_volatility'?percent(r.quote.implied_volatility):String(r.quote[k as keyof typeof r.quote]??'Indisponível')}</td>)}</tr>)}</tbody></table></div>{!chain.length&&!loading&&!error&&<State title="Escolha um ativo e consulte a cadeia">Nenhuma cotação foi carregada.</State>}</section>}
  {tab==='Execuções'&&<section className="panel"><h2>Execuções observadas ({notes.length})</h2><p className="muted">Fluxo recebido/pago na nota; não é lucro realizado. Vínculo com o ativo e fechamento não são inferidos.</p>{!ledgerAvailable&&<State kind="limited" title="Ledger indisponível">Importe notas de corretagem para reconstruir a história.</State>}<div className="table-wrap"><table><thead><tr>{['Data','Contrato','Direção','Quantidade','Preço','Fluxo bruto','Nota / fonte'].map(s=><th key={s}>{s}</th>)}</tr></thead><tbody>{notes.slice(page*30,page*30+30).map(o=><tr key={o.transaction_id}><td>{date(o.trade_date)}</td><td><button className="text-button" onClick={()=>onSelect(o.option_ticker)}>{o.option_ticker}</button></td><td>{o.side==='SELL'?'Venda':'Compra'}</td><td>{o.quantity}</td><td>{money(o.execution_price)}</td><td>{money(o.cash_flow)}</td><td><details><summary>{o.note_number??'Fonte'}</summary>{o.source_ref}</details></td></tr>)}</tbody></table></div><div className="pagination"><button disabled={!page} onClick={()=>setPage(page-1)}>Anterior</button><span>Página {page+1}</span><button disabled={(page+1)*30>=notes.length} onClick={()=>setPage(page+1)}>Próxima</button></div>{!notes.length&&ledgerAvailable&&<State title="Nenhuma execução para este filtro">Ajuste a busca ou carregue notas.</State>}</section>}
- {tab==='Resultados'&&<ResultsPanel cycles={completedCycles} ledgerAvailable={ledgerAvailable}/ >}</div>;
+ {tab==='Resultados'&&<ResultsPanel cycles={completedCycles} stockFlows={stockFlows} ledgerAvailable={ledgerAvailable}/ >}</div>;
 }
