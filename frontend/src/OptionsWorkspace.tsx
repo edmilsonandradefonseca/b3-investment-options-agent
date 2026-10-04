@@ -34,7 +34,8 @@ function closedOptionCycles(operations:BrokerageOperation[],knownAssets:string[]
    if(balance!==0&&Math.sign(next)!==Math.sign(balance)&&next!==0){reset();continue}
    balance=next;cash+=op.cash_flow;count++;qty=Math.max(qty,op.quantity);
    if(Math.abs(balance)<1e-8){
-    const sides=new Set(rows.filter(x=>x.trade_date>=day&&x.trade_date<=day).map(x=>x.side));
+    const sameDayRows=rows.filter(x=>String(x.trade_date||'').slice(0,10)===day);
+    const sides=new Set(sameDayRows.map(x=>x.side));
     const sameDayBothSides=sides.size>1;
     if(count>1&&!sameDayBothSides&&day){
      const root=op.option_ticker.slice(0,4).toUpperCase();
