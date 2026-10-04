@@ -554,6 +554,7 @@ def option_brokerage_ledger() -> dict[str, Any]:
     operations = [
         {
             "transaction_id": item.transaction_id,
+            "instrument_type": "OPTION",
             "option_ticker": item.option_ticker,
             "side": item.side,
             "quantity": item.absolute_quantity,
@@ -567,6 +568,25 @@ def option_brokerage_ledger() -> dict[str, Any]:
         for item in OptionTransactionLedger(ledger_path).list_all()
         if item.source_type == "BROKERAGE_NOTE" or item.source_ref.startswith("BTG:NotaCorretagem:")
     ]
+    stock_transactions = _transaction_repository().list_by_source_prefix("BTG:NotaCorretagem:")
+    operations.extend(
+        {
+            "transaction_id": item.transaction_id,
+            "instrument_type": "STOCK",
+            "option_ticker": item.ticker,
+            "side": item.action,
+            "quantity": item.quantity,
+            "execution_price": item.price,
+            "cash_flow": item.price * item.quantity * (-1 if item.action == "BUY" else 1),
+            "trade_date": item.executed_at.date().isoformat(),
+            "broker": item.broker,
+            "note_number": item.source_ref.split(":")[2] if len(item.source_ref.split(":")) > 2 else None,
+            "source_ref": item.source_ref,
+        }
+        for item in stock_transactions
+        if item.instrument_type == "STOCK"
+    )
+    operations.sort(key=lambda row: (row["trade_date"] or "", row["transaction_id"]))
     return {"status": "VALIDATED" if operations else "NOT_AVAILABLE", "operations": operations}
 
 
@@ -640,16 +660,26 @@ def _store_brokerage_note(upload: UploadFile) -> dict[str, Any]:
         if temp_path.stat().st_size < 5:
             raise ValueError("PDF vazio ou inválido")
 
-        transactions = BrokerageNoteParser().parse(temp_path)
+        parser = BrokerageNoteParser()
+        transactions = parser.parse(temp_path)
+        stock_transactions = parser.parse_stocks(temp_path)
+        if not transactions and not stock_transactions:
+            raise ValueError("nota sem operações de ações ou opções suportadas")
         source_fingerprint = hashlib.sha256(temp_path.read_bytes()).hexdigest()
         temp_path.replace(target)
 
         ledger_path = settings.data_dir / "options.sqlite3"
-        inserted_count = OptionTransactionLedger(ledger_path).append(transactions)
+        inserted_options = OptionTransactionLedger(ledger_path).append(transactions)
+        inserted_stocks = _transaction_repository().append_many(stock_transactions)
 
-        note_number = transactions[0].note_number
-        source_ref = transactions[0].source_ref.split(f":{safe_name}")[0]
+        first_source_ref = transactions[0].source_ref if transactions else stock_transactions[0].source_ref
+        note_number = (
+            transactions[0].note_number if transactions else first_source_ref.split(":")[2]
+        )
+        source_ref = first_source_ref.split(f":{safe_name}")[0]
         trade_dates = [item.as_of for item in transactions if item.as_of is not None]
+        trade_dates.extend(item.executed_at.date() for item in stock_transactions)
+        all_transactions = (*transactions, *stock_transactions)
         coverage_start = min(trade_dates) if trade_dates else None
         coverage_end = max(trade_dates) if trade_dates else None
 
@@ -661,7 +691,7 @@ def _store_brokerage_note(upload: UploadFile) -> dict[str, Any]:
                 source_ref=source_ref,
                 file_name=safe_name,
                 imported_at=datetime.now(timezone.utc),
-                record_count=len(transactions),
+                record_count=len(all_transactions),
                 coverage_start=coverage_start,
                 coverage_end=coverage_end,
                 scope="PERIOD_ONLY",
@@ -679,9 +709,9 @@ def _store_brokerage_note(upload: UploadFile) -> dict[str, Any]:
                 if coverage_start == coverage_end and coverage_start
                 else None
             ),
-            "parsed_count": len(transactions),
-            "inserted_count": inserted_count,
-            "transaction_ids": [item.transaction_id for item in transactions],
+            "parsed_count": len(all_transactions),
+            "inserted_count": inserted_options + inserted_stocks,
+            "transaction_ids": [item.transaction_id for item in all_transactions],
             "message": "nota de corretagem processada e registrada no ledger",
         }
     except HTTPException:
@@ -698,7 +728,7 @@ def _store_brokerage_note(upload: UploadFile) -> dict[str, Any]:
 
 @app.post("/imports/brokerage-notes")
 def import_brokerage_note(file: UploadFile = File(...)) -> dict[str, Any]:
-    """Append option trades from a brokerage note to the historical ledger."""
+    """Append stock and option executions from a brokerage note to their ledgers."""
     result = _store_brokerage_note(file)
     _configure_runtime.cache_clear()
     return result
