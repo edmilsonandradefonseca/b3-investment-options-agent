@@ -86,6 +86,10 @@ def main() -> int:
     data = client.get("/analysis/live/PETR4").json()
     bars = data["market"]["price_history"]
     cutoff = datetime.fromisoformat(data["as_of"].replace("Z", "+00:00"))
+    print(json.dumps({"case": "PETR4_chart_diagnostic", "bars": len(bars),
+                      "history_count": data["market"]["history_count"],
+                      "data_points": data["market"]["quant"]["data_points"],
+                      "sources": data["source_refs"]}), flush=True)
     assert len(bars) == data["market"]["history_count"] >= 85
     for bar in bars:
         for key in ("observation_timestamp", "available_timestamp"):
