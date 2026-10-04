@@ -52,3 +52,13 @@ Block 1 step 4 corrected declaration classification to `observed_at.astimezone(Z
 Revision `a3dced7729f460187aaf44ba6a9809101bcc95d5`: CI run 37202675923 SUCCESS. Ubuntu focused run 37202673290 passed the CI gate and 21 relevant tests, then installed this exact revision at `/opt/b3-investment-options-agent` on 2026-10-04 12:37:19 UTC. `sudo -n systemctl restart b3-runtime.service` failed because interactive authentication is required. The user-reported earlier restart predates installation and does not activate the corrected revision.
 
 Block 4 step 3 remains pending an authenticated restart after installation. Read-only post-restart acceptance verifies the installed correction ancestry, process start after provider installation, health, BBDC4 primary RI/12 monthly events/partial coverage, BUY ITUB4×BBDC4 and Opportunities. It does not replay Qwen or drain the production queue. Reports remain private on Ubuntu. No new frontend implementation has started.
+
+## Active backend closure — 2026-10-04 09:41 America/Sao_Paulo
+
+Block 1 step 4 and block 4 steps 1–5 are CLOSED for the scoped backend work. Corrected runtime revision: `a3dced7729f460187aaf44ba6a9809101bcc95d5`. Full local suite: 924 passed; CI run 37202675923 SUCCESS; Ubuntu focused regression: 21 passed. Authenticated service restart completed at 09:40:07 -03, PID 9790, after installation of the corrected provider.
+
+Active HTTP acceptance: run 37202797469 attempt 2, job 111438148765 SUCCESS, `ACTIVE_PROCESS_AFTER_INSTALL=PASS` and `ACTIVE_BACKEND_CLOSURE=PASS`. Health returned HTTP 200. BUY ITUB4 × BBDC4: HTTP 200 in 2914.9 ms; stored dividends READ_OK with 19/12 events; qualified institution target counts 1/1. BBDC4 primary RI source, 12 monthly gross PN amounts and PARTIAL_MONTHLY_JCP_ONLY were asserted; scheduled unannounced events retained unknown announcement dates. Economic scenario comparison: HTTP 200 in 1498.6 ms. Opportunities: HTTP 200 in 1812.8 ms, two qualified institution target potentials. Both economic comparisons conserved cash; all focused interactive responses used zero LLM calls and stored dividend snapshots.
+
+This validates deterministic active API behavior; no new senior synthesis or Qwen throughput benchmark was run. Earlier senior/worker acceptance remains separate evidence. No production queue catch-up was repeated. Reports remain private on Ubuntu. Scope closure does not certify all AC01–28, full complementary dividends, current BTG target coverage or Outcome/Experience/Learning ownership.
+
+Next work: new React implementation and visual acceptance against `docs/FRONTEND_FUNCTIONAL_SPEC_V1.0.md` (document title V1.1 FINAL). Backend activation is complete; frontend work remains open.

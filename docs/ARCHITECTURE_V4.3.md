@@ -1,8 +1,8 @@
 # B3 Investment & Options Agent — Architecture V4.3
 
 **Version:** 4.3  
-**Status:** IMPLEMENTED / CANDIDATE VALIDATED; latest HTTP activation pending  
-**Date:** 2026-10-03  
+**Status:** IMPLEMENTED / ACTIVE HTTP VALIDATED for scoped backend closure  
+**Date:** 2026-10-04  
 **Base:** V4.0 + V4.1 + V4.2  
 **Scope:** redefine the local Evidence analyst role as asynchronous Evidence pre-analysis and enrichment.
 
@@ -904,3 +904,13 @@ The dividend producer supports Bradesco RI monthly JCP fallback for BBDC3/BBDC4 
 Final candidate Ubuntu run 37169879967 passed CI gating, primary acquisition, real Qwen draining, workspace contracts and senior economic comparisons. Checkout update succeeded; authenticated sudo restart was blocked. Active legacy HTTP health/history checks do not prove activation of the new primary dividend reader.
 
 Detailed closure and tomorrow's sequence: `docs/BACKEND_PENDING_CLOSURE_2026-10-04.md`, `docs/NEXT_STEPS_BACKEND_2026-10-04.md` and `docs/RESTART_PROMPT_BACKEND_2026-10-04.md`. New React visual acceptance and the full AC01–28 contract are not closed by these backend measurements.
+
+## Active backend closure — 2026-10-04 09:41 America/Sao_Paulo
+
+Block 1 step 4 and block 4 steps 1–5 are CLOSED for the scoped backend work. Corrected runtime revision: `a3dced7729f460187aaf44ba6a9809101bcc95d5`. Full local suite: 924 passed; CI run 37202675923 SUCCESS; Ubuntu focused regression: 21 passed. Authenticated service restart completed at 09:40:07 -03, PID 9790, after installation of the corrected provider.
+
+Active HTTP acceptance: run 37202797469 attempt 2, job 111438148765 SUCCESS, `ACTIVE_PROCESS_AFTER_INSTALL=PASS` and `ACTIVE_BACKEND_CLOSURE=PASS`. Health returned HTTP 200. BUY ITUB4 × BBDC4: HTTP 200 in 2914.9 ms; stored dividends READ_OK with 19/12 events; qualified institution target counts 1/1. BBDC4 primary RI source, 12 monthly gross PN amounts and PARTIAL_MONTHLY_JCP_ONLY were asserted; scheduled unannounced events retained unknown announcement dates. Economic scenario comparison: HTTP 200 in 1498.6 ms. Opportunities: HTTP 200 in 1812.8 ms, two qualified institution target potentials. Both economic comparisons conserved cash; all focused interactive responses used zero LLM calls and stored dividend snapshots.
+
+This validates deterministic active API behavior; no new senior synthesis or Qwen throughput benchmark was run. Earlier senior/worker acceptance remains separate evidence. No production queue catch-up was repeated. Reports remain private on Ubuntu. Scope closure does not certify all AC01–28, full complementary dividends, current BTG target coverage or Outcome/Experience/Learning ownership.
+
+Next work: new React implementation and visual acceptance against `docs/FRONTEND_FUNCTIONAL_SPEC_V1.0.md` (document title V1.1 FINAL). Backend activation is complete; frontend work remains open.
