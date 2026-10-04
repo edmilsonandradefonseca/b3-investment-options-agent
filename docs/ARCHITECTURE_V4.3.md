@@ -2,19 +2,19 @@
 
 **Version:** 4.3  
 **Status:** IMPLEMENTED / RUNTIME VALIDATED  
-**Date:** 2026-09-30  
+**Date:** 2026-10-03  
 **Base:** V4.0 + V4.1 + V4.2  
-**Scope:** redefine the local DeepSeek role as asynchronous Evidence pre-analysis and enrichment.
+**Scope:** redefine the local Evidence analyst role as asynchronous Evidence pre-analysis and enrichment.
 
 ---
 
 ## 1. Executive decision
 
-V4.3 keeps DeepSeek R1 8B in the B3 architecture, but removes it from any mandatory senior-reasoning chain.
+The local Evidence analyst defaults to Qwen3 4B Instruct 2507 Q4_K_M. DeepSeek R1 8B remains available as an alternative. Neither model is part of a mandatory senior-reasoning chain.
 
 The new role is:
 
-> **DeepSeek is a local asynchronous Evidence Analyst.**
+> **The local model is an asynchronous Evidence Analyst.**
 
 It runs in background over already validated canonical Evidence and produces rebuildable derived dossiers.
 
@@ -28,7 +28,7 @@ It is **not**:
 - a blocker for interactive analysis;
 - a mandatory producer of user-facing answers.
 
-OpenClaw/Luna remains the senior reasoning path for ambiguous, complex or interactive questions and must be able to operate directly from canonical B3 facts and Evidence whether or not a DeepSeek dossier exists.
+OpenClaw/Luna remains the senior reasoning path for ambiguous, complex or interactive questions and must be able to operate directly from canonical B3 facts and Evidence whether or not a local analyst dossier exists.
 
 ---
 
@@ -68,71 +68,37 @@ Still authoritative:
 - human as final investment authority;
 - no autonomous trading.
 
-DeepSeek output is always **derived intelligence**.
+local analyst output is always **derived intelligence**.
 
 ---
 
 ## 4. V4.3 high-level architecture
 
-```text
-                    REACT / API / SCHEDULER / COPILOT
-                                   |
-                                   v
-                         DETERMINISTIC FAST ROUTER
-                                   |
-          +------------------------+------------------------+
-          |                        |                        |
-          v                        v                        v
-  DETERMINISTIC FACTS       BACKGROUND EVIDENCE       COMPLEX / AMBIGUOUS
-  portfolio/options/etc.         PIPELINE                   |
-          |                        |                        |
-          |                        v                        |
-          |                CANONICAL EVIDENCE               |
-          |                        |                        |
-          |                        v                        |
-          |              LOCAL ANALYSIS QUEUE               |
-          |                        |                        |
-          |                        v                        |
-          |                 DEEPSEEK R1 8B                  |
-          |               async local analyst               |
-          |                        |                        |
-          |                        v                        |
-          |               DERIVED LOCAL DOSSIER             |
-          |                        |                        |
-          |                  quality gate                    |
-          |                        |                        |
-          +------------------------+------------------------+
-                                   |
-                                   v
-                         SENIOR CONTEXT BUILDER
-                          canonical first
-                                   |
-                 +-----------------+-----------------+
-                 |                                   |
-                 v                                   v
-       dossier ready + valid                dossier absent/stale/invalid
-                 |                                   |
-                 +-----------------+-----------------+
-                                   |
-                                   v
-                           OPENCLAW / LUNA
-                           senior reasoning
-                                   |
-                                   v
-                              HUMAN / UI
+```mermaid
+flowchart TD
+  UI["React, API and scheduler"] --> Router["Deterministic router"]
+  Router --> Facts["Canonical financial facts"]
+  Router --> Producer["Background acquisition"]
+  Router --> Senior["Senior reasoning"]
+  Producer --> Evidence["Qualified evidence"]
+  Evidence --> Worker["Qwen async worker"]
+  Worker --> Dossier["Derived dossier"]
+  Facts --> Senior
+  Evidence --> Senior
+  Dossier -. "Optional validated context" .-> Senior
 ```
 
 Critical property:
 
-> **OpenClaw/Luna never waits for DeepSeek.**
+> **OpenClaw/Luna never waits for local analyst.**
 
 ---
 
-## 5. DeepSeek V4.3 responsibilities
+## 5. local analyst V4.3 responsibilities
 
 ### 5.1 Allowed
 
-DeepSeek may asynchronously:
+local analyst may asynchronously:
 
 - summarize multiple already-retrieved Evidence records;
 - identify repeated narratives across sources;
@@ -148,7 +114,7 @@ DeepSeek may asynchronously:
 
 ### 5.2 Prohibited
 
-DeepSeek must not:
+local analyst must not:
 
 - decide deterministic materiality;
 - create or correct canonical Evidence;
@@ -222,15 +188,15 @@ Minimum metadata:
   "evidence_fingerprint": "...",
   "evidence_refs": ["..."],
   "created_at": "...",
-  "model": "deepseek-r1:8b",
-  "prompt_version": "b3_local_evidence_analyst_v2",
+  "model": "qwen3:4b-instruct-2507-q4_K_M",
+  "prompt_version": "b3_local_evidence_analyst_v6",
   "status": "READY",
   "quality_flags": [],
   "analysis": "...",
   "thinking_chars": 0,
   "input_chars": 0,
   "eval_count": 0,
-  "num_predict": 768
+  "num_predict": 2048
 }
 ```
 
@@ -242,7 +208,7 @@ It may reference Evidence, but Evidence must never reference the dossier as its 
 
 ## 8. Eligibility policy
 
-DeepSeek should consume local CPU only when a background dossier has plausible reuse value.
+local analyst should consume local CPU only when a background dossier has plausible reuse value.
 
 Initial V4.3 eligibility:
 
@@ -294,7 +260,7 @@ Senior reasoning proceeds immediately.
 
 ### Scheduled background research
 
-DeepSeek may finish a dossier without invoking Luna.
+local analyst may finish a dossier without invoking Luna.
 
 A dossier may create a **senior-review candidate**, but senior invocation is controlled by deterministic policy or explicit human/user demand.
 
@@ -302,7 +268,7 @@ A dossier may create a **senior-review candidate**, but senior invocation is con
 
 ## 10. Quality gate for local dossiers
 
-A DeepSeek dossier is eligible for senior context only if all are true:
+A local analyst dossier is eligible for senior context only if all are true:
 
 1. model call completed;
 2. content is non-empty;
@@ -329,7 +295,7 @@ A degraded dossier may be persisted for diagnostics but must not be injected int
 
 ## 11. Evidence fingerprint
 
-The fingerprint must be deterministic and independent of DeepSeek.
+The fingerprint must be deterministic and independent of local analyst.
 
 Recommended input:
 
@@ -386,7 +352,7 @@ Required controls:
 - B3 deterministic services take priority;
 - João and B3 must eventually share a host-level reasoning lock/semaphore.
 
-A busy local model may delay DeepSeek analysis.
+A busy local model may delay local analyst analysis.
 
 It must never delay deterministic B3 APIs or senior interactive reasoning.
 
@@ -394,7 +360,7 @@ It must never delay deterministic B3 APIs or senior interactive reasoning.
 
 ## 14. Use-case role in V4.3
 
-| Use case | DeepSeek local analyst | OpenClaw/Luna |
+| Use case | local analyst local analyst | OpenClaw/Luna |
 |---|---|---|
 | UC-01 Portfolio | optional overnight narrative enrichment | complex interpretation |
 | UC-02 Options | optional background risk digest | strategy discussion |
@@ -405,7 +371,7 @@ It must never delay deterministic B3 APIs or senior interactive reasoning.
 | UC-07 History | background precedent digest | precedent reasoning |
 | UC-08 Learning | draft-only candidate context | human-facing implications |
 | UC-09 Similarity | summarize retrieved precedents | comparison |
-| UC-10 Research | **primary DeepSeek use case** | senior review only when needed |
+| UC-10 Research | **primary local analyst use case** | senior review only when needed |
 | UC-11 Stress | optional explanation cache | strategic implications |
 | UC-12 Copilot | precomputed optional context | **primary conversational reasoning** |
 
@@ -418,7 +384,7 @@ V4.3 preserves the deterministic Fast Router.
 Scheduled UC-10 research continues to route to a background target, but the semantic target changes from:
 
 ```text
-"run DeepSeek inline"
+"run local analyst inline"
 ```
 
 to:
@@ -438,7 +404,7 @@ No LLM is introduced into routing.
 V4.3 supersedes only the mandatory shape implied by V4.2 section 27:
 
 ```text
-Canonical Evidence -> DeepSeek -> escalation -> Luna
+Canonical Evidence -> local analyst -> escalation -> Luna
 ```
 
 with:
@@ -446,7 +412,7 @@ with:
 ```text
 Canonical Evidence -------------------------------> Luna
        |
-       +--> async DeepSeek dossier --optional----> Luna context
+       +--> async local analyst dossier --optional----> Luna context
 ```
 
 All V4.2 acquisition, Evidence, PIT, issuer mapping, materiality and coverage rules remain unchanged.
@@ -498,7 +464,7 @@ V4.3 implementation is acceptable when:
 - local dossier is stored separately from canonical Evidence;
 - output-limit detection marks the dossier degraded;
 - unknown Evidence refs prevent dossier reuse;
-- senior context selection never waits for DeepSeek;
+- senior context selection never waits for local analyst;
 - missing/pending/failed/degraded dossier returns canonical Evidence context immediately;
 - exact-current READY dossier can be added as optional secondary context;
 - Fast Router remains deterministic;
@@ -521,7 +487,7 @@ Production orchestration should migrate toward the V4.3 async local-analysis con
 
 The architectural decision introduced by V4.3 is:
 
-> **DeepSeek R1 8B is retained as an asynchronous local Evidence Analyst whose output is optional derived context. OpenClaw/Luna senior reasoning must never depend on DeepSeek availability or completion.**
+> **local analyst R1 8B is retained as an asynchronous local Evidence Analyst whose output is optional derived context. OpenClaw/Luna senior reasoning must never depend on local analyst availability or completion.**
 
 This change is motivated by observed production behavior and preserves all deterministic, Evidence, PIT, no-autonomous-trading and human-authority invariants.
 
@@ -536,9 +502,9 @@ The staged acceptance proved:
 
 - canonical Evidence acquisition/materiality completed before local reasoning;
 - enqueue returned in approximately 2.6 seconds;
-- DeepSeek was not invoked inline;
+- local analyst was not invoked inline;
 - the separate local worker consumed the queued request;
-- DeepSeek produced a degraded dossier after reaching the 768-token ceiling;
+- local analyst produced a degraded dossier after reaching the 768-token ceiling;
 - the quality gate marked it `DEGRADED` with `INVALID_JSON` and `OUTPUT_LIMIT_REACHED`;
 - the senior context builder omitted the degraded dossier;
 - canonical Evidence remained available to the senior path;
@@ -558,11 +524,11 @@ Repository merge/freeze sequencing remains separate because V4.3 is stacked on t
 
 V4.3 extends the asynchronous local Evidence Analyst into a continuous intelligence loop.
 
-The objective is to continuously discover new public/official information, normalize it into canonical Evidence, apply deterministic relevance/materiality filters, and use DeepSeek only as asynchronous derived-intelligence enrichment.
+The objective is to continuously discover new public/official information, normalize it into canonical Evidence, apply deterministic relevance/materiality filters, and use local analyst only as asynchronous derived-intelligence enrichment.
 
 The continuous loop must preserve the V4.3 critical invariant:
 
-> **Discovery and canonical Evidence ingestion never wait for DeepSeek.**
+> **Discovery and canonical Evidence ingestion never wait for local analyst.**
 
 ### 22.1 Source hierarchy
 
@@ -628,7 +594,7 @@ near-real-time discovery           reconciliation/backfill
                            OPENCLAW / LUNA
 ```
 
-### 22.3 Deterministic triage before DeepSeek
+### 22.3 Deterministic triage before local analyst
 
 New Evidence must not be sent indiscriminately to the local model.
 
@@ -653,7 +619,7 @@ Initial enqueue policy:
 4. `NON_MATERIAL`, duplicates and already-current fingerprints -> persist/skip without local inference;
 5. `COVERAGE_INSUFFICIENT` remains a coverage state, not a reason to invent relevance.
 
-DeepSeek never changes the canonical deterministic materiality classification.
+local analyst never changes the canonical deterministic materiality classification.
 
 ### 22.4 Two-stage local reasoning
 
@@ -682,7 +648,7 @@ Properties:
 - no numerical invention;
 - no canonical-state mutation.
 
-For official `MATERIAL` Evidence, a DeepSeek `NOT_RELEVANT` result cannot suppress the Evidence or remove it from senior availability.
+For official `MATERIAL` Evidence, a local analyst `NOT_RELEVANT` result cannot suppress the Evidence or remove it from senior availability.
 
 For `CANDIDATE` Evidence, relevance output remains derived intelligence.
 
@@ -709,7 +675,7 @@ Default operational target:
 - Download Múltiplo incremental discovery: configurable frequent polling on business days;
 - conservative initial cadence: every 15 minutes during the active monitoring window;
 - Open Data reconciliation: once daily;
-- local DeepSeek worker: separate timer after discovery and periodically drain a bounded queue;
+- local Evidence analyst worker: separate timer after discovery and periodically drain a bounded queue;
 - catch-up/reconciliation run after host downtime;
 - all cadences configurable through runtime environment, not hard-coded business logic.
 
@@ -749,7 +715,7 @@ A failed query must not advance the cursor.
 
 ### 22.7 Senior escalation policy
 
-DeepSeek may propose `senior_review_candidate=true`, but that field alone is insufficient to invoke OpenClaw/Luna automatically.
+local analyst may propose `senior_review_candidate=true`, but that field alone is insufficient to invoke OpenClaw/Luna automatically.
 
 Automatic senior escalation requires a deterministic policy, for example:
 
@@ -815,14 +781,14 @@ The continuous intelligence extension is accepted only when all are demonstrated
 - repeated polling is idempotent;
 - official MATERIAL Evidence is persisted immediately;
 - candidate Evidence can enter local relevance screening;
-- DeepSeek is never called inline by source ingestion;
+- local analyst is never called inline by source ingestion;
 - relevance-screen structured output is bounded and validated;
 - degraded local output cannot suppress canonical Evidence;
 - local worker is bounded and serialized;
 - B3/João shared-host lock works;
 - backend observability exposes queue/dossier/source-cursor status;
 - daily Open Data reconciliation detects/reconciles missed records;
-- senior reasoning remains fully functional when DeepSeek is absent, busy or degraded.
+- senior reasoning remains fully functional when local analyst is absent, busy or degraded.
 
 
 ---
@@ -855,7 +821,7 @@ deterministic materiality + triage
         +--> MATERIAL ----------------------> dossier queue
                                                 |
                                                 v
-                                      DeepSeek async worker
+                                      local analyst async worker
                                                 |
                                      READY -----+----- DEGRADED/DEFERRED
                                         |                 |
@@ -871,13 +837,13 @@ canonical Evidence --------------------+-----------------> OpenClaw/Luna
 
 Operational invariants frozen by this version:
 
-1. canonical Evidence acquisition never waits for DeepSeek;
+1. canonical Evidence acquisition never waits for local analyst;
 2. deterministic materiality always precedes local LLM reasoning;
-3. DeepSeek output is derived intelligence only;
+3. local analyst output is derived intelligence only;
 4. a local-model failure is deferred/requeued and cannot suppress official Evidence;
-5. a DeepSeek `NOT_RELEVANT` result cannot suppress deterministic official `MATERIAL`;
+5. a local analyst `NOT_RELEVANT` result cannot suppress deterministic official `MATERIAL`;
 6. only READY/current/reference-valid dossiers may enter senior context;
-7. OpenClaw/Luna never waits for DeepSeek;
+7. OpenClaw/Luna never waits for local analyst;
 8. B3 and João share one host-level local reasoning lock;
 9. discovery cursor advances only after successful Evidence persistence/routing;
 10. Open Data reconciliation never rewrites historical reconstruction as observed-live Evidence;
@@ -911,3 +877,14 @@ Final pre-freeze CI:
 Detailed freeze record:
 
 `docs/V4.3_CONTINUOUS_INTELLIGENCE_FREEZE_2026-09-30.md`
+
+
+## 2026-10-03 implementation update
+
+The dedicated B3_LOCAL_EVIDENCE_MODEL controls the dossier worker without changing global model routing. Default context 4096, output cap 2048, temperature 0 and timeout 600. Per-request structured generation restricts source references; post-validation rejects malformed fields, unknown references and truncation.
+
+The nightly producer monitors portfolio plus watchlist, refreshes stored dividend snapshots and reviewed institution reports, and discovers new primary report URLs. Only verified explicit XP report layouts currently admit numeric targets; unsupported institutional layouts and inaccessible sources remain explicit coverage gaps. Interactive BUY and Opportunities reuse snapshots without provider dividend calls.
+
+The existing filesystem queue supports exclusive consumers, twenty-minute abandoned-running leases, runtime-failure backoff capped at three attempts, terminal audit retention and bounded sequential draining. Existing scheduled CLI drains at most twenty batches within 1800 seconds plus at most one in-flight model request. Actual two-batch Qwen acceptance: 2 READY in 50.3591 seconds, zero failed/degraded/deferred, run 37167068552.
+
+See docs/BACKEND_ASYNC_COMPLETION_2026-10-03.md and final backend acceptance checkpoint for active HTTP evidence, source coverage limitations and remaining frontend visual acceptance. Historical DeepSeek measurements in section 2 explain the original architectural decision and are not the current worker default.
