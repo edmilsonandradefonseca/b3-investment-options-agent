@@ -1,7 +1,7 @@
 # B3 Investment & Options Agent — Architecture V4.3
 
 **Version:** 4.3  
-**Status:** IMPLEMENTED / RUNTIME VALIDATED  
+**Status:** IMPLEMENTED / CANDIDATE VALIDATED; latest HTTP activation pending  
 **Date:** 2026-10-03  
 **Base:** V4.0 + V4.1 + V4.2  
 **Scope:** redefine the local Evidence analyst role as asynchronous Evidence pre-analysis and enrichment.
@@ -189,7 +189,7 @@ Minimum metadata:
   "evidence_refs": ["..."],
   "created_at": "...",
   "model": "qwen3:4b-instruct-2507-q4_K_M",
-  "prompt_version": "b3_local_evidence_analyst_v6",
+  "prompt_version": "b3_local_evidence_analyst_v7",
   "status": "READY",
   "quality_flags": [],
   "analysis": "...",
@@ -360,7 +360,7 @@ It must never delay deterministic B3 APIs or senior interactive reasoning.
 
 ## 14. Use-case role in V4.3
 
-| Use case | local analyst local analyst | OpenClaw/Luna |
+| Use case | Local Evidence Analyst | OpenClaw/Luna |
 |---|---|---|
 | UC-01 Portfolio | optional overnight narrative enrichment | complex interpretation |
 | UC-02 Options | optional background risk digest | strategy discussion |
@@ -487,7 +487,7 @@ Production orchestration should migrate toward the V4.3 async local-analysis con
 
 The architectural decision introduced by V4.3 is:
 
-> **local analyst R1 8B is retained as an asynchronous local Evidence Analyst whose output is optional derived context. OpenClaw/Luna senior reasoning must never depend on local analyst availability or completion.**
+> **Qwen3 4B Instruct 2507 Q4_K_M is the default asynchronous local Evidence Analyst; DeepSeek R1 8B remains an alternative whose output is optional derived context. OpenClaw/Luna senior reasoning must never depend on local analyst availability or completion.**
 
 This change is motivated by observed production behavior and preserves all deterministic, Evidence, PIT, no-autonomous-trading and human-authority invariants.
 
@@ -572,7 +572,7 @@ near-real-time discovery           reconciliation/backfill
       SKIP/STORE                   LOCAL ANALYSIS QUEUE
   no model required                       |
                                           v
-                               DEEPSEEK ASYNC ANALYST
+                               QWEN ASYNC ANALYST
                                  relevance/enrichment
                                           |
                                  +--------+--------+
@@ -883,8 +883,24 @@ Detailed freeze record:
 
 The dedicated B3_LOCAL_EVIDENCE_MODEL controls the dossier worker without changing global model routing. Default context 4096, output cap 2048, temperature 0 and timeout 600. Per-request structured generation restricts source references; post-validation rejects malformed fields, unknown references and truncation.
 
-The nightly producer monitors portfolio plus watchlist, refreshes stored dividend snapshots and reviewed institution reports, and discovers new primary report URLs. Only verified explicit XP report layouts currently admit numeric targets; unsupported institutional layouts and inaccessible sources remain explicit coverage gaps. Interactive BUY and Opportunities reuse snapshots without provider dividend calls.
+The nightly producer monitors portfolio plus watchlist, refreshes stored dividend snapshots and reviewed institution reports, and discovers new primary report URLs. Bounded XP, Safra, Itaú and BTG primary report parsers admit only explicit, qualified targets. Current reviewed coverage includes XP ITUB4/BBDC4, Safra LIGT3 and Itaú VALE3; no current BTG target was admitted. Unsupported layouts, stale reports and inaccessible sources remain explicit coverage gaps. Interactive BUY and Opportunities reuse snapshots without provider dividend calls.
 
 The existing filesystem queue supports exclusive consumers, twenty-minute abandoned-running leases, runtime-failure backoff capped at three attempts, terminal audit retention and bounded sequential draining. Existing scheduled CLI drains at most twenty batches within 1800 seconds plus at most one in-flight model request. Actual two-batch Qwen acceptance: 2 READY in 50.3591 seconds, zero failed/degraded/deferred, run 37167068552.
 
 See docs/BACKEND_ASYNC_COMPLETION_2026-10-03.md and final backend acceptance checkpoint for active HTTP evidence, source coverage limitations and remaining frontend visual acceptance. Historical DeepSeek measurements in section 2 explain the original architectural decision and are not the current worker default.
+
+## 2026-10-03 end-of-day operational decision (UTC 2026-10-04)
+
+The dedicated worker uses `qwen3:4b-instruct-2507-q4_K_M`, `think=false`, context 4096 tokens, generation ceiling 2048 tokens, temperature 0 and request timeout 600 seconds. This changes the B3 evidence worker default, not global Ollama routing or the senior financial agent. OpenClaw/Luna still interprets canonical financial inputs; Python owns financial calculations.
+
+Prompt v7 requires a summary of at most 400 characters and at most two entries of 200 characters in each analytical list. JSON schema, allowed references and post-validation gate admission; oversized or invalid output is DEGRADED, never silently repaired into canonical truth. READY means contract admission, not proof of every semantic assertion.
+
+Production consumer cadence observed on Ubuntu: `Mon..Fri *-*-* *:10/15:00`. The nightly acquisition producer and periodic queue consumer are distinct. Durable queue leases, bounded retry/backoff and a host-level reasoning lock serialize work. Source ingestion and interactive senior analysis never wait for Qwen.
+
+Actual catch-up run 37169940668 processed 10 pending items into 10 READY, zero failed/degraded/deferred and zero remaining, in 1095.9 seconds. Broad isolated replay passed both dividends and stored news; the news replay does not certify current feed freshness. No sustained-throughput or financial-accuracy superiority is inferred from these measurements.
+
+The dividend producer supports Bradesco RI monthly JCP fallback for BBDC3/BBDC4 with gross ON/PN separation and partial coverage. Future scheduled declarations are not announced income. A remaining boundary correction must classify declaration days in America/Sao_Paulo rather than UTC.
+
+Final candidate Ubuntu run 37169879967 passed CI gating, primary acquisition, real Qwen draining, workspace contracts and senior economic comparisons. Checkout update succeeded; authenticated sudo restart was blocked. Active legacy HTTP health/history checks do not prove activation of the new primary dividend reader.
+
+Detailed closure and tomorrow's sequence: `docs/BACKEND_PENDING_CLOSURE_2026-10-04.md`, `docs/NEXT_STEPS_BACKEND_2026-10-04.md` and `docs/RESTART_PROMPT_BACKEND_2026-10-04.md`. New React visual acceptance and the full AC01–28 contract are not closed by these backend measurements.

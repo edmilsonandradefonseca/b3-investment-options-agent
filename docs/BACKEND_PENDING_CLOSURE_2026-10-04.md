@@ -25,8 +25,9 @@ The local worker prompt v7 bounds summary to 400 characters and each analytical 
 - Expanded institution run 37169227243: four isolated reports READY in 108.9 seconds, four batches, queue empty; four primary records projected.
 - Broad replay run 37169535475: one real dividend bundle, 10,456 input characters, READY in 160.1 seconds, 272 output tokens, 189 summary characters. News was absent from the pending queue; this run alone is not news acceptance.
 - Installed consumer calendar was observed as `Mon..Fri *-*-* *:10/15:00`, not nightly-only.
-- Dedicated broader validation now also reads temporally admissible stored news when none is pending, and requires both bundle classes. Historical replay is separate from current freshness.
-- A bounded production catch-up job verifies actual backlog drain, rather than extrapolating two-report timings.
+- Expanded broad run 37169879958 passed both real bundle classes: dividend evidence READY in 148.8 seconds (9,116 input characters, 245 output tokens); three stored news events READY in 42.5 seconds (2,831 input characters, 176 output tokens). No quality flags. These are structurally admitted analyses, not certification of every semantic claim. Stored news replay allows up to 180 days and does not establish current freshness.
+- Dividend fallback Ubuntu run 37169418767 passed: ITUB4 19 events and BBDC4 12 monthly events, both READ_OK, with no interactive provider dividend calls. Senior BUY and Opportunities comparisons also passed.
+- Production catch-up run 37169940668 passed: ten actual pending items processed in two batches, ten READY, zero degraded/failed/deferred, zero remaining, no competing worker; 1,095.9 seconds total (about 18.3 minutes). This demonstrates actual batch closure, not guaranteed sustained capacity for arbitrary future arrivals.
 
 ## Block 3 and block 4
 
@@ -35,3 +36,11 @@ Economic calculations, sizing, cash conservation, source/horizon qualification, 
 The Ubuntu HTTP process requires an authenticated service restart to load the new stored primary dividend reader. Automatic `sudo -n systemctl restart b3-runtime.service` is blocked by interactive authentication. Candidate checks and checkout updates do not establish that the active HTTP process has loaded the new reader.
 
 New React frontend implementation and visual acceptance remain separate work after backend activation.
+
+## Final end-of-day checkpoint — local 2026-10-03
+
+Final Ubuntu run 37169879967 completed successfully, including deterministic workspace and focused senior economic acceptance. Runtime restart was explicitly BLOCKED by authenticated sudo. Candidate acceptance is distinct from the active HTTP process.
+
+Remaining backend closure: correct issuer declaration-day calculation from UTC to America/Sao_Paulo, add a midnight-boundary regression, run relevant tests/CI and install the tested revision; then authenticated `sudo systemctl restart b3-runtime.service` and focused active HTTP acceptance of BBDC4 stored primary dividends, BUY comparison and Opportunities. Do not mark the backend activated before this check.
+
+The four requested functional blocks are substantially implemented; block 4 activation is incomplete. New React visual validation remains later. Current BTG report coverage and complete complementary dividend coverage remain explicit limitations, not invented data. Advanced personal Outcome/Experience/Learning acceptance remains outside this scoped closure; its canonical ownership/configuration is not established.
