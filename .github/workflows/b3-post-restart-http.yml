@@ -12,7 +12,7 @@ concurrency:
 jobs:
   active-http:
     runs-on: [self-hosted, Linux, X64]
-    timeout-minutes: 4
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Verify BUY evidence on the active HTTP process
@@ -88,4 +88,31 @@ jobs:
               assert abs(evidence["notional_brl"]+evidence["entry_cost_brl"]+evidence["residual_cash_brl"]-10000)<1e-7
               assert evidence["expected_return"] is None
           print(json.dumps({"case":"ACTIVE_SOURCED_OPPORTUNITIES","http":200,"elapsed_ms":opportunity_response["elapsed_ms"],"target_count":sum(len(row["economic_evidence"]["institution_target_potential"]) for row in result["opportunity_screen"]["rows"]),"cash_conservation":"PASS","llm_calls":0}),flush=True)
+          PY
+
+      - name: Verify installed asynchronous worker and one bounded production batch
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          repo=Path('/opt/b3-investment-options-agent')
+          command=subprocess.check_output(['systemctl','show','b3-local-evidence-analyst.service','--property=ExecStart','--value'],text=True,timeout=10)
+          assert str(repo/'scripts/run_local_evidence_analyst.py') in command
+          pid=subprocess.check_output(['systemctl','show','b3-runtime.service','--property=MainPID','--value'],text=True,timeout=10).strip()
+          env=dict(os.environ)
+          for field in Path(f'/proc/{pid}/environ').read_bytes().split(b'\0'):
+              key,sep,value=field.partition(b'=');name=key.decode()
+              if sep and (name.startswith('B3_') or name.startswith('LOCAL_REASONING_')): env[name]=value.decode()
+          env['B3_AGENT_DATA_DIR']='/opt/b3-runtime/data'
+          env['B3_AGENT_PROJECT_ROOT']=str(repo)
+          env['PYTHONPATH']=str(repo/'src')
+          result=subprocess.run([str(repo/'.venv/bin/python'),str(repo/'scripts/run_local_evidence_analyst.py'),'--limit','2','--max-batches','1','--max-seconds','120'],env=env,text=True,capture_output=True,timeout=720)
+          assert result.returncode == 0, 'Installed production worker did not complete cleanly; private diagnostics retained'
+          manifest=json.loads(result.stdout.strip().splitlines()[-1])
+          print(json.dumps({'case':'INSTALLED_PRODUCTION_WORKER', **{k:manifest[k] for k in ('batches','processed','ready','degraded','failed','deferred','remaining_queue','worker_busy')}}),flush=True)
+          assert not manifest['worker_busy'] and manifest['deferred']==0
+          for unit in ['b3-nightly-intelligence.timer','b3-local-evidence-analyst.timer']:
+              state=subprocess.run(['systemctl','is-active',unit],text=True,capture_output=True,timeout=10).stdout.strip()
+              assert state=='active'
+              print(json.dumps({'case':'INSTALLED_ASYNC_TIMER','unit':unit,'state':state}),flush=True)
           PY
