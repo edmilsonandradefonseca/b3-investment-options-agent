@@ -44,7 +44,7 @@ function isOperationalStatusQuestion(task:string){
    || /^(status|status do sistema|esta conectado|esta funcionando)$/.test(normalized);
 }
 export default function App(){
- const inspectionSequence=useRef(0);
+ const inspectionSequence=useRef(0), expectedHash=useRef<string|null>(null);
  const [copilotOpen,setCopilotOpen]=useState(true),[sidebarCollapsed,setSidebarCollapsed]=useState(false),[marketTab,setMarketTab]=useState('regime');
  const [researchMode,setResearchMode]=useState("stored_first");
  const [opportunityAssets,setOpportunityAssets]=useState('VALE3, RENT3, VIVT3, BBAS3');
@@ -63,8 +63,8 @@ export default function App(){
  const [workspaceResults,setWorkspaceResults]=useState<Partial<Record<Page,OrchestrateResponse|null>>>({});
  const analysis=page==='Market Intelligence'?(marketResults[assetView?'asset':marketTab]??null):(workspaceResults[page]??null);
  function setAnalysis(value:OrchestrateResponse|null,marketKey?:string){setWorkspaceResults(v=>({...v,[page]:value}));if(page==='Market Intelligence')setMarketResults(v=>({...v,[marketKey??(assetView?'asset':marketTab)]:value}))}
- function navigate(p:Page,symbol?:string){++inspectionSequence.current;setPage(p);window.location.hash=hashForPage(p);setBusy(false);if(symbol){setTicker(symbol);setAsset(symbol);if(p==='Strategy Lab'){setLeft(symbol);setStrategyA('Comprar ação')}if(p==='Market Intelligence')setAssetView(true)}}
- useEffect(()=>{const listener=()=>{const next=pageFromHash();if(next!=='Copilot'){++inspectionSequence.current;setPage(next);setBusy(false)}};window.addEventListener('hashchange',listener);return()=>window.removeEventListener('hashchange',listener)},[]);
+ function navigate(p:Page,symbol?:string){++inspectionSequence.current;setPage(p);const nextHash=hashForPage(p);if(window.location.hash!==nextHash){expectedHash.current=nextHash;window.location.hash=nextHash}else expectedHash.current=null;setBusy(false);if(symbol){setTicker(symbol);setAsset(symbol);if(p==='Strategy Lab'){setLeft(symbol);setStrategyA('Comprar ação')}if(p==='Market Intelligence')setAssetView(true)}}
+ useEffect(()=>{const listener=()=>{const next=pageFromHash();if(next==='Copilot')return;const changedHash=window.location.hash;if(changedHash===expectedHash.current){expectedHash.current=null;return}++inspectionSequence.current;setPage(next);setBusy(false)};window.addEventListener('hashchange',listener);return()=>window.removeEventListener('hashchange',listener)},[]);
  const [question,setQuestion]=useState(''),[chat,setChat]=useState<{q:string;r:OrchestrateResponse|null;error?:string}[]>([]),[batch,setBatch]=useState<string>('');
  const [left,setLeft]=useState('ITUB4'),[right,setRight]=useState('BBDC4'),[strategyA,setStrategyA]=useState('Comprar ação'),[strategyB,setStrategyB]=useState('Comprar ação'),[amount,setAmount]=useState('10000');
  const [putPairObjective,setPutPairObjective]=useState('COMPARE_ONLY');
