@@ -41,6 +41,7 @@ jobs:
           assert all(row["expected_return"] is None and row["future_dividend_per_share"] is None for row in rows)
           assert {row["alternative_id"] for row in rows} == {row["alternative_id"] for row in result["strategy_comparison"]["alternatives"]}
           assert all(row["dividends"]["policy_version"] == "issuer-dividends-v1" for row in rows)
+          assert all(row["dividends"]["read_origin"] == "STORED_ASYNC_SNAPSHOT" for row in rows), "Active process still uses inline dividend collection"
           assert any(row["dividends"]["events"] for row in rows)
           assert all(row["institution_targets"]["policy_version"] == "stored-institution-targets-v1" for row in rows)
           assert all(row["institution_targets"]["rows"] for row in rows), "Expected ingested primary reports on active runtime"
@@ -81,6 +82,7 @@ jobs:
           ranking=result["economic_target_ranking"]
           assert ranking["status"]=="CONDITIONAL_TARGET_POTENTIAL" and len(ranking["rows"])==2
           for row in result["opportunity_screen"]["rows"]:
+              assert row["dividends"]["read_origin"] == "STORED_ASYNC_SNAPSHOT"
               evidence=row["economic_evidence"]
               assert evidence["quantity"]>0 and evidence["institution_target_potential"]
               assert abs(evidence["notional_brl"]+evidence["entry_cost_brl"]+evidence["residual_cash_brl"]-10000)<1e-7
