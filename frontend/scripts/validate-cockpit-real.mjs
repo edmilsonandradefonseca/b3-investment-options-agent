@@ -48,10 +48,14 @@ const scenarioResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&
 await page.getByText('Premissas e estratégias avançadas: cenários, custos, troca financiada e strikes',{exact:true}).click();
 await nav('Opportunities');
 const assetAnalysisResponse=page.waitForResponse(r=>r.url().endsWith('/analysis/live/PETR4'),{timeout:60000});
+const assetSynthesisResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().context?.workspace==='Market Intelligence'&&r.request().postDataJSON().context?.selected_ticker==='PETR4',{timeout:180000});
 await page.getByLabel('Ativo para análise detalhada',{exact:true}).fill('PETR4');
 await page.getByRole('button',{name:'Ver gráfico e análise',exact:true}).click();
 const assetMarket=await (await assetAnalysisResponse).json();
+const assetSynthesis=await (await assetSynthesisResponse).json();
 assert.ok(assetMarket.market.price_history.length>0,'Single-ticker analysis must load canonical price history');
+assert.ok(!assetSynthesis.error,'Asset synthesis must complete');
+assert.notEqual(assetSynthesis.result.derived_synthesis_status,'NOT_REQUESTED','Asset analysis must run the senior synthesis');
 await page.getByRole('heading',{name:'Market Intelligence',exact:true}).waitFor();
 await page.getByRole('button',{name:'Ativo · gráfico e indicadores',exact:true}).waitFor();
 await page.getByRole('img',{name:/Preço e volume em/}).waitFor({timeout:30000});
