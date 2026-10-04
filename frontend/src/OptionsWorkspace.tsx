@@ -77,7 +77,7 @@ function ResultsPanel({cycles,optionFlows,stockFlows,ledgerAvailable}:{cycles:Cl
  const [asset,setAsset]=useState(''),[kind,setKind]=useState(''),[month,setMonth]=useState('');
  const assets=[...new Set([...optionFlows.map(x=>x.underlying),...cycles.map(x=>x.underlying),...stockFlows.map(x=>x.ticker)])].sort();
  const months=[...new Set([...optionFlows.map(x=>x.month),...cycles.map(x=>x.month),...stockFlows.map(x=>x.month)])].sort();
- const visibleFlows=optionFlows.filter(x=>(!asset||x.underlying===asset)&&(!kind||kind==='PUT'||kind==='CALL'?(!kind||x.kind===kind):true)&&(!month||x.month===month));
+ const visibleFlows=optionFlows.filter(x=>(!asset||x.underlying===asset)&&(!kind||kind!=='STOCK'&&x.kind===kind)&&(!month||x.month===month));
  const visible=cycles.filter(x=>kind!=='STOCK'&&(!asset||x.underlying===asset)&&(!kind||x.kind===kind)&&(!month||x.month===month));
  const visibleStocks=stockFlows.filter(x=>(!asset||x.ticker===asset)&&(!kind||kind==='STOCK')&&(!month||x.month===month));
  const optionByMonth=new Map<string,number>(),stockByMonth=new Map<string,number>();
