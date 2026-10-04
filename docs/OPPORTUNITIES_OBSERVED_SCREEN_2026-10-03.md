@@ -1,0 +1,17 @@
+# Opportunities: observed stock comparison — 2026-10-03
+
+Policy: `B3_OBSERVED_STOCK_SCREEN_V1`. This increment addresses the missing cross-asset deterministic table and objective-specific ordering, using existing providers, quant features and portfolio snapshot. It does not complete economic BUY ranking or prove superiority to ChatGPT.
+
+The explicit universe contains 1–20 validated stock symbols, optionally unioned with current portfolio stocks. No silent truncation. Current holdings include signed stock quantities and related option underlyings; historical replay excludes the current portfolio, quotes and fundamentals because their historical availability is not established.
+
+Objectives: comparison without ranking, lower annualized realized volatility from 60 log returns (61 observations), or greater approximate average adjusted-close-times-volume over 20 observations. Liquidity is a proxy, not actual financial turnover. All ranked assets must share every daily observation date in the selected window. The largest compatible cohort is selected, breaking cohort ties by latest end date and date tuple. Different cohorts, invalid/duplicate values, insufficient samples and last observations older than seven calendar days are explicitly excluded. PIT uses one frozen cutoff after live acquisition, or the explicit historical cutoff. Numerical ties use relative tolerance 1e-9 and absolute tolerance 1e-12, anchored at the first value of each tie group; competition ranking preserves ties.
+
+The backend owns all calculations and ordering. React displays objective, scope, holdings, quote time, observed metrics, common window, exclusions and sources. An optional senior interpretation receives the same AssetEvidencePack and must assess each selected asset without treating observed risk/liquidity as valuation or future return. Personal eligible outcomes are optional enrichment, not a prerequisite for this observed-data objective. Expected return remains null and valuation UNKNOWN. No ledger or financial execution is introduced.
+
+Validation pending at publication: GitHub full CI, SSR rendering regression, two objective screens and one focused senior interpretation on the Ubuntu runner with real production inputs. Candidate ASGI validation is distinct from the active systemd HTTP process. Runtime update follows green CI and candidate acceptance; any blocked service restart must be reported rather than claimed successful.
+
+Still open: objective/constraint-aware economic ranking, valuation and expected-return evidence, financed sell-to-buy completeness, advanced model routing, actual browser visual acceptance, and the broader delivery-plan acceptance cases.
+
+## Real validation result
+
+Code ad0f738: [CI SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37125688641), 829 tests plus React/SSR. [Ubuntu candidate SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37125685987): risk 3.67s, liquidity 2.67s, three comparable assets; VALE3 excluded because its observation dates differ. Senior 81.15s, four assessments, HTTP 200. Full responses retained privately on Ubuntu. Checkout updated; service restart blocked by interactive sudo. Active new-code HTTP and browser visual acceptance pending. This is not proof of financial superiority or completed economic ranking.

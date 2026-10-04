@@ -6,6 +6,7 @@ import pytest
 
 import b3_agent.orchestration.fast_dispatch as fast_dispatch
 from b3_agent.orchestration.fast_dispatch import FastRouteDispatcher
+from b3_agent.schemas.market import StockMarketData
 from b3_agent.schemas.position import PortfolioContext, Position
 
 
@@ -133,3 +134,311 @@ def test_complex_question_escalates_instead_of_using_dashboard_metadata(monkeypa
     )
 
     assert response is None
+
+
+def test_structured_strategy_comparison_dispatches_without_llm(monkeypatch):
+    _install_portfolio(monkeypatch)
+
+    class FakeStrategyService:
+        def compare(self, **kwargs):
+            assert kwargs["assets"] == ("VALE3", "WEGE3")
+            assert kwargs["strategies"] == ("Comprar ação", "Comprar ação")
+            assert kwargs["option_ids"] == (None, None)
+            assert kwargs["amount"] == 50000.0
+            return {
+                "as_of": "2026-10-01T15:00:00+00:00",
+                "quality_status": "VALIDATED",
+                "summary": "comparison ready",
+                "strategy_comparison": {"assumptions": {"ranking": "not_applied"}},
+                "asset_evidence": {"VALE3": {}, "WEGE3": {}},
+                "limitations": [],
+                "source_refs": ["brapi"],
+            }
+
+    monkeypatch.setattr(fast_dispatch, "LiveStrategyComparisonService", FakeStrategyService)
+    response = FastRouteDispatcher().dispatch(
+        task="UC-04: compare Comprar ação em VALE3 e Comprar ação em WEGE3",
+        context={
+            "workspace": "Strategy Lab",
+            "comparison_assets": ["VALE3", "WEGE3"],
+            "strategy_a": "Comprar ação",
+            "strategy_b": "Comprar ação",
+            "comparison_amount": 50000,
+        },
+    )
+
+    assert response is not None
+    assert response.status == "COMPLETED"
+    assert response.result["fast_route"]["target"] == "strategy_engine"
+    assert set(response.result["asset_evidence"]) == {"VALE3", "WEGE3"}
+    assert response.sources == ("brapi",)
+
+
+def test_structured_sell_put_dispatches_explicit_contract_without_llm(monkeypatch):
+    _install_portfolio(monkeypatch)
+
+    class FakeStrategyService:
+        def compare(self, **kwargs):
+            assert kwargs["assets"] == ("VALE3", "WEGE3")
+            assert kwargs["strategies"] == ("Comprar ação", "Vender PUT")
+            assert kwargs["option_ids"] == (None, "WEGEV500")
+            return {
+                "as_of": "2026-10-01T15:00:00+00:00",
+                "quality_status": "WARNING",
+                "summary": "comparison ready",
+                "strategy_comparison": {"assumptions": {"ranking": "not_applied"}},
+                "asset_evidence": {"VALE3": {}, "WEGE3": {}},
+                "option_evidence": {"WEGEV500": {"current_quote": {"bid": 1.2}}},
+                "limitations": [],
+                "source_refs": ["oplab"],
+            }
+
+    monkeypatch.setattr(
+        fast_dispatch,
+        "LiveStrategyComparisonService",
+        FakeStrategyService,
+    )
+    response = FastRouteDispatcher().dispatch(
+        task="UC-04: compare Comprar ação em VALE3 e Vender PUT WEGEV500 em WEGE3",
+        context={
+            "workspace": "Strategy Lab",
+            "comparison_assets": ["VALE3", "WEGE3"],
+            "strategy_a": "Comprar ação",
+            "strategy_b": "Vender PUT",
+            "option_b": "WEGEV500",
+        },
+    )
+
+    assert response is not None
+    assert response.status == "COMPLETED"
+    assert response.result["fast_route"]["target"] == "strategy_engine"
+    assert response.result["option_evidence"]["WEGEV500"]["current_quote"]["bid"] == 1.2
+
+
+def test_strategy_dispatch_forwards_explicit_price_scenarios(monkeypatch):
+    _install_portfolio(monkeypatch)
+
+    class FakeStrategyService:
+        def compare(self, **kwargs):
+            assert kwargs["scenario_horizon"] == "2026-11-20"
+            assert kwargs["scenario_shocks_pct"] == [-10.0, 0.0, 10.0]
+            assert kwargs["scenario_objective"] == "MAXIMIZE_WORST_CASE_RETURN_ON_CAPITAL"
+            return {
+                "as_of": "2026-10-01T15:00:00+00:00",
+                "quality_status": "VALIDATED",
+                "summary": "comparison ready",
+                "strategy_comparison": {"assumptions": {"ranking": "not_applied"}},
+                "scenario_analysis": {"status": "COMPUTED"},
+                "asset_evidence": {"VALE3": {}, "WEGE3": {}},
+                "limitations": [],
+                "source_refs": [],
+            }
+
+    monkeypatch.setattr(fast_dispatch, "LiveStrategyComparisonService", FakeStrategyService)
+    response = FastRouteDispatcher().dispatch(
+        task="UC-04: calculate explicit terminal price scenarios",
+        context={
+            "workspace": "Strategy Lab",
+            "comparison_assets": ["VALE3", "WEGE3"],
+            "strategy_a": "Comprar ação",
+            "strategy_b": "Comprar ação",
+            "comparison_amount": 5000,
+            "scenario_horizon": "2026-11-20",
+            "scenario_shocks_pct": [-10, 0, 10],
+            "scenario_objective": "MAXIMIZE_WORST_CASE_RETURN_ON_CAPITAL",
+        },
+    )
+
+    assert response is not None
+    assert response.result["scenario_analysis"]["status"] == "COMPUTED"
+
+
+def test_strategy_dispatch_routes_explicit_multi_strike_put_candidates(monkeypatch):
+    _install_portfolio(monkeypatch)
+
+    class FakeStrategyService:
+        def compare_put_candidates(self, **kwargs):
+            assert kwargs["ticker"] == "VALE3"
+            assert kwargs["option_ids"] == ("VALEV6714", "VALEV6664", "VALEV6564")
+            assert kwargs["scenario_horizon"] == "2026-10-16"
+            assert kwargs["scenario_shocks_pct"] == [-10.0, 0.0, 10.0]
+            return {
+                "as_of": "2026-10-02T15:00:00+00:00",
+                "quality_status": "VALIDATED",
+                "summary": "three PUTs compared",
+                "put_chain_comparison": {"candidate_count": 3},
+                "source_refs": ["oplab"],
+            }
+
+    monkeypatch.setattr(fast_dispatch, "LiveStrategyComparisonService", FakeStrategyService)
+    response = FastRouteDispatcher().dispatch(
+        task="UC-04: compare multiple PUT strikes",
+        context={
+            "workspace": "Strategy Lab",
+            "comparison_ticker": "VALE3",
+            "put_candidate_option_ids": ["VALEV6714", "VALEV6664", "VALEV6564"],
+            "scenario_horizon": "2026-10-16",
+            "scenario_shocks_pct": [-10, 0, 10],
+        },
+    )
+
+    assert response is not None
+    assert response.result["put_chain_comparison"]["candidate_count"] == 3
+
+
+def test_market_price_lookup_uses_current_oplab_quote(monkeypatch):
+    current = StockMarketData(
+        instrument_id="WEGE3",
+        ticker="WEGE3",
+        observation_timestamp=fast_dispatch.datetime(2026, 10, 1, 16, 50, tzinfo=fast_dispatch.timezone.utc),
+        available_timestamp=fast_dispatch.datetime(2026, 10, 1, 16, 50, tzinfo=fast_dispatch.timezone.utc),
+        source="oplab",
+        ingested_at=fast_dispatch.datetime(2026, 10, 1, 16, 50, tzinfo=fast_dispatch.timezone.utc),
+        source_record_id="WEGE3:current",
+        quality_flags=("current_quote",),
+        open=49.2,
+        high=49.6,
+        low=49.1,
+        close=49.4,
+        volume=2_000_000,
+        currency="BRL",
+    )
+    historical = StockMarketData(
+        instrument_id="WEGE3",
+        ticker="WEGE3",
+        observation_timestamp=fast_dispatch.datetime(2026, 10, 1, 3, 0, tzinfo=fast_dispatch.timezone.utc),
+        available_timestamp=fast_dispatch.datetime(2026, 10, 1, 4, 0, tzinfo=fast_dispatch.timezone.utc),
+        source="b3_cotahist",
+        ingested_at=fast_dispatch.datetime(2026, 10, 1, 4, 0, tzinfo=fast_dispatch.timezone.utc),
+        source_record_id="WEGE3:2026-10-01:test",
+        open=49.0,
+        high=49.5,
+        low=48.8,
+        close=49.39,
+        volume=1_000_000,
+        currency="BRL",
+    )
+
+    class Current:
+        def get_current_quote(self, ticker):
+            assert ticker == "WEGE3"
+            return current
+
+    class History:
+        def get_market_data(self, ticker, start, end):
+            assert ticker == "WEGE3"
+            return [historical]
+
+    class FakeLiveProviderService:
+        def __init__(self):
+            self.current_market_provider = Current()
+            self.market_provider = History()
+
+    monkeypatch.setattr(fast_dispatch, "LiveProviderService", FakeLiveProviderService)
+
+    response = FastRouteDispatcher().dispatch(task="qual o preço de WEGE3?")
+
+    assert response is not None
+    assert response.result["current_market_quote"]["close"] == 49.4
+    assert response.result["latest_daily_market_record"]["close"] == 49.39
+    assert response.result["as_of"] == current.observation_timestamp
+
+
+def test_structured_covered_call_dispatches_explicit_contract_without_llm(monkeypatch):
+    _install_portfolio(monkeypatch)
+
+    class FakeStrategyService:
+        def compare(self, **kwargs):
+            assert kwargs["assets"] == ("PETR4", "PETR4")
+            assert kwargs["strategies"] == ("Manter", "Vender CALL coberta")
+            assert kwargs["option_ids"] == (None, "PETRJ450")
+            assert kwargs["portfolio"].positions[0].ticker == "PETR4"
+            return {
+                "as_of": "2026-10-01T15:00:00+00:00",
+                "quality_status": "WARNING",
+                "summary": "covered call comparison ready",
+                "strategy_comparison": {"assumptions": {"ranking": "not_applied"}},
+                "asset_evidence": {"PETR4": {}},
+                "option_evidence": {
+                    "PETRJ450": {
+                        "current_quote": {"bid": 0.8},
+                        "call_analysis": {"premium": 0.8},
+                    }
+                },
+                "limitations": [],
+                "source_refs": ["oplab", "BTG:Renda Variavel:Acoes"],
+            }
+
+    monkeypatch.setattr(
+        fast_dispatch,
+        "LiveStrategyComparisonService",
+        FakeStrategyService,
+    )
+    response = FastRouteDispatcher().dispatch(
+        task="UC-04: compare Manter PETR4 e Vender CALL coberta PETRJ450 em PETR4",
+        context={
+            "workspace": "Strategy Lab",
+            "comparison_assets": ["PETR4", "PETR4"],
+            "strategy_a": "Manter",
+            "strategy_b": "Vender CALL coberta",
+            "option_b": "PETRJ450",
+        },
+    )
+
+    assert response is not None
+    assert response.status == "COMPLETED"
+    assert response.result["fast_route"]["target"] == "strategy_engine"
+    assert response.result["option_evidence"]["PETRJ450"]["current_quote"]["bid"] == 0.8
+
+
+def test_structured_stock_reduction_dispatches_portfolio_and_amount(monkeypatch):
+    _install_portfolio(monkeypatch)
+
+    class FakeStrategyService:
+        def compare(self, **kwargs):
+            assert kwargs["assets"] == ("PETR4", "PETR4")
+            assert kwargs["strategies"] == ("Manter", "Vender/reduzir ação")
+            assert kwargs["amount"] == 2000.0
+            assert kwargs["portfolio"].positions[0].ticker == "PETR4"
+            return {
+                "as_of": "2026-10-01T15:00:00+00:00",
+                "quality_status": "WARNING",
+                "summary": "stock reduction comparison ready",
+                "strategy_comparison": {
+                    "alternatives": [
+                        {"action_type": "HOLD"},
+                        {
+                            "action_type": "SELL_STOCK",
+                            "capital_required": 0.0,
+                            "assumptions": {"capital_released": 2000.0},
+                        },
+                    ],
+                    "assumptions": {"ranking": "not_applied"},
+                },
+                "asset_evidence": {"PETR4": {}},
+                "option_evidence": {},
+                "limitations": [],
+                "source_refs": ["oplab", "BTG:Renda Variavel:Acoes"],
+            }
+
+    monkeypatch.setattr(
+        fast_dispatch,
+        "LiveStrategyComparisonService",
+        FakeStrategyService,
+    )
+    response = FastRouteDispatcher().dispatch(
+        task="UC-04: compare Manter PETR4 e Vender/reduzir ação PETR4",
+        context={
+            "workspace": "Strategy Lab",
+            "comparison_assets": ["PETR4", "PETR4"],
+            "strategy_a": "Manter",
+            "strategy_b": "Vender/reduzir ação",
+            "comparison_amount": 2000,
+        },
+    )
+
+    assert response is not None
+    assert response.status == "COMPLETED"
+    alternatives = response.result["strategy_comparison"]["alternatives"]
+    assert alternatives[1]["action_type"] == "SELL_STOCK"
+    assert alternatives[1]["assumptions"]["capital_released"] == 2000.0

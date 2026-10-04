@@ -44,7 +44,10 @@ class SynthesisAgent:
                 "rerank opportunities, or execute trades. Identify agreements, conflicts, material "
                 "uncertainties and evidence gaps. Optional derived intelligence is non-authoritative "
                 "and must never override deterministic facts or Evidence. This is decision-support context for a separate "
-                "decision proposal and human review."
+                "decision proposal and human review. Answer in Portuguese. Compare all supplied alternatives "
+                "explicitly; explain material supporting and contradicting evidence and the decision consequence "
+                "of each conflict or gap. Do not equate missing information with absence of risk, use generic "
+                "disclaimers in place of analysis, or present a deferred technical order as economic ranking."
             ),
             input_text=json.dumps(
                 {

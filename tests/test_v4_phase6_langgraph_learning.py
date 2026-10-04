@@ -10,6 +10,7 @@ from b3_agent.knowledge.projection import MemoryProjectionBridge, SQLiteProjecti
 from b3_agent.learning import LearningEngine
 from b3_agent.orchestration.experience_workflow import (
     ExperienceContextService,
+    CanonicalPostOutcomeCommit,
     PostOutcomeLearningService,
     build_post_outcome_workflow,
 )
@@ -202,12 +203,17 @@ def test_post_outcome_langgraph_learns_and_projects(tmp_path):
         graph=graph,
         ledger=SQLiteProjectionLedger(tmp_path / "projection.db"),
     )
+    class FixtureCanonicalOwner:
+        def load(self, event): return None
+        def commit(self, *, event, input_fingerprint, result, expected_previous):
+            return CanonicalPostOutcomeCommit(event, input_fingerprint, event.occurred_at, result)
     service = PostOutcomeLearningService(
         experience_engine=ExperienceEngine(),
         learning_engine=LearningEngine(),
         projection_bridge=bridge,
         cohort_loader=lambda operation, regime: (),
         previous_learning_loader=lambda learning_id: None,
+        canonical_store=FixtureCanonicalOwner(),
     )
     workflow = build_post_outcome_workflow(service)
 

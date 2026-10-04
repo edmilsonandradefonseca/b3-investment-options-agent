@@ -28,6 +28,9 @@ from b3_agent.schemas.position import PortfolioContext
 
 from .orchestrator import configure_workflow
 from .workflow import build_workflow
+from .experience_workflow import ExperienceContextService
+from b3_agent.intelligence.personal_history import PersonalHistoryService
+from b3_agent.llm.reuse import ReusingLLMClient
 
 
 B3_V4_QDRANT_COLLECTION = "b3_evidence_768_hybrid"
@@ -111,11 +114,17 @@ def _build_llm_client():
     )
 
 
+def _workspace_single_synthesis_enabled() -> bool:
+    """Avoid redundant LLM rounds for workspace requests unless explicitly disabled."""
+    return os.getenv("B3_WORKSPACE_SINGLE_SYNTHESIS", "true").strip().lower() == "true"
+
+
 def configure_default_workflow(
     *,
     vault_path: Path | None = None,
     portfolio_context: PortfolioContext | dict[str, Any] | None = None,
     opportunity_set: OpportunitySet | None = None,
+    experience_context_service: ExperienceContextService | None = None,
 ) -> None:
     """Compose and register the V4 production workflow.
 
@@ -127,8 +136,10 @@ def configure_default_workflow(
     """
     if not settings.llm_enabled:
         raise RuntimeError("B3_AGENT_LLM_ENABLED is false; cannot compose the reasoning workflow")
+    if experience_context_service is not None and not isinstance(experience_context_service, ExperienceContextService):
+        raise TypeError("experience_context_service must be a trusted typed service")
 
-    llm = _build_llm_client()
+    llm = ReusingLLMClient(_build_llm_client())
     memory_manager = None
     if vault_path is not None:
         retriever, graph, memory_manager = _legacy_test_context(vault_path)
@@ -140,6 +151,9 @@ def configure_default_workflow(
         retriever=retriever,
         knowledge_context_builder=knowledge_context_builder,
         memory_manager=memory_manager,
+        personal_history_service=PersonalHistoryService(settings.data_dir),
+        experience_context_service=experience_context_service,
+        single_synthesis=_workspace_single_synthesis_enabled(),
         market_agent=MarketAnalysisAgent(llm),
         portfolio_agent=PortfolioAnalysisAgent(llm),
         options_agent=OptionsAnalysisAgent(llm),
@@ -148,16 +162,12 @@ def configure_default_workflow(
         risk_validator=RiskValidator(),
     )
 
-    deterministic_defaults: dict[str, Any] = load_active_snapshots(settings.data_dir)
-    if portfolio_context is not None:
-        deterministic_defaults["portfolio_context"] = portfolio_context
-    if opportunity_set is not None:
-        deterministic_defaults["opportunity_set"] = opportunity_set
-
-    if deterministic_defaults:
-        def invoke_with_deterministic_context(state):
-            initial_state = {**deterministic_defaults, **state}
-            return workflow.invoke(initial_state)
-        configure_workflow(invoke_with_deterministic_context)
-    else:
-        configure_workflow(workflow)
+    def invoke_with_deterministic_context(state):
+        # Reload current portfolio on each invocation, not just runtime startup.
+        defaults = load_active_snapshots(settings.data_dir)
+        if portfolio_context is not None:
+            defaults["portfolio_context"] = portfolio_context
+        if opportunity_set is not None:
+            defaults["opportunity_set"] = opportunity_set
+        return workflow.invoke({**defaults, **state})
+    configure_workflow(invoke_with_deterministic_context)

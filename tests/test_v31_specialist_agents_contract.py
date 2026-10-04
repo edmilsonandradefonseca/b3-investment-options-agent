@@ -35,16 +35,22 @@ def test_market_specialist_receives_only_market_slice():
     assert "market_analysis" in payload and "portfolio_context" not in payload
 
 
-def test_portfolio_specialist_receives_only_portfolio_slice():
+def test_portfolio_specialist_receives_portfolio_and_market_context():
     llm = FakeLLM(); PortfolioAnalysisAgent(llm).analyze(_context())
     payload = llm.calls[0]["input_text"]
-    assert "portfolio_context" in payload and "risk_analysis" in payload and "options_analysis" not in payload
+    assert "portfolio_context" in payload
+    assert "risk_analysis" in payload
+    assert "market_analysis" in payload
+    assert "options_analysis" not in payload
 
 
-def test_options_specialist_receives_only_options_slice():
+def test_options_specialist_receives_options_and_market_context():
     llm = FakeLLM(); OptionsAnalysisAgent(llm).analyze(_context())
     payload = llm.calls[0]["input_text"]
-    assert "options_analysis" in payload and "opportunities" in payload and "market_analysis" not in payload
+    assert "options_analysis" in payload
+    assert "opportunities" in payload
+    assert "market_analysis" in payload
+    assert "portfolio_context" not in payload
 
 
 def test_specialist_receives_local_dossier_as_non_deterministic_context():

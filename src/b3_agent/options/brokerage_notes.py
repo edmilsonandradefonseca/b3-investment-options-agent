@@ -21,6 +21,15 @@ _TRADE_RE = re.compile(
     r"(?P<amount>[\d.,]+)\s+(?P<cash_side>[DC])\s*$"
 )
 
+# BTG also emits blank share classes and the D (day trade) observation.
+_EXTENDED_TRADE_RE = re.compile(
+    r"^\s*\S+\s+(?P<side>[CV])\s+OPCAO\s+DE\s+"
+    r"(?P<option_type>COMPRA|VENDA)\s+\S+\s+"
+    r"(?P<ticker>[A-Z0-9]+)\s+(?:(?:ON|PN)\s+)?(?:D\s+)?"
+    r"(?P<quantity>[\d.]+)\s+(?P<price>[\d.,]+)\s+"
+    r"(?P<amount>[\d.,]+)\s+(?P<cash_side>[DC])\s*$"
+)
+
 _NOTE_RE = re.compile(r"(?m)^\s*(?P<note>\d{6,})\s*$")
 _DATE_RE = re.compile(r"(?m)^\s*(?P<date>\d{2}/\d{2}/\d{4})\s*$")
 
@@ -71,14 +80,24 @@ class BrokerageNoteParser:
 
         transactions: list[OptionTransaction] = []
         trade_index = 0
+        option_row_index = 0
 
         for raw_line in text.splitlines():
             line = " ".join(raw_line.split())
             match = _TRADE_RE.match(line)
-            if not match:
+            legacy_match = match is not None
+            match = match or _EXTENDED_TRADE_RE.match(line)
+            if not match and "OPCAO DE" in line:
+                raise BrokerageNoteIngestionError(
+                    f"unsupported option trade row in brokerage note {note_number}; "
+                    "note not imported to avoid partial execution history"
+                )
+            if match is None:
                 continue
 
-            trade_index += 1
+            option_row_index += 1
+            if legacy_match:
+                trade_index += 1
             side = match.group("side")
             quantity = _number(match.group("quantity"))
             price = _number(match.group("price"))
@@ -92,6 +111,8 @@ class BrokerageNoteParser:
             ticker = match.group("ticker")
             transaction_id = (
                 f"btg-note:{note_number}:{trade_index}:{ticker}"
+                if legacy_match else
+                f"btg-note:{note_number}:additional:{option_row_index}:{ticker}"
             )
             source_ref = (
                 f"BTG:NotaCorretagem:{note_number}"

@@ -12,6 +12,9 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from uuid import uuid4
 from typing import Any
+from time import monotonic
+from b3_agent.intelligence.personal_history import PersonalHistoryService
+from b3_agent.intelligence.decision_history import build_decision_history
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
@@ -35,6 +38,10 @@ from b3_agent.storage.sqlite import SQLiteStore
 from b3_agent.orchestration import OrchestratorRequest, OrchestratorResponse, b3_orchestrator, configure_default_workflow
 from b3_agent.orchestration.fast_dispatch import FastRouteDispatcher
 from b3_agent.orchestration.live_providers import LiveProviderService
+from b3_agent.quant_engine import compute_quant_features
+from b3_agent.providers.brapi.fundamentals import BrapiFundamentalsAdapter
+from b3_agent.providers.oplab.adapter import OplabAdapter
+from b3_agent.providers.oplab.options import OplabOptionsAdapter
 from b3_agent.providers.searxng_news import SearxngNewsAdapter
 from b3_agent.research_events import ResearchEventService
 from b3_agent.runtime import RuntimeManager
@@ -43,6 +50,10 @@ from b3_agent.intelligence.observability import (
     local_intelligence_queues,
     local_intelligence_status,
     local_ticker_intelligence,
+)
+from b3_agent.routing.decision_intent import explicit_stock_comparison
+from b3_agent.intelligence.workspace_context import (
+    WorkspaceIntelligenceContextService,
 )
 
 
@@ -130,6 +141,247 @@ def _dispatch_fast_route(request: OrchestratorRequest) -> OrchestratorResponse |
         task=request.task,
         ticker=request.ticker,
         context=request.context,
+    )
+
+
+def _workspace_name(request: OrchestratorRequest) -> str:
+    return str(
+        request.context.get("workspace")
+        or request.context.get("dashboard_page")
+        or ""
+    ).strip()
+
+
+def _workspace_tickers(request: OrchestratorRequest) -> tuple[str, ...]:
+    selected = request.context.get("opportunity_assets")
+    if isinstance(selected, (list, tuple)):
+        return tuple(dict.fromkeys(str(item).upper().strip() for item in selected))
+    values: list[str] = []
+    for raw in (
+        request.ticker,
+        request.context.get("selected_ticker"),
+    ):
+        if isinstance(raw, str) and raw.strip():
+            values.append(raw.upper().strip())
+
+    comparison = request.context.get("comparison_assets")
+    if isinstance(comparison, (list, tuple)):
+        values.extend(
+            str(item).upper().strip()
+            for item in comparison
+            if str(item).strip()
+        )
+    values.extend(re.findall(r"(?<![A-Z0-9])([A-Z]{4}\d{1,2})(?![A-Z0-9])", request.task.upper()))
+    return tuple(dict.fromkeys(values))
+
+
+def _dispatch_opportunity_screen(request: OrchestratorRequest) -> OrchestratorResponse | None:
+    if _workspace_name(request).casefold() != 'opportunities' or 'opportunity_assets' not in request.context:
+        return None
+    from b3_agent.opportunity_screen import StockOpportunityScreenService
+    assets = request.context['opportunity_assets']
+    include = request.context.get('include_portfolio_stocks', False)
+    if not isinstance(assets, (list, tuple)) or any(not isinstance(item, str) for item in assets) or not isinstance(include, bool):
+        raise ValueError('opportunity_assets must be a list of symbols and include_portfolio_stocks a boolean')
+    started = monotonic()
+    result = StockOpportunityScreenService().build(assets,
+        objective=request.context.get('opportunity_objective', 'COMPARE_ONLY'),
+        include_portfolio=include, as_of=request.context.get('as_of'),
+        economic_inputs=request.context.get('opportunity_economic_inputs'))
+    result['workspace_intelligence'] = {'workspace':'Opportunities', 'as_of':result['as_of'],
+        'tickers':result['opportunity_screen']['requested_universe'], 'limitations':result['limitations'], 'derived_intelligence':{}}
+    result['derived_synthesis_status'] = 'NOT_REQUESTED'
+    result['telemetry'] = {'total_ms':(monotonic()-started)*1000, 'llm_calls':0}
+    return OrchestratorResponse(status='COMPLETED', result=result, sources=tuple(result['source_refs']),
+        audit=({'event':'observed_stock_screen', 'policy':result['opportunity_screen']['policy_version']},))
+
+
+def _uses_workspace_intelligence(request: OrchestratorRequest) -> bool:
+    return " ".join(_workspace_name(request).casefold().split()) in {
+        "opportunities",
+        "market intelligence",
+        "strategy lab",
+    }
+
+
+def _workspace_intelligence_response(
+    request: OrchestratorRequest,
+    *,
+    deterministic_response: OrchestratorResponse | None,
+) -> OrchestratorResponse:
+    started = monotonic()
+    workspace = _workspace_name(request)
+    deterministic_only = request.context.get("analysis_mode") == "deterministic"
+    research_mode = request.context.get("research_mode", "stored_first")
+    if research_mode not in {"stored_first", "stored_only", "refresh"}:
+        raise HTTPException(status_code=422, detail="Invalid research_mode")
+    context = WorkspaceIntelligenceContextService().build(
+        workspace=workspace,
+        tickers=_workspace_tickers(request),
+        deterministic_result=(
+            deterministic_response.result
+            if deterministic_response is not None
+            else None
+        ),
+        include_joao=not deterministic_only,
+        research_mode=research_mode,
+        **({"history_as_of": request.context["as_of"]} if request.context.get("as_of") is not None else {}),
+        **({"history_since": request.context["history_since"]} if request.context.get("history_since") is not None else {}),
+        include_joao_perspective=(not deterministic_only and os.getenv("B3_JOAO_SYNC_PERSPECTIVE", "true").lower() == "true"),
+    )
+
+    context_payload = context.as_context()
+    if deterministic_only:
+        facts = context_payload.get("deterministic_context", {})
+        workspace_result = facts.get("workspace_result", {})
+        market_context = facts.get("market_analysis", {})
+        asset_evidence = {
+            ticker: entry["asset_evidence"]
+            for ticker, entry in market_context.get("tickers", {}).items()
+            if isinstance(entry, dict) and isinstance(entry.get("asset_evidence"), dict)
+        }
+        return OrchestratorResponse(
+            status="COMPLETED",
+            result={
+                **workspace_result,
+                **({"asset_evidence": asset_evidence} if asset_evidence else {}),
+                **(deterministic_response.result if deterministic_response else {}),
+                "workspace_intelligence": {
+                    "workspace": workspace,
+                    "as_of": facts.get("as_of"),
+                    "tickers": list(_workspace_tickers(request)),
+                    "market_context": market_context,
+                    "derived_intelligence": {},
+                    "limitations": list(getattr(context, "limitations", ())),
+                    "source_refs": list(context.source_refs),
+                },
+                "deterministic_context": context_payload.get("deterministic_context", {}),
+                "research_context": context_payload.get("deterministic_context", {}).get("market_analysis", {}),
+                "stored_research": context_payload.get("deterministic_context", {}).get("stored_research", {}),
+        "personal_history": context_payload.get("deterministic_context", {}).get("personal_history", {}),
+                "decision_history": context_payload.get("deterministic_context", {}).get("decision_history", {}),
+                "canonical_experience_context": {
+                    "status": "CANONICAL_LOADER_NOT_CONFIGURED", "learnings": [],
+                    "assessment": None, "retrieval": None,
+                },
+                "derived_synthesis_status": "NOT_REQUESTED",
+                "telemetry": {"total_ms": (monotonic()-started)*1000, "llm_calls": 0},
+            },
+            sources=tuple(dict.fromkeys((*context.source_refs, *(deterministic_response.sources if deterministic_response else ())))),
+        )
+    senior_context = {
+        **request.context,
+        **context_payload,
+    }
+    _configure_runtime()
+    senior = b3_orchestrator(
+        task=request.task,
+        ticker=request.ticker,
+        context=senior_context,
+    )
+
+    deterministic_result = (
+        deterministic_response.result
+        if deterministic_response is not None
+        else {}
+    )
+    deterministic_context_payload = context_payload.get(
+        "deterministic_context", {}
+    )
+    market_context = (
+        deterministic_context_payload.get("market_analysis", {})
+        if isinstance(deterministic_context_payload, dict)
+        else {}
+    )
+    workspace_result = (
+        deterministic_context_payload.get("workspace_result", {})
+        if isinstance(deterministic_context_payload, dict)
+        else {}
+    )
+    workspace_asset_evidence: dict[str, Any] = {}
+    ticker_context = (
+        market_context.get("tickers", {})
+        if isinstance(market_context, dict)
+        else {}
+    )
+    if isinstance(ticker_context, dict):
+        for ticker, entry in ticker_context.items():
+            if not isinstance(entry, dict):
+                continue
+            pack = entry.get("asset_evidence")
+            if isinstance(pack, dict):
+                workspace_asset_evidence[str(ticker)] = pack
+
+    merged_result = {
+        **senior.result,
+        **workspace_result,
+        **deterministic_result,
+        **(
+            {"asset_evidence": workspace_asset_evidence}
+            if workspace_asset_evidence
+            and "asset_evidence" not in deterministic_result
+            else {}
+        ),
+        "derived_synthesis_status": "FAILED" if senior.error else "COMPLETED",
+        "personal_history": context_payload.get("deterministic_context", {}).get("personal_history", {}),
+        "research_context": market_context,
+        "stored_research": context_payload.get("deterministic_context", {}).get("stored_research", {}),
+        "decision_history": context_payload.get("deterministic_context", {}).get("decision_history", {}),
+        "canonical_experience_context": senior.result.get("canonical_experience_context", {
+            "status": "CANONICAL_LOADER_NOT_CONFIGURED", "learnings": [],
+            "assessment": None, "retrieval": None,
+        }),
+        "telemetry": {"total_ms": (monotonic()-started)*1000, "stages": senior.result.get("stage_telemetry", {})},
+        "workspace_intelligence": {
+            "workspace": context.workspace,
+            "context_telemetry": deterministic_context_payload.get("context_telemetry", {}),
+            "as_of": context.as_of.isoformat(),
+            "tickers": list(context.tickers),
+            "market_context": market_context,
+            "derived_intelligence": context.derived_intelligence,
+            "limitations": list(context.limitations),
+            "source_refs": list(context.source_refs),
+        },
+    }
+    sources = tuple(
+        dict.fromkeys(
+            (
+                *(
+                    deterministic_response.sources
+                    if deterministic_response is not None
+                    else ()
+                ),
+                *context.source_refs,
+                *senior.sources,
+            )
+        )
+    )
+    audit = tuple(
+        [
+            *(
+                deterministic_response.audit
+                if deterministic_response is not None
+                else ()
+            ),
+            {
+                "event": "workspace_intelligence_composed",
+                "workspace": workspace,
+                "tickers": list(context.tickers),
+                "joao_status": (
+                    context.derived_intelligence.get(
+                        "joao_resolve", {}
+                    ).get("status")
+                ),
+            },
+            *senior.audit,
+        ]
+    )
+    return OrchestratorResponse(
+        status=senior.status,
+        result=merged_result,
+        sources=sources,
+        audit=audit,
+        error=senior.error,
     )
 
 
@@ -254,8 +506,43 @@ def current_portfolio() -> dict[str, Any]:
         "updated_at": datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat(),
         "source_refs": list(context.source_refs),
         "positions": [asdict(position) for position in context.positions],
+        "received_income": asdict(context.received_income) if context.received_income is not None else None,
         "intelligence": asdict(PortfolioIntelligenceEngine().build(context)),
     }
+
+
+@app.get("/history/context")
+def personal_history_context(ticker: str | None = None, as_of: datetime | None = None, since: str | None = None):
+    """Deterministic read projection; no models, providers, migrations or ingestion."""
+    try:
+        return PersonalHistoryService(settings.data_dir).build(ticker=ticker, as_of=as_of, since=since)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/intelligence/research-context")
+def stored_research_context(ticker: str, as_of: str | None = None, limit: int = 8):
+    """Read existing B3 research only; no web search, market fetch or senior model."""
+    from b3_agent.intelligence.stored_research import StoredResearchContextService
+    try:
+        cutoff = datetime.fromisoformat(as_of.replace("Z", "+00:00")) if as_of else datetime.now(timezone.utc)
+        return StoredResearchContextService().build(ticker, as_of=cutoff, limit=limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get("/history/decision-context")
+def decision_history_context(ticker: str, as_of: datetime | None = None, since: str | None = None):
+    """Exact subject evidence for an explicit analysis; no market/provider calls."""
+    if not ticker.strip():
+        raise HTTPException(status_code=400, detail="ticker must not be empty")
+    try:
+        return build_decision_history(
+            PersonalHistoryService(settings.data_dir), result={}, tickers=(ticker,),
+            as_of=as_of, since=since,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/options/ledger")
@@ -507,6 +794,7 @@ def health() -> dict[str, Any]:
             "neo4j_uri": os.getenv("B3_NEO4J_URI", "bolt://127.0.0.1:7687"),
             "qdrant_collection": "b3_evidence_768_hybrid",
             "oplab_token_configured": bool(os.getenv("OPLAB_API_TOKEN")),
+            "brapi_token_configured": bool(os.getenv("BRAPI_TOKEN")),
         },
     }
 
@@ -517,22 +805,127 @@ def runtime_status() -> dict[str, Any]:
     return RuntimeManager().status(health_override="ok")
 
 
+@app.get("/market/current/{ticker}")
+def current_market_quote(ticker: str) -> dict[str, Any]:
+    """Return the current OPLAB stock quote, separate from history."""
+    try:
+        provider = OplabAdapter()
+        quote = provider.get_current_quote(ticker)
+        return {
+            "ticker": quote.ticker,
+            "as_of": quote.observation_timestamp.isoformat(),
+            "source": quote.source,
+            "quote": asdict(quote),
+            "reuse_telemetry": getattr(provider, "last_reuse_telemetry", {}),
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (RuntimeError, OSError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/options/current/{ticker}")
+def current_option_quotes(
+    ticker: str,
+    option_type: str | None = None,
+    limit: int = 100,
+) -> dict[str, Any]:
+    """Return compact current OPLAB option quotes for explicit selection."""
+    if not 1 <= limit <= 500:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 500")
+    normalized_type = option_type.upper().strip() if option_type else None
+    if normalized_type not in {None, "PUT", "CALL"}:
+        raise HTTPException(status_code=400, detail="option_type must be PUT or CALL")
+    try:
+        as_of = datetime.now(timezone.utc)
+        provider = OplabOptionsAdapter()
+        contracts, quotes = provider.get_snapshot(ticker, as_of)
+        quote_by_id = {item.option_id: item for item in quotes}
+        rows = []
+        for contract in contracts:
+            if normalized_type and contract.option_type != normalized_type:
+                continue
+            if contract.expiration_date <= as_of.date():
+                continue
+            quote = quote_by_id.get(contract.option_id)
+            if quote is None:
+                continue
+            if not any(
+                value is not None
+                for value in (quote.bid, quote.ask, quote.last, quote.mid)
+            ):
+                continue
+            rows.append({
+                "contract": asdict(contract),
+                "quote": asdict(quote),
+            "reuse_telemetry": getattr(provider, "last_reuse_telemetry", {}),
+            })
+        rows.sort(
+            key=lambda row: (
+                row["contract"]["expiration_date"],
+                row["contract"]["strike"],
+                row["contract"]["option_id"],
+            )
+        )
+        return {
+            "ticker": ticker.upper().strip(),
+            "as_of": as_of.isoformat(),
+            "source": "oplab",
+            "option_type": normalized_type,
+            "count": min(len(rows), limit),
+            "options": rows[:limit],
+            "reuse_telemetry": getattr(provider, "last_reuse_telemetry", {}),
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (RuntimeError, OSError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 @app.get("/analysis/live/{ticker}")
 def live_analysis(ticker: str) -> dict[str, Any]:
     """Return normalized live market/options analytics for one B3 underlying."""
     try:
-        snapshot = LiveProviderService().load(ticker)
-        latest = max(
-            snapshot.market_records,
+        snapshot = LiveProviderService().load(
+            ticker, include_current_quote=False, include_options=False
+        )
+        # OPLAB history becomes available to this response when acquisition completes.
+        # Use that response-time cutoff so ingestion-time availability is not
+        # incorrectly treated as future data.
+        cutoff = datetime.now(timezone.utc)
+        if cutoff.tzinfo is None or cutoff.utcoffset() is None:
+            raise ValueError("live snapshot as_of must be timezone-aware")
+
+        def available_by_cutoff(record: Any) -> bool:
+            observed = record.observation_timestamp
+            if observed.tzinfo is None or observed.utcoffset() is None:
+                observed = observed.replace(tzinfo=timezone.utc)
+            return observed <= cutoff and record.is_available_at(cutoff)
+
+        eligible_history = sorted(
+            (record for record in snapshot.market_records if available_by_cutoff(record)),
             key=lambda item: item.observation_timestamp,
         )
+        if not eligible_history:
+            raise ValueError(f"no point-in-time market history available for {snapshot.ticker}")
+        history_latest = eligible_history[-1]
+        current_quote = snapshot.current_stock_quote
+        if current_quote is not None and not available_by_cutoff(current_quote):
+            current_quote = None
+        display_latest = current_quote or history_latest
+        bounded_history = eligible_history[-520:]
+        quant = compute_quant_features(eligible_history, as_of=cutoff)
         return {
             "ticker": snapshot.ticker,
-            "as_of": snapshot.as_of.isoformat(),
+            "as_of": cutoff.isoformat(),
             "source_refs": list(snapshot.source_refs),
             "market": {
-                "history_count": len(snapshot.market_records),
-                "latest": asdict(latest),
+                "history_count": len(eligible_history),
+                "price_history": [asdict(item) for item in bounded_history],
+                "quant": asdict(quant),
+                "current_quote": asdict(current_quote) if current_quote is not None else None,
+                "history_latest": asdict(history_latest),
+                "latest": asdict(display_latest),
             },
             "options": {
                 "contract_count": len(snapshot.option_contracts),
@@ -545,6 +938,45 @@ def live_analysis(ticker: str) -> dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except (RuntimeError, OSError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/fundamentals/{ticker}")
+def current_fundamentals(ticker: str) -> dict[str, Any]:
+    """Return source-labeled current BRAPI fundamentals with explicit PIT limits."""
+    normalized = ticker.upper().strip()
+    if re.fullmatch(r"[A-Z]{4}\d{1,2}", normalized) is None:
+        raise HTTPException(status_code=400, detail="invalid B3 ticker")
+    as_of = datetime.now(timezone.utc)
+    try:
+        adapter = BrapiFundamentalsAdapter()
+        records = adapter.get_financial_data(normalized)
+        eligible = []
+        excluded_future_count = 0
+        for record in records:
+            observed = record.observation_timestamp
+            if observed.tzinfo is None or observed.utcoffset() is None:
+                observed = observed.replace(tzinfo=timezone.utc)
+            if observed > as_of or not record.is_available_at(as_of):
+                excluded_future_count += 1
+                continue
+            eligible.append(record)
+        return {
+            "ticker": normalized,
+            "as_of": as_of.isoformat(),
+            "status": "AVAILABLE" if eligible else "NO_DATA",
+            "metrics": [asdict(record) for record in eligible],
+            "source_refs": list(dict.fromkeys(
+                f"{record.source}:{record.source_record_id or record.metric}"
+                for record in eligible
+            )),
+            "excluded_future_count": excluded_future_count,
+            "limitations": [
+                "Current BRAPI fundamentals only; ingestion availability does not establish historical availability.",
+                "Verified broker price-target data is not configured; target price remains UNKNOWN.",
+            ],
+        }
+    except (OSError, RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
@@ -638,7 +1070,7 @@ def intelligence_local_ticker(ticker: str) -> dict[str, Any]:
 
 @app.get("/version")
 def version() -> dict[str, str]:
-    return {"service": "b3-orchestrator-server", "version": app.version}
+    return {"service": "b3-orchestrator-server", "version": app.version, "opportunity_screen_policy": "B3_OBSERVED_STOCK_SCREEN_V1"}
 
 
 @app.post("/orchestrate", response_model=OrchestrateResponse)
@@ -650,7 +1082,42 @@ def orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
             ticker=request.ticker,
             context=request.context,
         )
-        fast_response = _dispatch_fast_route(normalized)
+        normalized = explicit_stock_comparison(normalized)
+        if normalized.context.get('funded_switch') is not None:
+            if _workspace_name(normalized) != 'Strategy Lab' or normalized.context.get('as_of') is not None:
+                raise ValueError('Funded switch supports current Strategy Lab requests only')
+            from b3_agent.funded_switch import build_funded_switch
+            inputs = normalized.context['funded_switch']
+            assets = normalized.context.get('comparison_assets')
+            if not isinstance(inputs, dict) or not isinstance(assets, list) or len(assets) != 2 or any(not isinstance(item,str) for item in assets):
+                raise ValueError('Funded switch requires an explicit input object and two stock assets')
+            from b3_agent.strategy_live import _validated_equity_ticker
+            assets = [_validated_equity_ticker(item) for item in assets]
+            result = build_funded_switch(assets, inputs)
+            fast_response = OrchestratorResponse(status='COMPLETED', result=result, sources=tuple(result['source_refs']))
+            normalized = OrchestratorRequest(task=normalized.task,ticker=None,context={**normalized.context,'selected_ticker':None})
+            if normalized.context.get('analysis_mode') == 'deterministic':
+                result['telemetry'] = {'llm_calls':0}
+                result['derived_synthesis_status'] = 'NOT_REQUESTED'
+                return _response_to_model(OrchestratorResponse(status='COMPLETED',result=result,sources=tuple(result['source_refs'])))
+            return _response_to_model(_workspace_intelligence_response(normalized, deterministic_response=fast_response))
+        fast_response = _dispatch_opportunity_screen(normalized)
+        if fast_response is not None:
+            if normalized.context.get('analysis_mode') == 'deterministic' or normalized.context.get('as_of') is not None:
+                return _response_to_model(fast_response)
+            normalized = OrchestratorRequest(task=normalized.task, ticker=None, context={
+                **normalized.context, 'selected_ticker':None,
+                'opportunity_assets':fast_response.result['opportunity_screen']['requested_universe'],
+            })
+        else:
+            fast_response = _dispatch_fast_route(normalized)
+        if _uses_workspace_intelligence(normalized):
+            response = _workspace_intelligence_response(
+                normalized,
+                deterministic_response=fast_response,
+            )
+            return _response_to_model(response)
+
         if fast_response is not None:
             return _response_to_model(fast_response)
 

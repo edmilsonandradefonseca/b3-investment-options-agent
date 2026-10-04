@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -12,7 +14,7 @@ from b3_agent.llm.ollama_client import OllamaClient
 
 
 POLICY_VERSION = "v4.3-local-evidence-1"
-PROMPT_VERSION = "b3_local_evidence_analyst_v2"
+PROMPT_VERSION = "b3_local_evidence_analyst_v6"
 
 LOCAL_ANALYSIS_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -259,7 +261,7 @@ class LocalEvidenceQueue:
 
         if run_path.exists():
             previous = json.loads(run_path.read_text(encoding="utf-8"))
-            if previous.get("status") != LocalAnalysisStatus.FAILED.value:
+            if previous.get("status") != LocalAnalysisStatus.FAILED.value or "RETRY_EXHAUSTED" in previous.get("quality_flags", []):
                 return QueueEnqueueResult(
                     request=request,
                     queue_status="ALREADY_PROCESSED",
@@ -278,34 +280,62 @@ class LocalEvidenceQueue:
 
     def pending(self, *, limit: int | None = None) -> list[LocalEvidenceAnalysisRequest]:
         paths = sorted(self.queue_dir.glob("*.json"))
-        if limit is not None:
-            paths = paths[: max(0, int(limit))]
         requests: list[LocalEvidenceAnalysisRequest] = []
+        now = datetime.now(timezone.utc)
         for path in paths:
             payload = json.loads(path.read_text(encoding="utf-8"))
+            due = payload.get("next_attempt_at")
+            if due and datetime.fromisoformat(due) > now:
+                continue
+            if payload.get("status") == LocalAnalysisStatus.RUNNING.value:
+                started = datetime.fromisoformat(payload["started_at"])
+                if now - started < timedelta(minutes=20):
+                    continue
             requests.append(LocalEvidenceAnalysisRequest.from_dict(payload))
+            if limit is not None and len(requests) >= max(0, int(limit)):
+                break
+        if limit is not None and limit <= 0:
+            return []
         return requests
 
     def mark_running(self, request: LocalEvidenceAnalysisRequest) -> None:
+        path = self.queue_dir / f"{request.analysis_id}.json"
+        previous = json.loads(path.read_text())
         _atomic_json_write(
-            self.queue_dir / f"{request.analysis_id}.json",
+            path,
             {
+                **previous,
                 **request.as_dict(),
                 "status": LocalAnalysisStatus.RUNNING.value,
                 "started_at": datetime.now(timezone.utc).isoformat(),
             },
         )
 
-    def defer(self, request: LocalEvidenceAnalysisRequest, *, reason: str) -> None:
+    def defer(self, request: LocalEvidenceAnalysisRequest, *, reason: str, runtime_failure: bool = False, model: str = "") -> bool:
+        path = self.queue_dir / f"{request.analysis_id}.json"
+        previous = json.loads(path.read_text())
+        attempts = int(previous.get("runtime_failures", 0)) + int(runtime_failure)
+        now = datetime.now(timezone.utc)
+        if attempts >= 3:
+            dossier = self.fail(request, error=reason, model=model)
+            from dataclasses import replace
+            self.complete(replace(dossier, quality_flags=("MODEL_FAILURE", "RETRY_EXHAUSTED")))
+            return False
         _atomic_json_write(
-            self.queue_dir / f"{request.analysis_id}.json",
+            path,
             {
                 **request.as_dict(),
                 "status": LocalAnalysisStatus.PENDING.value,
-                "deferred_at": datetime.now(timezone.utc).isoformat(),
+                "deferred_at": now.isoformat(),
                 "defer_reason": reason,
+                "runtime_failures": attempts,
+                "next_attempt_at": (now + timedelta(seconds=60 * 2 ** attempts)).isoformat(),
             },
         )
+        return True
+
+    def outstanding_count(self) -> int:
+        return sum(1 for _ in self.queue_dir.glob("*.json"))
 
     def complete(self, dossier: LocalEvidenceDossier) -> None:
         payload = dossier.as_dict()
@@ -346,11 +376,31 @@ class LocalEvidenceQueue:
 
 class LocalEvidenceAnalyst:
     def __init__(self, client: OllamaClient | None = None):
-        self.client = client or OllamaClient(format_schema=LOCAL_ANALYSIS_SCHEMA)
+        self.client = client or OllamaClient(
+            model=os.getenv("B3_LOCAL_EVIDENCE_MODEL", "qwen3:4b-instruct-2507-q4_K_M"),
+            think=False, format_schema=LOCAL_ANALYSIS_SCHEMA,
+            num_ctx=int(os.getenv("B3_LOCAL_EVIDENCE_NUM_CTX", "4096")),
+            num_predict=int(os.getenv("B3_LOCAL_EVIDENCE_NUM_PREDICT", "2048")),
+            timeout=float(os.getenv("B3_LOCAL_EVIDENCE_TIMEOUT_SECONDS", "600")),
+        )
 
     def analyze(self, request: LocalEvidenceAnalysisRequest) -> LocalEvidenceDossier:
         prompt = _analysis_prompt(request)
-        result = self.client.ask(prompt)
+        client = self.client
+        if isinstance(client, OllamaClient):
+            schema = deepcopy(LOCAL_ANALYSIS_SCHEMA)
+            refs_schema = schema["properties"]["evidence_refs"]
+            if request.source_refs:
+                refs_schema["items"]["enum"] = list(request.source_refs)
+            else:
+                refs_schema["maxItems"] = 0
+            client = OllamaClient(
+                base_url=client.base_url, model=client.model,
+                timeout=client.timeout, num_ctx=client.num_ctx,
+                num_predict=client.num_predict, keep_alive=client.keep_alive,
+                think=client.think, format_schema=schema,
+            )
+        result = client.ask(prompt)
         quality_flags: list[str] = []
 
         analysis: dict[str, Any] | None
@@ -379,6 +429,12 @@ class LocalEvidenceAnalyst:
             if any(
                 key not in analysis or not isinstance(analysis.get(key), expected)
                 for key, expected in required.items()
+            ):
+                quality_flags.append("INVALID_SCHEMA")
+            if set(analysis) - set(required) or any(
+                not isinstance(analysis.get(key), list)
+                or any(not isinstance(item, str) for item in analysis[key])
+                for key, expected in required.items() if expected is list
             ):
                 quality_flags.append("INVALID_SCHEMA")
 
@@ -441,7 +497,9 @@ class LocalEvidenceContextSelector:
         evidence_events: list[dict[str, Any]] | tuple[dict[str, Any], ...],
         as_of: datetime | None = None,
     ) -> LocalContextSelection:
-        dossier = self.queue.latest(ticker)
+        request=build_request(ticker,evidence_events)
+        matching_path=self.queue.runs_dir / f"{request.analysis_id}.json"
+        dossier = LocalEvidenceDossier.from_dict(json.loads(matching_path.read_text(encoding="utf-8"))) if matching_path.exists() else self.queue.latest(ticker)
         if dossier is None:
             return LocalContextSelection(None, "ABSENT", ("NO_DOSSIER",))
 

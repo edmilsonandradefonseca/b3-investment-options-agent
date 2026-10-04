@@ -1,0 +1,30 @@
+name: B3 local worker admission diagnostics
+on:
+  push:
+    branches: [feature/react-functional-v43-integration]
+    paths: [.github/workflows/b3-local-worker-diagnostics.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 2
+    steps:
+      - name: Read admission metadata without model calls or private content
+        run: |
+          python3 - <<'PY'
+          import json,subprocess
+          from pathlib import Path
+          root=Path('/opt/b3-runtime/data/derived/local_evidence_analyst')
+          for path in root.joinpath('runs').glob('*.json'):
+              d=json.loads(path.read_text())
+              if not any('conteudos.xpi.com.br/acoes/relatorios/' in str(ref) for ref in d.get('evidence_refs',[])):
+                  continue
+              analysis=d.get('analysis') or {}
+              required={'summary':'str','risks':'list','catalysts':'list','contradictions':'list','questions_for_senior_review':'list','escalation_recommended':'bool','evidence_refs':'list'}
+              print(json.dumps({'case':'TARGET_DOSSIER_METADATA','status':d.get('status'),'quality_flags':d.get('quality_flags'),'model':d.get('model'),'eval_count':d.get('eval_count'),'num_predict':d.get('num_predict'),'thinking_chars':d.get('thinking_chars'),'input_chars':d.get('input_chars'),'raw_chars':len(d.get('raw_analysis') or ''),'field_types':{key:type(analysis.get(key)).__name__ for key in required}}))
+          for unit in ['b3-nightly-intelligence.timer','b3-local-evidence-analyst.timer','b3-continuous-intelligence.timer']:
+              state=subprocess.run(['systemctl','is-active',unit],text=True,capture_output=True,timeout=10).stdout.strip()
+              print(json.dumps({'case':'TIMER_STATE','unit':unit,'state':state}))
+          PY

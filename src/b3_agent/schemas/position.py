@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
+from .received_income import ReceivedIncomeContext
+
 
 @dataclass(frozen=True)
 class Position:
@@ -54,6 +56,7 @@ class PortfolioContext:
     cash_is_known: bool = True
     source_refs: tuple[str, ...] = ()
     quality_status: str = "VALIDATED"
+    received_income: ReceivedIncomeContext | None = None
 
     def __post_init__(self) -> None:
         if self.cash < 0:

@@ -30,6 +30,74 @@ from b3_agent.schemas.outcome import Outcome, OutcomeStatus
 BASE = datetime(2026, 9, 1, 15, 0, tzinfo=timezone.utc)
 
 
+@pytest.mark.parametrize('change', ['future', 'provisional', 'degraded', 'late_exit'])
+def test_ranker_excludes_ineligible_outcomes_and_unresolved_semantic_candidates(change):
+    from dataclasses import replace
+    from b3_agent.knowledge.vector_store import VectorSearchResult
+    exp = experience(1, day=1, close=40, vol=.4)
+    cutoff = BASE + timedelta(days=20)
+    if change == 'future':
+        exp = replace(exp, outcome=replace(exp.outcome, finalized_at=cutoff + timedelta(days=1)))
+    elif change == 'provisional':
+        exp = replace(exp, outcome=replace(exp.outcome, status=OutcomeStatus.PROVISIONAL))
+    elif change == 'degraded':
+        exp = replace(exp, outcome=replace(exp.outcome, quality_status='UNKNOWN'))
+    else:
+        exp = replace(exp, exit_snapshot=replace(exp.entry_snapshot, as_of=cutoff + timedelta(days=1)))
+    current = snapshot('NOW', 20, 40, .4)
+    result = ExperienceRanker().rank(
+        current_snapshot=current, current_regime=regime('NOW-REG', current), as_of=cutoff,
+        experiences=(exp,), semantic_results=(VectorSearchResult('chunk','unresolved',.99,'unsupported',{'canonical_id':exp.experience_id}),),
+    )
+    assert not result.matches
+    assert dict(result.retrieval_metadata)['excluded_ineligible_experience'] == '1'
+    assert dict(result.retrieval_metadata)['excluded_unresolved_semantic_candidate'] == '1'
+
+
+@pytest.mark.parametrize('change', ['future_version', 'future_confirmation', 'future_evidence', 'wrong_subject', 'expired'])
+def test_canonical_learning_gate_prevents_temporal_and_subject_leaks(change):
+    from dataclasses import replace
+    from b3_agent.schemas.learning import LearningEvidenceLink, EvidenceDirection
+    cutoff = BASE + timedelta(days=30)
+    item = learning('LRN-BOUNDARY')
+    if change == 'future_version':
+        item = replace(item, last_updated_at=cutoff + timedelta(days=1))
+    elif change == 'future_confirmation':
+        item = replace(item, last_confirmed_at=cutoff + timedelta(days=1))
+    elif change == 'future_evidence':
+        item = replace(item, evidence_links=(LearningEvidenceLink('EV', EvidenceDirection.CONTRADICTS, observed_at=cutoff + timedelta(days=1)),))
+    elif change == 'wrong_subject':
+        item = replace(item, subject_ids=('B3-VALE3',))
+    else:
+        item = replace(item, valid_to=cutoff - timedelta(days=1))
+    current = snapshot('NOW', 20, 40, .4)
+    result = ExperienceRanker().rank(current_snapshot=current, current_regime=regime('NOW-REG', current), as_of=cutoff,
+        experiences=(), learnings=(item,), semantic_results=(_semantic_result_for_learning(item.learning_id),))
+    assert not result.matches
+
+
+def test_preanalysis_does_not_expose_future_learning_even_without_semantic_match():
+    from dataclasses import replace
+    from b3_agent.orchestration.experience_workflow import ExperienceContextService
+    cutoff = BASE + timedelta(days=30)
+    current = snapshot('NOW', 20, 40, .4)
+    valid = learning('KNOWN')
+    future = replace(learning('FUTURE'), last_updated_at=cutoff + timedelta(days=1))
+    service = ExperienceContextService(ranker=ExperienceRanker(), assessment_engine=ExperienceAssessmentEngine(),
+        experience_loader=lambda *a: (), learning_loader=lambda *a: (valid, future))
+    context = service.build(query='Compare', snapshot=current, regime=regime('NOW-REG', current), as_of=cutoff)
+    assert context.learnings == (valid,)
+
+
+def test_ranker_rejects_current_state_from_future_or_unrelated_regime():
+    from dataclasses import replace
+    current = snapshot('NOW', 20, 40, .4)
+    with pytest.raises(ValueError, match='must not exceed'):
+        ExperienceRanker().rank(current_snapshot=current,current_regime=regime('NOW-REG',current),as_of=BASE,experiences=())
+    with pytest.raises(ValueError, match='must reference'):
+        ExperienceRanker().rank(current_snapshot=current,current_regime=replace(regime('NOW-REG',current),feature_snapshot_id='OTHER'),as_of=BASE+timedelta(days=30),experiences=())
+
+
 def snapshot(snapshot_id: str, day: int, close: float, vol: float) -> FeatureSnapshot:
     as_of = BASE + timedelta(days=day)
     return FeatureSnapshot(
@@ -336,7 +404,7 @@ def test_experience_ranker_emits_retrieval_trace():
     assert result.trace is not None
     assert result.trace.candidate_count == 2
     assert result.trace.selected_count == 2
-    assert result.trace.ranker_version == "experience-ranker-v2"
+    assert result.trace.ranker_version == "experience-ranker-v3-pit-admission"
     assert [item.final_rank for item in result.matches] == [1, 2]
     assert result.trace.items[0].rerank_components
     assert dict(result.retrieval_metadata)["trace_id"] == result.trace.trace_id
