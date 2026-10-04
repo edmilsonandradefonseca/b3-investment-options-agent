@@ -73,6 +73,44 @@ class AssetEvidencePack:
     limitations: tuple[str, ...] = ()
 
 
+_HISTORICAL_WINDOWS = (("1W", 5), ("1M", 21), ("3M", 63), ("6M", 126), ("1Y", 252))
+
+
+def _historical_performance(records, as_of: datetime) -> dict[str, Any]:
+    """Describe price changes over common trading-session windows; never forecast."""
+    eligible = []
+    for row in records:
+        observed = getattr(row, "observation_timestamp", None)
+        available = getattr(row, "available_timestamp", None)
+        if observed is None or observed > as_of or (available is not None and available > as_of):
+            continue
+        adjusted = getattr(row, "adjusted_close", None)
+        close = adjusted if isinstance(adjusted, (int, float)) and adjusted > 0 else getattr(row, "close", None)
+        if isinstance(close, (int, float)) and math.isfinite(float(close)) and close > 0:
+            eligible.append((observed, float(close), "adjusted close" if adjusted is not None else "close"))
+
+    eligible.sort(key=lambda item: item[0])
+    output = {}
+    for label, sessions in _HISTORICAL_WINDOWS:
+        if len(eligible) <= sessions:
+            output[label] = {
+                "status": "INSUFFICIENT_HISTORY", "sessions": sessions,
+                "available_observations": len(eligible), "return_fraction": None,
+                "start_at": None, "end_at": eligible[-1][0] if eligible else None,
+                "price_basis": None,
+            }
+            continue
+        start, end = eligible[-(sessions + 1)], eligible[-1]
+        output[label] = {
+            "status": "AVAILABLE", "sessions": sessions,
+            "available_observations": len(eligible),
+            "return_fraction": end[1] / start[1] - 1,
+            "start_at": start[0], "end_at": end[0],
+            "price_basis": "adjusted close" if start[2] == end[2] == "adjusted close" else "close",
+        }
+    return output
+
+
 class StrategyEvidenceService:
     """Build a compact multi-source evidence pack without invoking an LLM."""
 
@@ -82,7 +120,7 @@ class StrategyEvidenceService:
         market_provider: MarketProvider | None = None,
         fundamentals_provider: FundamentalsProvider | None = None,
         current_quote_provider: CurrentQuoteProvider | None = None,
-        history_days: int = 120,
+        history_days: int = 400,
     ) -> None:
         if history_days < 1:
             raise ValueError("history_days must be positive")
@@ -244,6 +282,7 @@ class StrategyEvidenceService:
                 "history_end": max(
                     row.observation_timestamp for row in market_records
                 ),
+                "historical_returns": _historical_performance(market_records, as_of),
             },
             quant=asdict(quant),
             fundamentals={
