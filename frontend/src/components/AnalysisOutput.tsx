@@ -624,9 +624,6 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
       {data.sources.map((source, index) => <p key={index}>{source}</p>)}
     </details>}
 
-    <details className="technical-output">
-      <summary>Detalhes técnicos</summary>
-      <pre>{JSON.stringify(result, null, 2)}</pre>
-    </details>
+
   </div>;
 }

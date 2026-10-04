@@ -47,7 +47,7 @@ const scenarioForm=page.locator('form').filter({has:page.getByRole('button',{nam
 const scenarioResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().context?.scenario_horizon==='2026-11-04',{timeout:120000});await scenarioForm.getByRole('button',{name:'Comparar',exact:true}).click();const scenarioComparison=await (await scenarioResponse).json();assert.ok(!scenarioComparison.error);assert.ok(scenarioComparison.result.scenario_analysis.alternatives.length===2);await page.getByRole('img',{name:'P&L canônico por cenário e alternativa',exact:true}).waitFor();await screenshot('strategy-scenarios-real');
 await page.getByText('Premissas e estratégias avançadas: cenários, custos, troca financiada e strikes',{exact:true}).click();
 await nav('Opportunities');
-await page.getByLabel('Universo de ações (até 20)',{exact:true}).fill('ITUB4, BBDC4');
+await page.getByLabel('Universo de ações (até 20)',{exact:true}).fill('ITUB4, BBDC4');await page.getByLabel('Objetivo da comparação',{exact:true}).selectOption('LOWEST_REALIZED_VOLATILITY_60D');
 const opportunityResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().context?.opportunity_assets?.join(',')==='ITUB4,BBDC4',{timeout:120000});
 await page.getByRole('button',{name:'Comparar / ordenar',exact:true}).click();
 const opportunity=await (await opportunityResponse).json();assert.ok(!opportunity.error);assert.equal(opportunity.result.opportunity_screen.rows.length,2);
@@ -76,7 +76,7 @@ for(const [width,height] of [[1920,1080],[1440,900],[1366,768]]){
  await page.getByRole('button',{name:'Fechar Copilot',exact:true}).click();await noOverflow();await screenshot(`copilot-closed-${width}`);await page.getByRole('button',{name:/Copilot \+/}).click();
 }
 await nav('Portfolio');const copilotResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().task==='Resuma a concentração da carteira.',{timeout:60000});await page.locator('.chat-form textarea').fill('Resuma a concentração da carteira.');await page.getByRole('button',{name:'Enviar',exact:true}).click();const copilot=await (await copilotResponse).json();assert.ok(!copilot.error);assert.equal(copilot.result.portfolio_context.positions.length,portfolio.positions.length);await page.locator('.copilot').getByRole('heading',{name:'Carteira canônica',exact:true}).waitFor();await screenshot('copilot-context-real');
-await nav('Strategy Lab');await page.locator('.chat-form textarea').fill('Está online?');await page.getByRole('button',{name:'Enviar',exact:true}).click();await page.getByText(/Sim. Estou conectado ao B3 Runtime/).waitFor();
+await nav('Strategy Lab');await page.locator('.chat-form textarea').fill('Está online?');await page.getByRole('button',{name:'Enviar',exact:true}).click();await page.locator('.copilot .analysis-summary p').filter({hasText:/Sim. Estou conectado ao B3 Runtime/}).waitFor();
 assert.equal(consoleErrors.length,0,`Browser errors: ${consoleErrors.join('; ')}`);
 assert.ok(requests.some(r=>r.context?.ticker_price_shocks?.PETR4===-0.1),'Percentage unit conversion incorrect');
 assert.ok(requests.some(r=>r.context?.comparison_assets?.join(',')==='ITUB4,BBDC4'&&r.context.analysis_mode==='deterministic'));
