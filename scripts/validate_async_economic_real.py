@@ -57,7 +57,7 @@ def main():
         candidates=[]
         for path in queue.runs_dir.glob('*.json'):
             data=json.loads(path.read_text())
-            if data.get('status')=='READY' and any('conteudos.xpi.com.br/acoes/relatorios/' in str(r) for r in data.get('evidence_refs',[])):
+            if data.get('status')=='READY' and data.get('prompt_version') == PROMPT_VERSION and data.get('model') == LocalEvidenceAnalystJob().analyst.client.model and any('conteudos.xpi.com.br/acoes/relatorios/' in str(r) for r in data.get('evidence_refs',[])):
                 candidates.append(data)
         assert candidates,'No queued target request or admitted target dossier'
         print(json.dumps({'case':'REAL_LOCAL_TARGET_WORKER','status':'PREVIOUSLY_READY','count':len(candidates)}),flush=True)

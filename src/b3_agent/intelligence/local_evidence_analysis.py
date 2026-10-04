@@ -261,7 +261,7 @@ class LocalEvidenceQueue:
 
         if run_path.exists():
             previous = json.loads(run_path.read_text(encoding="utf-8"))
-            if previous.get("status") != LocalAnalysisStatus.FAILED.value:
+            if previous.get("status") != LocalAnalysisStatus.FAILED.value or "RETRY_EXHAUSTED" in previous.get("quality_flags", []):
                 return QueueEnqueueResult(
                     request=request,
                     queue_status="ALREADY_PROCESSED",
@@ -280,34 +280,62 @@ class LocalEvidenceQueue:
 
     def pending(self, *, limit: int | None = None) -> list[LocalEvidenceAnalysisRequest]:
         paths = sorted(self.queue_dir.glob("*.json"))
-        if limit is not None:
-            paths = paths[: max(0, int(limit))]
         requests: list[LocalEvidenceAnalysisRequest] = []
+        now = datetime.now(timezone.utc)
         for path in paths:
             payload = json.loads(path.read_text(encoding="utf-8"))
+            due = payload.get("next_attempt_at")
+            if due and datetime.fromisoformat(due) > now:
+                continue
+            if payload.get("status") == LocalAnalysisStatus.RUNNING.value:
+                started = datetime.fromisoformat(payload["started_at"])
+                if now - started < timedelta(minutes=20):
+                    continue
             requests.append(LocalEvidenceAnalysisRequest.from_dict(payload))
+            if limit is not None and len(requests) >= max(0, int(limit)):
+                break
+        if limit is not None and limit <= 0:
+            return []
         return requests
 
     def mark_running(self, request: LocalEvidenceAnalysisRequest) -> None:
+        path = self.queue_dir / f"{request.analysis_id}.json"
+        previous = json.loads(path.read_text())
         _atomic_json_write(
-            self.queue_dir / f"{request.analysis_id}.json",
+            path,
             {
+                **previous,
                 **request.as_dict(),
                 "status": LocalAnalysisStatus.RUNNING.value,
                 "started_at": datetime.now(timezone.utc).isoformat(),
             },
         )
 
-    def defer(self, request: LocalEvidenceAnalysisRequest, *, reason: str) -> None:
+    def defer(self, request: LocalEvidenceAnalysisRequest, *, reason: str, runtime_failure: bool = False, model: str = "") -> bool:
+        path = self.queue_dir / f"{request.analysis_id}.json"
+        previous = json.loads(path.read_text())
+        attempts = int(previous.get("runtime_failures", 0)) + int(runtime_failure)
+        now = datetime.now(timezone.utc)
+        if attempts >= 3:
+            dossier = self.fail(request, error=reason, model=model)
+            from dataclasses import replace
+            self.complete(replace(dossier, quality_flags=("MODEL_FAILURE", "RETRY_EXHAUSTED")))
+            return False
         _atomic_json_write(
-            self.queue_dir / f"{request.analysis_id}.json",
+            path,
             {
                 **request.as_dict(),
                 "status": LocalAnalysisStatus.PENDING.value,
-                "deferred_at": datetime.now(timezone.utc).isoformat(),
+                "deferred_at": now.isoformat(),
                 "defer_reason": reason,
+                "runtime_failures": attempts,
+                "next_attempt_at": (now + timedelta(seconds=60 * 2 ** attempts)).isoformat(),
             },
         )
+        return True
+
+    def outstanding_count(self) -> int:
+        return sum(1 for _ in self.queue_dir.glob("*.json"))
 
     def complete(self, dossier: LocalEvidenceDossier) -> None:
         payload = dossier.as_dict()

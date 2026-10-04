@@ -12,7 +12,8 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from b3_agent.intelligence.official_sources import load_open_data_official_evidence
-from b3_agent.jobs.nightly_intelligence import NightlyIntelligenceJob, portfolio_tickers
+from b3_agent.jobs.nightly_intelligence import NightlyIntelligenceJob
+from b3_agent.jobs.continuous_intelligence import _monitored_tickers
 
 
 def main() -> int:
@@ -21,7 +22,7 @@ def main() -> int:
     parser.add_argument("--news-limit", type=int, default=8)
     args = parser.parse_args()
 
-    selected = args.tickers or portfolio_tickers()
+    selected = args.tickers or _monitored_tickers()
     if not selected:
         raise RuntimeError("no portfolio tickers available for nightly intelligence")
 
@@ -52,8 +53,12 @@ def main() -> int:
     from b3_agent.jobs.dividend_refresh import DividendRefreshJob
     dividend_job=DividendRefreshJob()
     selected_list=list(selected)
+    from b3_agent.jobs.institution_target_discovery import InstitutionTargetDiscoveryJob
+    discovery_job = InstitutionTargetDiscoveryJob()
+    target_discovery = {'batches': [discovery_job.run(selected_list[i:i+20]) for i in range(0, len(selected_list), 20)]}
     dividend_refresh={"batches":[dividend_job.run(selected_list[i:i+20]) for i in range(0,len(selected_list),20)]}
     output = {
+        'institution_target_discovery':target_discovery,
         'issuer_dividend_refresh':dividend_refresh,
         'institution_target_refresh':target_refresh,
         "ticker_count": result["ticker_count"],
@@ -76,7 +81,8 @@ def main() -> int:
     # runtime failure. The nightly producer succeeds as long as official-source
     # loading is healthy and no ticker execution failed.
     dividend_projection_ok=all(r["status"]=="PROJECTED" for batch in dividend_refresh["batches"] for r in batch["results"])
-    return 0 if official_ok and not result["failed"] and dividend_projection_ok else 2
+    discovery_projection_ok=all(r['status'] != 'PROJECTION_FAILED' for batch in target_discovery['batches'] for r in batch['results'])
+    return 0 if official_ok and not result["failed"] and dividend_projection_ok and discovery_projection_ok else 2
 
 
 if __name__ == "__main__":
