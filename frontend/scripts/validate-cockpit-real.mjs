@@ -17,7 +17,7 @@ const portfolio=await backend('/portfolio/current');
 assert.ok(portfolio.positions.length>0,'Real portfolio must exist for acceptance');
 const health=await backend('/health');assert.ok(health.status);
 async function nav(label){await page.locator('nav').getByRole('button',{name:label,exact:true}).click();await page.locator('h1').filter({hasText:label}).waitFor();}
-async function screenshot(name){await page.screenshot({path:resolve(out,name+'.png'),fullPage:false});}
+async function screenshot(name){await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:resolve(out,name+'.png'),fullPage:false,animations:'disabled'});}
 async function noOverflow(){const size=await page.evaluate(()=>({scroll:document.documentElement.scrollWidth,width:innerWidth}));assert.ok(size.scroll<=size.width+1,`Global horizontal overflow ${size.scroll}/${size.width}`)}
 try {
 await page.goto(base+'/#/portfolio');
@@ -39,9 +39,13 @@ const comparisonResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate'
 await page.getByTestId('primary-comparison').getByRole('button',{name:'Comparar fatos',exact:true}).click();
 const comparison=await (await comparisonResponse).json();assert.ok(!comparison.error,'Canonical BUY failed');
 assert.equal(comparison.result.stock_purchase_comparison.rows.length,2);
-await page.getByTestId('primary-comparison-result').getByText('Compra entre ações',{exact:true}).waitFor({timeout:10000});
+await page.getByTestId('primary-comparison-result').getByRole('heading',{name:'Compra entre ações · fundamentos e perspectivas',exact:true}).waitFor({timeout:10000});
 assert.ok((await page.getByTestId('primary-comparison-result').innerText()).includes('ITUB4'));
 await screenshot('strategy-comparison-real');
+await page.getByText('Premissas e estratégias avançadas: cenários, custos, troca financiada e strikes',{exact:true}).click();
+const scenarioForm=page.locator('form').filter({has:page.getByRole('button',{name:'Comparar',exact:true})});await scenarioForm.getByLabel('Horizonte comum dos cenários',{exact:true}).fill('2026-11-04');
+const scenarioResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().context?.scenario_horizon==='2026-11-04',{timeout:120000});await scenarioForm.getByRole('button',{name:'Comparar',exact:true}).click();const scenarioComparison=await (await scenarioResponse).json();assert.ok(!scenarioComparison.error);assert.ok(scenarioComparison.result.scenario_analysis.alternatives.length===2);await page.getByRole('img',{name:'P&L canônico por cenário e alternativa',exact:true}).waitFor();await screenshot('strategy-scenarios-real');
+await page.getByText('Premissas e estratégias avançadas: cenários, custos, troca financiada e strikes',{exact:true}).click();
 await nav('Opportunities');
 await page.getByLabel('Universo de ações (até 20)',{exact:true}).fill('ITUB4, BBDC4');
 const opportunityResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().context?.opportunity_assets?.join(',')==='ITUB4,BBDC4',{timeout:120000});
@@ -68,13 +72,15 @@ const routes=['Overview','Portfolio','Options','Opportunities','Strategy Lab','M
 for(const [width,height] of [[1920,1080],[1440,900],[1366,768]]){
  await page.setViewportSize({width,height});
  for(const label of routes){await nav(label);await noOverflow();await screenshot(`${label.toLowerCase().replaceAll(/[^a-z]+/g,'-')}-${width}`)}
+ await page.getByRole('button',{name:'Recolher menu',exact:true}).click();await noOverflow();await screenshot(`sidebar-collapsed-${width}`);await page.getByRole('button',{name:'Recolher menu',exact:true}).click();
  await page.getByRole('button',{name:'Fechar Copilot',exact:true}).click();await noOverflow();await screenshot(`copilot-closed-${width}`);await page.getByRole('button',{name:/Copilot \+/}).click();
 }
+await nav('Portfolio');const copilotResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().task==='Resuma a concentração da carteira.',{timeout:60000});await page.locator('.chat-form textarea').fill('Resuma a concentração da carteira.');await page.getByRole('button',{name:'Enviar',exact:true}).click();const copilot=await (await copilotResponse).json();assert.ok(!copilot.error);assert.equal(copilot.result.portfolio_context.positions.length,portfolio.positions.length);await page.locator('.copilot').getByRole('heading',{name:'Carteira canônica',exact:true}).waitFor();await screenshot('copilot-context-real');
 await nav('Strategy Lab');await page.locator('.chat-form textarea').fill('Está online?');await page.getByRole('button',{name:'Enviar',exact:true}).click();await page.getByText(/Sim. Estou conectado ao B3 Runtime/).waitFor();
 assert.equal(consoleErrors.length,0,`Browser errors: ${consoleErrors.join('; ')}`);
 assert.ok(requests.some(r=>r.context?.ticker_price_shocks?.PETR4===-0.1),'Percentage unit conversion incorrect');
 assert.ok(requests.some(r=>r.context?.comparison_assets?.join(',')==='ITUB4,BBDC4'&&r.context.analysis_mode==='deterministic'));
-const report={status:'PASS',real_backend:true,resolutions:[1920,1440,1366],screens:routes,interaction_checks:['route','portfolio coherence','filter continuity','option limited state','OPLAB chain with source Greeks','UC06 limited state','UC08 and UC09 real zero sample','macro and stored event queries','buy comparison','opportunity detail','stress','personal history','price ranges','volume','zoom','copilot close/open','copilot health'],page_errors:consoleErrors,raw_payloads_uploaded:false};
+const report={status:'PASS',real_backend:true,resolutions:[1920,1440,1366],screens:routes,interaction_checks:['route','portfolio coherence','filter continuity','option limited state','OPLAB chain with source Greeks','UC06 limited state','UC08 and UC09 real zero sample','macro and stored event queries','buy comparison','canonical scenario chart','opportunity detail','stress','personal history','price ranges','volume','zoom','copilot close/open','copilot health','UC12 contextual canonical portfolio answer'],page_errors:consoleErrors,raw_payloads_uploaded:false};
 await writeFile(resolve(out,'acceptance.json'),JSON.stringify(report,null,2));
 console.log(JSON.stringify(report));
 } catch(error){await screenshot('failure-current-screen');await writeFile(resolve(out,'failure.json'),JSON.stringify({status:'FAIL',url:page.url(),reason:error.message,page_errors:consoleErrors},null,2));throw error} finally{await browser.close()}

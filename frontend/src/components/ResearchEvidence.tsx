@@ -1,8 +1,8 @@
+import {date} from './cockpit';
 type Obj = Record<string, unknown>;
 const obj = (v: unknown): Obj => v && typeof v === 'object' && !Array.isArray(v) ? v as Obj : {};
 const arr = (v: unknown): Obj[] => Array.isArray(v) ? v.map(obj) : [];
 const text = (v: unknown) => typeof v === 'string' ? v : 'Indisponível';
-const date = (v: unknown) => typeof v === 'string' && !Number.isNaN(Date.parse(v)) ? new Date(v).toLocaleString('pt-BR') : 'Indisponível';
 export default function ResearchEvidence({ stored, market }: { stored: unknown; market: unknown }) {
   const entries = Object.entries(obj(stored));
   if (!entries.length) return null;
