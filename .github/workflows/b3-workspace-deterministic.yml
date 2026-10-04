@@ -36,8 +36,6 @@ on:
       - src/b3_agent/put_pair.py
       - src/b3_agent/strategy_live.py
       - src/b3_agent/server.py
-      - frontend/src/App.tsx
-      - frontend/src/components/AnalysisOutput.tsx
   workflow_dispatch:
 
 permissions:

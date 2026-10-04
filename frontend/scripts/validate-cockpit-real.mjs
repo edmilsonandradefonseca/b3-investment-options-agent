@@ -31,6 +31,8 @@ await nav('Options');await nav('Portfolio');assert.equal(await page.getByLabel('
 await page.getByLabel('Buscar posição',{exact:true}).fill('');
 await nav('Options');await page.getByRole('tab',{name:'Resultados',exact:true}).click();await page.getByText('Resultado mensal e acumulado · LIMITED',{exact:true}).waitFor();
 await page.getByRole('tab',{name:'Execuções',exact:true}).click();await page.getByRole('tab',{name:'Posições',exact:true}).click();
+await page.getByRole('tab',{name:'Cadeia de opções',exact:true}).click();await page.getByLabel('Ativo da cadeia',{exact:true}).fill('PETR4');
+const chainResponse=page.waitForResponse(r=>r.url().includes('/options/current/PETR4'),{timeout:90000});await page.getByRole('button',{name:'Consultar cadeia',exact:true}).click();const chain=await (await chainResponse).json();assert.ok(chain.options.length>0,'Real OPLAB chain missing');await page.getByRole('button',{name:chain.options[0].contract.option_id,exact:true}).waitFor();await screenshot('oplab-chain-real');await page.getByRole('tab',{name:'Posições',exact:true}).click();
 await nav('Strategy Lab');
 const comparisonResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().context?.comparison_assets?.join(',')==='ITUB4,BBDC4',{timeout:120000});
 await page.getByTestId('primary-comparison').getByRole('button',{name:'Comparar fatos',exact:true}).click();
@@ -51,7 +53,11 @@ const stressResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r
 await page.getByRole('button',{name:'Simular impacto',exact:true}).click();const stress=await (await stressResponse).json();assert.ok(!stress.error);assert.ok(stress.result.scenario_result);await page.getByRole('heading',{name:'Impacto por posição',exact:true}).waitFor();
 await nav('History & Learning');await page.getByLabel('Ativo do histórico',{exact:true}).fill('PETR4');
 const historyResponse=page.waitForResponse(r=>r.url().includes('/history/context?'),{timeout:30000});await page.getByRole('button',{name:'Consultar histórico',exact:true}).click();assert.equal((await historyResponse).status(),200);await page.getByText('Operações pessoais · evidência disponível',{exact:true}).waitFor();
-await nav('Market Intelligence');await page.getByRole('button',{name:'Ativo · gráfico e indicadores',exact:true}).click();
+for(const [label,title] of [['Learnings','Aprendizados · LIMITED'],['Similarity','Similaridade · LIMITED']]){await page.getByRole('tab',{name:label,exact:true}).click();const response=page.waitForResponse(r=>r.url().includes('/history/context?'));await page.getByRole('button',{name:'Consultar histórico',exact:true}).click();const value=await (await response).json();assert.equal(value.learning_sample_size,0);await page.getByText(title,{exact:true}).waitFor();await screenshot(label.toLowerCase()+'-limited-real')}
+await page.getByRole('tab',{name:'Operations',exact:true}).click();
+await nav('Market Intelligence');
+for(const label of ['Regime','Factors','Research & Events']){await page.getByRole('tab',{name:label,exact:true}).click();const response=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().context?.workspace==='Market Intelligence',{timeout:90000});await page.getByRole('button',{name:'Analisar contexto',exact:true}).click();const value=await (await response).json();assert.ok(value.result.workspace_intelligence);assert.equal(value.result.telemetry.llm_calls,0);await page.locator('.context-evidence').waitFor();await screenshot('market-'+label.toLowerCase().replaceAll(/[^a-z]+/g,'-')+'-real')}
+await page.getByRole('button',{name:'Ativo · gráfico e indicadores',exact:true}).click();
 await page.getByLabel('Ativo B3',{exact:true}).fill('PETR4');
 const marketResponse=page.waitForResponse(r=>r.url().endsWith('/analysis/live/PETR4'),{timeout:60000});await page.locator('main').getByRole('button',{name:'Analisar',exact:true}).click();const market=await (await marketResponse).json();assert.ok(market.market.price_history.length>0);
 await page.getByRole('img',{name:/Preço e volume em/}).waitFor({timeout:30000});
@@ -67,6 +73,6 @@ await nav('Strategy Lab');await page.locator('.chat-form textarea').fill('Está 
 assert.equal(consoleErrors.length,0,`Browser errors: ${consoleErrors.join('; ')}`);
 assert.ok(requests.some(r=>r.context?.ticker_price_shocks?.PETR4===-0.1),'Percentage unit conversion incorrect');
 assert.ok(requests.some(r=>r.context?.comparison_assets?.join(',')==='ITUB4,BBDC4'&&r.context.analysis_mode==='deterministic'));
-const report={status:'PASS',real_backend:true,resolutions:[1920,1440,1366],screens:routes,interaction_checks:['route','portfolio coherence','filter continuity','option limited state','buy comparison','opportunity detail','stress','personal history','price ranges','volume','zoom','copilot close/open','copilot health'],page_errors:consoleErrors,raw_payloads_uploaded:false};
+const report={status:'PASS',real_backend:true,resolutions:[1920,1440,1366],screens:routes,interaction_checks:['route','portfolio coherence','filter continuity','option limited state','OPLAB chain with source Greeks','UC06 limited state','UC08 and UC09 real zero sample','macro and stored event queries','buy comparison','opportunity detail','stress','personal history','price ranges','volume','zoom','copilot close/open','copilot health'],page_errors:consoleErrors,raw_payloads_uploaded:false};
 await writeFile(resolve(out,'acceptance.json'),JSON.stringify(report,null,2));
 console.log(JSON.stringify(report));await browser.close();
