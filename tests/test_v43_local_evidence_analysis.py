@@ -339,7 +339,8 @@ def test_default_local_analyst_is_bounded_non_thinking_structured_extraction():
     analyst=LocalEvidenceAnalyst()
     assert analyst.client.think is False
     assert analyst.client.format_schema==LOCAL_ANALYSIS_SCHEMA
-    assert build_request('ITUB4',_events()).prompt_version=='b3_local_evidence_analyst_v5'
+    assert build_request('ITUB4',_events()).prompt_version=='b3_local_evidence_analyst_v6'
+    assert analyst.client.model == 'qwen3:4b-instruct-2507-q4_K_M'
     assert analyst.client.num_ctx == 4096
     assert analyst.client.num_predict == 2048
     assert analyst.client.timeout == 600

@@ -14,7 +14,7 @@ from b3_agent.llm.ollama_client import OllamaClient
 
 
 POLICY_VERSION = "v4.3-local-evidence-1"
-PROMPT_VERSION = "b3_local_evidence_analyst_v5"
+PROMPT_VERSION = "b3_local_evidence_analyst_v6"
 
 LOCAL_ANALYSIS_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -349,6 +349,7 @@ class LocalEvidenceQueue:
 class LocalEvidenceAnalyst:
     def __init__(self, client: OllamaClient | None = None):
         self.client = client or OllamaClient(
+            model=os.getenv("B3_LOCAL_EVIDENCE_MODEL", "qwen3:4b-instruct-2507-q4_K_M"),
             think=False, format_schema=LOCAL_ANALYSIS_SCHEMA,
             num_ctx=int(os.getenv("B3_LOCAL_EVIDENCE_NUM_CTX", "4096")),
             num_predict=int(os.getenv("B3_LOCAL_EVIDENCE_NUM_PREDICT", "2048")),

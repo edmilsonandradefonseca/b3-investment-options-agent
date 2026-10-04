@@ -51,8 +51,8 @@ def main():
         started=monotonic();result=LocalEvidenceAnalystJob(queue=FocusedQueue()).run(limit=1)
         write_private_report(Path.home()/'.local/share/b3-investment-options-agent/live-validation/async-economic/local-worker',result)
         print(json.dumps({'case':'LOCAL_ADMISSION','ready':result['ready'],'degraded':result['degraded'],'failed':result['failed'],'deferred':result['deferred'],'quality_flags':[row['quality_flags'] for row in result['results']]}),flush=True)
-        assert result['ready']==1 and result['failed']==result['degraded']==result['deferred']==0, 'Real DeepSeek target dossier did not pass admission'
-        print(json.dumps({'case':'REAL_DEEPSEEK_TARGET_WORKER','status':'READY','processed':1,'elapsed_ms':round((monotonic()-started)*1000,1)}),flush=True)
+        assert result['ready']==1 and result['failed']==result['degraded']==result['deferred']==0, 'Real local target dossier did not pass admission'
+        print(json.dumps({'case':'REAL_LOCAL_TARGET_WORKER','status':'READY','model':LocalEvidenceAnalystJob().analyst.client.model,'processed':1,'elapsed_ms':round((monotonic()-started)*1000,1)}),flush=True)
     else:
         candidates=[]
         for path in queue.runs_dir.glob('*.json'):
@@ -60,7 +60,7 @@ def main():
             if data.get('status')=='READY' and any('conteudos.xpi.com.br/acoes/relatorios/' in str(r) for r in data.get('evidence_refs',[])):
                 candidates.append(data)
         assert candidates,'No queued target request or admitted target dossier'
-        print(json.dumps({'case':'REAL_DEEPSEEK_TARGET_WORKER','status':'PREVIOUSLY_READY','count':len(candidates)}),flush=True)
+        print(json.dumps({'case':'REAL_LOCAL_TARGET_WORKER','status':'PREVIOUSLY_READY','count':len(candidates)}),flush=True)
     for name in ['b3-nightly-intelligence.timer','b3-local-evidence-analyst.timer']:
         state=subprocess.run(['systemctl','is-active',name],text=True,capture_output=True,timeout=10).stdout.strip()
         print(json.dumps({'case':'ASYNC_TIMER_STATE','unit':name,'state':state}),flush=True)

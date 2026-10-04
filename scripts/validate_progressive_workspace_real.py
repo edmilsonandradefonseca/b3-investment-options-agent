@@ -7,7 +7,7 @@ This is an isolated ASGI instance, not proof that systemd loaded the new code.
 from __future__ import annotations
 
 import argparse
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import os
 from pathlib import Path
@@ -90,7 +90,23 @@ def main() -> int:
                       "history_count": data["market"]["history_count"],
                       "data_points": data["market"]["quant"]["data_points"],
                       "sources": data["source_refs"]}), flush=True)
-    assert len(bars) == data["market"]["history_count"] >= 85
+    # The 120-calendar-day window changes its session count over weekends.
+    # Verify actual persisted coverage and the 60-session indicator minimum.
+    from b3_agent.config import settings
+    from b3_agent.repositories.market_data import MarketDataRepository
+    start = cutoff.date() - timedelta(days=120)
+    expected_dates = {
+        record.observation_timestamp.date()
+        for record in MarketDataRepository(settings.data_dir / 'archive' / 'cotahist_raw').read('PETR4')
+        if start <= record.observation_timestamp.date() <= cutoff.date()
+        and record.observation_timestamp <= cutoff and record.is_available_at(cutoff)
+    }
+    returned_dates = {datetime.fromisoformat(bar['observation_timestamp'].replace('Z', '+00:00')).date() for bar in bars}
+    assert len(bars) == data["market"]["history_count"] >= 60
+    assert len(returned_dates) == len(bars), 'Duplicate chart sessions'
+    assert len(expected_dates) >= 60 and expected_dates <= returned_dates, 'Missing persisted COTAHIST sessions'
+    assert all(start <= day <= cutoff.date() for day in returned_dates), 'Chart outside requested history window'
+    assert (cutoff.date() - max(returned_dates)).days <= 7, 'Stale chart tail'
     for bar in bars:
         for key in ("observation_timestamp", "available_timestamp"):
             assert datetime.fromisoformat(bar[key].replace("Z", "+00:00")) <= cutoff

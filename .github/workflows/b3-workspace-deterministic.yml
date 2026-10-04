@@ -86,7 +86,7 @@ jobs:
             --url https://conteudos.xpi.com.br/acoes/relatorios/itau-unibanco-itub4-ainda-faz-sentido-pagar-por-qualidade/ \
             --url https://conteudos.xpi.com.br/acoes/relatorios/bradesco-bbdc4-recuperacao-gradual-mas-com-ventos-macro-contrarios/
 
-      - name: Validate asynchronous dividends and one real DeepSeek worker
+      - name: Validate asynchronous dividends and one real local worker
         env:
           PYTHONPATH: ${{ github.workspace }}/src
         run: |
@@ -157,7 +157,7 @@ jobs:
           print(json.dumps(result, ensure_ascii=False), flush=True)
           assert data["ticker"] == "PETR4"
           assert str(latest["observation_timestamp"]).startswith("2026-10-02"), "Expected 02/10 candle"
-          assert market["history_count"] >= 85, "History coverage regressed"
+          assert market["history_count"] == len(market["price_history"]) >= 60, "History indicator coverage regressed"
           assert "b3_cotahist" in sources and "oplab" in sources, "Missing required source"
           assert data["options"]["contract_count"] == 0, "History route must not request options"
           print("PETR4_HTTP_ACCEPTANCE=PASS", flush=True)
