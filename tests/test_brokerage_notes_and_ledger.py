@@ -165,6 +165,11 @@ def test_brokerage_upload_endpoint_parses_and_persists_note(monkeypatch, tmp_pat
         "parse",
         lambda self, path: transactions,
     )
+    monkeypatch.setattr(
+        server.BrokerageNoteParser,
+        "parse_stocks",
+        lambda self, path: (),
+    )
 
     response = TestClient(server.app).post(
         "/imports/brokerage-notes",
