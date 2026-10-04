@@ -47,7 +47,7 @@ const scenarioForm=page.locator('form').filter({has:page.getByRole('button',{nam
 const scenarioResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().context?.scenario_horizon==='2026-11-04',{timeout:120000});await scenarioForm.getByRole('button',{name:'Comparar',exact:true}).click();const scenarioComparison=await (await scenarioResponse).json();assert.ok(!scenarioComparison.error);assert.ok(scenarioComparison.result.scenario_analysis.alternatives.length===2);await page.getByRole('img',{name:'P&L canônico por cenário e alternativa',exact:true}).waitFor();await screenshot('strategy-scenarios-real');
 await page.getByText('Premissas e estratégias avançadas: cenários, custos, troca financiada e strikes',{exact:true}).click();
 await nav('Opportunities');
-await page.getByLabel('Universo de ações (até 20)',{exact:true}).fill('ITUB4, BBDC4');await page.getByLabel('Objetivo da comparação',{exact:true}).selectOption('LOWEST_REALIZED_VOLATILITY_60D');
+const opportunityForm=page.locator('form').filter({has:page.getByRole('button',{name:'Comparar / ordenar',exact:true})});await opportunityForm.getByLabel('Universo de ações (até 20)',{exact:true}).fill('ITUB4, BBDC4');await opportunityForm.locator('select').first().selectOption('LOWEST_REALIZED_VOLATILITY_60D');
 const opportunityResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().context?.opportunity_assets?.join(',')==='ITUB4,BBDC4',{timeout:120000});
 await page.getByRole('button',{name:'Comparar / ordenar',exact:true}).click();
 const opportunity=await (await opportunityResponse).json();assert.ok(!opportunity.error);assert.equal(opportunity.result.opportunity_screen.rows.length,2);
