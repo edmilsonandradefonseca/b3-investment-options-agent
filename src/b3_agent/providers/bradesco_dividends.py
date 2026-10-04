@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from hashlib import sha256
 from html.parser import HTMLParser
 from io import BytesIO
+from zoneinfo import ZoneInfo
 import re
 from urllib.request import Request, urlopen
 
@@ -45,7 +46,7 @@ def monthly_records(text, *, ticker, source, observed_at):
     if len(rows) != 12 or {row[0] for row in rows} != set(months):
         raise ValueError('Incomplete or ambiguous monthly declaration schedule')
     records = []
-    today = observed_at.date()
+    today = observed_at.astimezone(ZoneInfo('America/Sao_Paulo')).date()
     for month, record, ex_date, payment in rows:
         dates = [datetime.strptime(v, '%d.%m.%Y').date() for v in (record, ex_date, payment)]
         if not dates[0] < dates[1] <= dates[2]:

@@ -1,0 +1,82 @@
+name: B3 focused backend closure (Ubuntu)
+on:
+  push:
+    branches: [feature/react-functional-v43-integration]
+    paths:
+      - src/b3_agent/providers/bradesco_dividends.py
+      - tests/test_bradesco_dividends.py
+      - scripts/validate_backend_active_http.py
+      - .github/workflows/b3-backend-closure.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: b3-backend-closure
+  cancel-in-progress: false
+jobs:
+  closure:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Require green CI for this revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os, time
+          from urllib.request import Request, urlopen
+          url = f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/actions/runs?head_sha={os.environ['GITHUB_SHA']}&event=pull_request&per_page=20"
+          for attempt in range(72):
+              request = Request(url, headers={"Authorization":"Bearer " + os.environ["GH_TOKEN"],"Accept":"application/vnd.github+json"})
+              with urlopen(request,timeout=15) as response:
+                  runs=json.load(response)["workflow_runs"]
+              ci=[run for run in runs if run["name"]=="CI"]
+              if ci and ci[0]["status"]=="completed":
+                  assert ci[0]["conclusion"]=="success", "CI failed; installation refused"
+                  print("CI_GATE=PASS",flush=True)
+                  break
+              time.sleep(5)
+          else:
+              raise RuntimeError("CI completion not observed; installation refused")
+          PY
+      - name: Verify issuer timezone regression on Ubuntu
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: /opt/b3-investment-options-agent/.venv/bin/python -m pytest tests/test_bradesco_dividends.py tests/test_stored_dividends.py tests/test_dividend_evidence.py
+      - name: Install tested revision and request service restart
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_dir=/opt/b3-investment-options-agent
+          test "$(git -C "$runtime_dir" branch --show-current)" = "feature/react-functional-v43-integration"
+          test -z "$(git -C "$runtime_dir" status --porcelain --untracked-files=no)"
+          git -C "$runtime_dir" fetch origin feature/react-functional-v43-integration
+          git -C "$runtime_dir" merge --ff-only "$GITHUB_SHA"
+          test "$(git -C "$runtime_dir" rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "TESTED_REVISION_INSTALLED=$GITHUB_SHA"
+          if sudo -n systemctl restart b3-runtime.service; then
+            echo "RUNTIME_RESTART=PERFORMED"
+          else
+            echo "RUNTIME_RESTART=BLOCKED_AUTHENTICATION_REQUIRED"
+            echo "Run sudo systemctl restart b3-runtime.service on Ubuntu, then rerun this workflow. Activation is NOT certified."
+            exit 1
+          fi
+          ready=0
+          for attempt in {1..20}; do
+            if curl -fsS --max-time 2 http://127.0.0.1:8000/health >/dev/null; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          test "$ready" -eq 1
+          systemctl is-active b3-runtime.service
+          systemctl show b3-runtime.service --property=MainPID --property=ActiveEnterTimestamp
+      - name: Accept active HTTP dividends, BUY comparison and Opportunities
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_backend_active_http.py

@@ -12,6 +12,19 @@ from b3_agent.dividend_evidence import dividend_payload
 NOW = datetime(2026,10,4,tzinfo=timezone.utc)
 SOURCE = DOCUMENT_PREFIX + 'fixture_aviso_aos_acionistas.pdf'
 
+@pytest.mark.parametrize('ticker', ['BBDC3', 'BBDC4'])
+@pytest.mark.parametrize('hour,minute,declared', [(0,0,False),(1,30,False),(2,59,False),(3,0,True)])
+def test_declaration_uses_sao_paulo_day_at_utc_midnight(ticker,hour,minute,declared):
+    observed = datetime(2026,10,1,hour,minute,tzinfo=timezone.utc)
+    records = monthly_records(notice(),ticker=ticker,source=SOURCE,observed_at=observed)
+    october = records[9]
+    assert len(records) == 12
+    assert october['announcement_date'] == (october['record_date'] if declared else None)
+    assert ('DECLARATION_DATE_FROM_ISSUER_SCHEDULE' if declared else 'SCHEDULED_NOT_YET_DECLARED') in october['quality_flags']
+    assert 'PARTIAL_MONTHLY_JCP_ONLY' in october['quality_flags']
+    assert october['observation_timestamp'] == observed
+    assert october['gross_amount'] == (0.017249826 if ticker == 'BBDC3' else 0.018974809)
+
 def notice():
     amounts = 'Banco Bradesco S.A. R$0,017249826 por ação ordinária e R$0,018974809 por ação preferencial, que, líquidos Data de Declaração '
     months = 'Janeiro Fevereiro Março Abril Maio Junho Julho Agosto Setembro Outubro Novembro Dezembro'.split()
