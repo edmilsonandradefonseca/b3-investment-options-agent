@@ -577,7 +577,7 @@ def option_brokerage_ledger() -> dict[str, Any]:
             "side": item.action,
             "quantity": item.quantity,
             "execution_price": item.price,
-            "cash_flow": item.price * item.quantity * (-1 if item.action == "BUY" else 1),
+            "cash_flow": round(item.price * item.quantity * (-1 if item.action == "BUY" else 1), 2),
             "trade_date": item.executed_at.date().isoformat(),
             "broker": item.broker,
             "note_number": item.source_ref.split(":")[2] if len(item.source_ref.split(":")) > 2 else None,
