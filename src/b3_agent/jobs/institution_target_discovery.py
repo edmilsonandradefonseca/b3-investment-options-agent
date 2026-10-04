@@ -38,7 +38,7 @@ class InstitutionTargetDiscoveryJob:
                 seen.add(url)
                 accepted += 1
                 row = {'ticker': ticker, 'institution': institution, 'source_url': url}
-                if not ((institution == 'XP' and parsed.hostname == 'conteudos.xpi.com.br' and parsed.path.startswith('/acoes/relatorios/')) or (institution == 'SAFRA' and parsed.hostname == 'oespecialista.safra.com.br' and parsed.path.startswith('/analise/')) or (institution == 'ITAU' and parsed.hostname in {'www.itau.com.br', 'itau.com.br', 'hub-conteudo.cloud.itau.com.br'} and parsed.path.startswith('/investimentos/analises/'))):
+                if not ((institution == 'XP' and parsed.hostname == 'conteudos.xpi.com.br' and parsed.path.startswith('/acoes/relatorios/')) or (institution == 'SAFRA' and parsed.hostname == 'oespecialista.safra.com.br' and parsed.path.startswith('/analise/')) or (institution == 'ITAU' and parsed.hostname in {'www.itau.com.br', 'itau.com.br', 'hub-conteudo.cloud.itau.com.br'} and parsed.path.startswith('/investimentos/analises/')) or (institution == 'BTG' and parsed.hostname == 'content.btgpactual.com' and parsed.path.startswith('/research/files/file/pt-BR/') and parsed.path.endswith('.pdf'))):
                     row['status'] = 'CANDIDATE_NOT_ADMITTED_UNSUPPORTED_LAYOUT'
                 else:
                     try:
@@ -60,5 +60,5 @@ class InstitutionTargetDiscoveryJob:
                 rows.append({'ticker': ticker, 'status': 'NO_PRIMARY_CANDIDATES'})
         return {'policy_version': 'primary-target-discovery-v1', 'llm_calls': 0, 'results': rows,
                 'limitations': ['Search snippets never authorize target values or horizons.',
-                                'XP, Safra and Itau explicit single-report parsers; other institutional layouts remain unadmitted.',
+                                'XP, Safra, Itau and BTG explicit report parsers; aggregate pages and other layouts remain unadmitted.',
                                 'Source restrictions and unsupported layouts are not bypassed.']}

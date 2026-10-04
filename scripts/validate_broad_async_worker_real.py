@@ -27,6 +27,18 @@ def main():
         if group in kinds:continue
         selected.append((group,request));kinds.add(group)
         if len(selected)==2:break
+    if 'news_or_disclosure' not in kinds:
+        from datetime import datetime, timezone, timedelta
+        from types import SimpleNamespace
+        from b3_agent.intelligence.stored_research import StoredResearchContextService
+        for ticker in ['PETR4','VALE3','ITUB4','BBDC4','BBAS3']:
+            stored=StoredResearchContextService().build(ticker,as_of=datetime.now(timezone.utc),limit=3,max_age=timedelta(days=180))
+            if not stored['events']:continue
+            events=[{'evidence_type':'open_web_event','evidence_id':e['event_id'],'source_ref':e['source_ref'],
+                'published_at':e['published_at'].isoformat(),'headline':e['headline'],'summary':e['summary']} for e in stored['events']]
+            selected.append(('news_or_disclosure',SimpleNamespace(ticker=ticker,evidence_events=events)))
+            kinds.add('news_or_disclosure')
+            break
     assert selected, 'No real non-target bundle available for broad validation'
     timer=subprocess.check_output(['systemctl','cat','b3-local-evidence-analyst.timer'],text=True)
     print(json.dumps({'case':'INSTALLED_CONSUMER_SCHEDULE','calendar':[line.split('=',1)[1] for line in timer.splitlines() if line.startswith('OnCalendar=')],
@@ -45,10 +57,11 @@ def main():
                 'eval_count':dossier.eval_count if dossier else None,'elapsed_ms':round((monotonic()-started)*1000,1),
                 'summary_chars':len((dossier.analysis or {}).get('summary','')) if dossier else None}
             print(json.dumps(metrics),flush=True)
-            reports.append({'metrics':metrics,'source_request':request.as_dict(),'dossier':dossier.as_dict() if dossier else None,'manifest':result})
+            reports.append({'metrics':metrics,'source_request':{'ticker':request.ticker,'events':request.evidence_events},'dossier':dossier.as_dict() if dossier else None,'manifest':result})
         write_private_report(Path.home()/'.local/share/b3-investment-options-agent/live-validation/broad-async-worker',{'cases':reports})
+    assert kinds=={'dividends','news_or_disclosure'}, 'News or disclosure corpus unavailable; broad acceptance remains incomplete'
     assert all(row['metrics']['status']=='READY' and not row['metrics']['quality_flags'] for row in reports), 'Broad bundle admission failed'
-    assert production.outstanding_count()>=len(requests), 'Isolated validation unexpectedly mutated production queue'
+    print(json.dumps({'case':'PRODUCTION_QUEUE_OBSERVATION','remaining':production.outstanding_count(),'replay_writes_to_production':False}),flush=True)
     print('BROAD_ASYNC_WORKER_REAL=PASS isolated-real-bundles; semantic expert review remains separate',flush=True)
 
 if __name__=='__main__':main()

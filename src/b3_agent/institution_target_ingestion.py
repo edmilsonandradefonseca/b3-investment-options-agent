@@ -143,7 +143,8 @@ def acquire_institution_report(url, *, opener=urlopen):
     if urlparse(url).hostname == 'conteudos.xpi.com.br':
         return acquire_xp_report(url, opener=opener)
     parsed = urlparse(url)
-    supported = (parsed.hostname == 'oespecialista.safra.com.br' and parsed.path.startswith('/analise/')) or (parsed.hostname in {'www.itau.com.br', 'itau.com.br', 'hub-conteudo.cloud.itau.com.br'} and parsed.path.startswith('/investimentos/analises/'))
+    btg = parsed.hostname == 'content.btgpactual.com' and parsed.path.startswith('/research/files/file/pt-BR/') and parsed.path.endswith('.pdf')
+    supported = btg or (parsed.hostname == 'oespecialista.safra.com.br' and parsed.path.startswith('/analise/')) or (parsed.hostname in {'www.itau.com.br', 'itau.com.br', 'hub-conteudo.cloud.itau.com.br'} and parsed.path.startswith('/investimentos/analises/'))
     if parsed.scheme != 'https' or not supported or parsed.username or parsed.password:
         raise ValueError('Unsupported institutional report URL')
     with opener(Request(url, headers={'User-Agent':'B3-Evidence/1.0'}), timeout=15) as response:
@@ -152,6 +153,12 @@ def acquire_institution_report(url, *, opener=urlopen):
         data = response.read(2_000_001)
         if len(data) > 2_000_000:
             raise ValueError('Report too large')
+    if btg:
+        from io import BytesIO
+        from pypdf import PdfReader
+        reader = PdfReader(BytesIO(data))
+        if not 1 <= len(reader.pages) <= 30: raise ValueError('BTG PDF page bound exceeded')
+        return btg_report_evidence(url,reader.pages[0].extract_text() or '',datetime.now(timezone.utc),source_hash=sha256(data).hexdigest())
     parser = safra_report_evidence if parsed.hostname == 'oespecialista.safra.com.br' else itau_report_evidence
     return parser(url, data.decode('utf-8'), datetime.now(timezone.utc))
 
@@ -243,3 +250,48 @@ def itau_report_evidence(url, html, retrieved_at):
     return Evidence(evidence_id=doc, kind=EvidenceKind.MARKET_RESEARCH,
         title=f'Itau institutional target {ticker}', content=content, metadata=metadata,
         source_url=url, content_hash=sha256(content.encode()).hexdigest())
+
+
+def btg_report_evidence(url, first_page, retrieved_at, *, source_hash):
+    from datetime import time, timedelta
+    from zoneinfo import ZoneInfo
+    parsed = urlparse(url)
+    if (parsed.scheme != 'https' or parsed.hostname != 'content.btgpactual.com'
+            or not parsed.path.startswith('/research/files/file/pt-BR/') or not parsed.path.endswith('.pdf')
+            or parsed.username or parsed.password):
+        raise ValueError('Unsupported BTG primary PDF report')
+    text = ' '.join(first_page.split())
+    if 'BTG Pactual Equity Research' not in text[:200]:
+        raise ValueError('Missing BTG report identity')
+    dates = re.findall(r'BTG Pactual Equity Research\s+(\d{2}/\d{2}/\d{4})\b', text[:200])
+    ticker_rows = set(re.findall(r'\bTicker\s+([A-Z]{4}\d{1,2})\b', text))
+    if len(dates) != 1 or len(ticker_rows) != 1:
+        raise ValueError('Ambiguous BTG report date or equity')
+    ticker = ticker_rows.pop()
+    if set(re.findall(r'\b[A-Z]{4}\d{1,2}\b', text)) != {ticker}:
+        raise ValueError('BTG multi-equity report is unsupported')
+    day = datetime.strptime(dates[0], '%d/%m/%Y').date()
+    published = datetime.combine(day,time.max,tzinfo=ZoneInfo('America/Sao_Paulo'))
+    updated = re.findall(r'Atualização\s+Preço\s*[- ]\s*alvo\s+(\d{2}/\d{2}/\d{4})', text, re.I)
+    if len(updated) != 1:
+        raise ValueError('Missing unique BTG target version date')
+    target_day = datetime.strptime(updated[0], '%d/%m/%Y').date()
+    if target_day > day or retrieved_at.date() - target_day > timedelta(days=180):
+        raise ValueError('BTG target version is future or stale')
+    pattern = r'preço\s*[- ]\s*alvo\s+para\s+o\s+fim\s+de\s+(20\d{2})\s+para\s+R\$\s*([0-9]+(?:[.,][0-9]{1,2})?)\s+por\s+ação'
+    pairs = {(float(m.group(2).replace(',', '.')),m.group(1)+'-12-31') for m in re.finditer(pattern,text,re.I)}
+    summary = re.findall(r'Preço\s+Alvo\s*\(R\$\)\s*([0-9]+(?:[.,][0-9]{1,2})?)',text,re.I)
+    if len(pairs) != 1 or len(summary) != 1 or float(summary[0].replace(',', '.')) != next(iter(pairs))[0]:
+        raise ValueError('Missing or conflicting explicit BTG amount and horizon')
+    price,horizon=pairs.pop()
+    doc='BTG:'+sha256((url+day.isoformat()).encode()).hexdigest()
+    target={'institution':'BTG','ticker':ticker,'price_brl':price,'currency':'BRL','horizon_date':horizon}
+    metadata=EvidenceMetadata(document_id=doc,source=url,published_at=published,retrieved_at=retrieved_at,
+        ticker_refs=(ticker,),topic='price_target',source_quality='primary',
+        extra={'price_target':target,'parser_version':'btg-explicit-pdf-v1','source_content_sha256':source_hash,
+               'target_version_date':target_day.isoformat(),'published_at_semantics':'BRAZIL_REPORT_DATE_END_OF_DAY'})
+    if not qualify_targets(ticker,[SimpleNamespace(metadata=asdict(metadata))],retrieved_at)['rows']:
+        raise ValueError('BTG report fails temporal/provenance qualification')
+    content=f'Institution BTG; equity {ticker}; target BRL {price}; horizon {horizon}; report date {day.isoformat()}; target version {target_day.isoformat()}.'
+    return Evidence(evidence_id=doc,kind=EvidenceKind.MARKET_RESEARCH,title=f'BTG institutional target {ticker}',
+        content=content,metadata=metadata,source_url=url,content_hash=sha256(content.encode()).hexdigest())

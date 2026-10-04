@@ -87,3 +87,16 @@ def test_itau_article_uses_exact_metadata_equity_and_explicit_body_horizon():
     for bad in [body.replace('VALE3', 'PETR4'), body.replace('ao fim de 2027', 'no futuro'), body.replace('</p>', ' preço-alvo para R$ 93 ao fim de 2027.</p>')]:
         with pytest.raises(ValueError):
             itau_report_evidence(url, page(bad), cutoff)
+
+
+def test_btg_primary_pdf_layout_checks_version_age_horizon_and_share_class():
+    from b3_agent.institution_target_ingestion import btg_report_evidence
+    from datetime import datetime, timezone
+    url='https://content.btgpactual.com/research/files/file/pt-BR/report.pdf'
+    text='BTG Pactual Equity Research 17/12/2025 preço -alvo para o fim de 2026 para R$7 por ação Ticker MATD3 Preço Alvo (R$) 7,0 Atualização Preço-alvo 16/12/2025'
+    admitted=datetime(2025,12,18,12,tzinfo=timezone.utc)
+    result=btg_report_evidence(url,text,admitted,source_hash='a'*64)
+    assert result.metadata.extra['price_target']['price_brl']==7
+    assert result.metadata.extra['target_version_date']=='2025-12-16'
+    for cutoff,bad in [(datetime(2026,10,4,tzinfo=timezone.utc),text),(admitted,text+' ITUB4'),(admitted,text.replace('Alvo (R$) 7,0','Alvo (R$) 8,0')),(admitted,text.replace('fim de 2026','futuro'))]:
+        with pytest.raises(ValueError):btg_report_evidence(url,bad,cutoff,source_hash='a'*64)
