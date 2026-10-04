@@ -36,8 +36,8 @@ def main():
             enqueue_target(queue, reviewed_evidence(raw, datetime.now(timezone.utc)))
         started = monotonic()
         result = LocalEvidenceAnalystJob(queue=queue).run_until_idle(limit=1, max_batches=3, max_seconds=240)
-        for path in queue.runs_dir.glob('*.json'):
-            write_private_report(Path.home() / '.local/share/b3-investment-options-agent/live-validation/async-reliability', json.loads(path.read_text()))
+        write_private_report(Path.home() / '.local/share/b3-investment-options-agent/live-validation/async-reliability',
+                             {'manifest': result, 'dossiers': [json.loads(path.read_text()) for path in queue.runs_dir.glob('*.json')]})
         print(json.dumps({'case': 'REAL_MULTI_BATCH_QWEN', **{key: result[key] for key in ('batches', 'processed', 'ready', 'degraded', 'failed', 'deferred', 'remaining_queue')},
                           'elapsed_ms': round((monotonic() - started) * 1000, 1)}), flush=True)
         assert result['processed'] == result['ready'] == 2 and result['batches'] == 2
