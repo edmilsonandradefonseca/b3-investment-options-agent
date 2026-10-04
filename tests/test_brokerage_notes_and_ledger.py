@@ -194,7 +194,7 @@ def test_brokerage_upload_persists_stock_rows_in_options_results_ledger(monkeypa
     from b3_agent import server
 
     options = BrokerageNoteParser().parse_text(NOTE_TEXT, source_file="nota.pdf")
-    stock_note = NOTE_TEXT + "1-BOVESPA C VISTA PETR4 PN N2 100 32,05 3.205,00 D\\n"
+    stock_note = NOTE_TEXT + "1-BOVESPA C VISTA PETR4 PN N2 100 32,05 3.205,00 D\n"
     stocks = BrokerageNoteParser().parse_stock_text(stock_note, source_file="nota.pdf")
     monkeypatch.setattr(
         server,
