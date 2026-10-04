@@ -339,8 +339,26 @@ def test_default_local_analyst_is_bounded_non_thinking_structured_extraction():
     analyst=LocalEvidenceAnalyst()
     assert analyst.client.think is False
     assert analyst.client.format_schema==LOCAL_ANALYSIS_SCHEMA
-    assert build_request('ITUB4',_events()).prompt_version=='b3_local_evidence_analyst_v6'
+    assert build_request('ITUB4',_events()).prompt_version=='b3_local_evidence_analyst_v7'
     assert analyst.client.model == 'qwen3:4b-instruct-2507-q4_K_M'
     assert analyst.client.num_ctx == 4096
     assert analyst.client.num_predict == 2048
     assert analyst.client.timeout == 600
+
+
+@pytest.mark.parametrize("field,value", [("summary", "x" * 401), ("risks", ["a", "b", "c"]), ("catalysts", ["x" * 201])])
+def test_verbose_analysis_is_degraded_without_truncating_evidence(field, value):
+    class VerboseClient(FakeClient):
+        def ask(self, prompt):
+            result = super().ask(prompt)
+            payload = json.loads(result.content)
+            payload[field] = value
+            result.content = json.dumps(payload)
+            return result
+
+    request = build_request("PETR4", _events())
+    dossier = LocalEvidenceAnalyst(VerboseClient()).analyze(request)
+    assert dossier.status == LocalAnalysisStatus.DEGRADED
+    assert "OUTPUT_TOO_VERBOSE" in dossier.quality_flags
+    assert dossier.analysis[field] == value
+    assert request.evidence_events[0]["summary"] == "Evento oficial"

@@ -14,19 +14,20 @@ from b3_agent.llm.ollama_client import OllamaClient
 
 
 POLICY_VERSION = "v4.3-local-evidence-1"
-PROMPT_VERSION = "b3_local_evidence_analyst_v6"
+PROMPT_VERSION = "b3_local_evidence_analyst_v7"
 
 LOCAL_ANALYSIS_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
-        "summary": {"type": "string"},
-        "risks": {"type": "array", "items": {"type": "string"}},
-        "catalysts": {"type": "array", "items": {"type": "string"}},
-        "contradictions": {"type": "array", "items": {"type": "string"}},
+        "summary": {"type": "string", "maxLength": 400},
+        "risks": {"type": "array", "maxItems": 2, "items": {"type": "string", "maxLength": 200}},
+        "catalysts": {"type": "array", "maxItems": 2, "items": {"type": "string", "maxLength": 200}},
+        "contradictions": {"type": "array", "maxItems": 2, "items": {"type": "string", "maxLength": 200}},
         "questions_for_senior_review": {
             "type": "array",
-            "items": {"type": "string"},
+            "maxItems": 2,
+            "items": {"type": "string", "maxLength": 200},
         },
         "escalation_recommended": {"type": "boolean"},
         "evidence_refs": {"type": "array", "items": {"type": "string"}},
@@ -438,6 +439,15 @@ class LocalEvidenceAnalyst:
             ):
                 quality_flags.append("INVALID_SCHEMA")
 
+            if isinstance(analysis.get("summary"), str) and len(analysis["summary"]) > 400:
+                quality_flags.append("OUTPUT_TOO_VERBOSE")
+            for key in ("risks", "catalysts", "contradictions", "questions_for_senior_review"):
+                values = analysis.get(key)
+                if isinstance(values, list) and (
+                    len(values) > 2 or any(isinstance(item, str) and len(item) > 200 for item in values)
+                ):
+                    quality_flags.append("OUTPUT_TOO_VERBOSE")
+
             refs = analysis.get("evidence_refs")
             if not isinstance(refs, list):
                 quality_flags.append("UNKNOWN_EVIDENCE_REF")
@@ -534,7 +544,10 @@ def _analysis_prompt(request: LocalEvidenceAnalysisRequest) -> str:
         "share classes, returns, probabilities, causal claims or facts. "
         "Do not make an investment recommendation. If evidence does not support "
         "a conclusion, state that limitation. Return ONLY one compact JSON object "
-        "matching the runtime-enforced JSON schema."
+        "matching the runtime-enforced JSON schema. Summary: at most 400 characters. "
+        "Each analytical list: at most two items, each at most 200 characters. "
+        "Use empty lists when unsupported. Select only material issues; flag escalation "
+        "when the bundle requires a fuller senior review."
         f"\nTicker: {request.ticker}"
         "\nAllowed evidence refs: "
         + json.dumps(list(request.source_refs), ensure_ascii=False)
