@@ -78,7 +78,7 @@ const indicatorHelpText=await indicatorHelp.innerText();
 for(const term of ['RSI (14)','SMA (20), SMA (50) e SMA (200)','MACD','Volatilidade anualizada','Drawdown máximo na amostra','Indisponível'])assert.ok(indicatorHelpText.includes(term),`Indicator help missing ${term}`);
 await page.getByRole('button',{name:'Ocultar explicação',exact:true}).click();
 await indicatorHelp.waitFor({state:'hidden'});
-await page.getByRole('heading',{name:'Notícias e eventos verificados · PETR4',exact:true}).waitFor();
+await page.getByRole('heading',{name:'Notícias e eventos verificados',exact:true}).waitFor();
 const assetTask=[...requests].reverse().find(r=>r.context?.workspace==='Market Intelligence'&&r.context?.selected_ticker==='PETR4');
 assert.ok(assetTask?.task.includes('toda a carteira carregada'),'Asset analysis must ask the orchestrator to consider portfolio context');
 
