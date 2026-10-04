@@ -30,7 +30,11 @@ for(const p of portfolio.positions.filter(p=>p.instrument_type==='STOCK').slice(
 await page.getByLabel('Buscar posição',{exact:true}).fill('PETR');
 await nav('Options');await nav('Portfolio');assert.equal(await page.getByLabel('Buscar posição',{exact:true}).inputValue(),'PETR','Filter continuity lost');
 await page.getByLabel('Buscar posição',{exact:true}).fill('');
-await nav('Options');await page.getByRole('tab',{name:'Resultados',exact:true}).click();await page.getByText('Resultado mensal e acumulado · LIMITED',{exact:true}).waitFor();
+await nav('Options');await page.getByRole('tab',{name:'Resultados',exact:true}).click();await page.getByRole('heading',{name:'Resultado por ativo e mês',exact:true}).waitFor();
+await page.getByLabel('Filtrar resultado por ativo',{exact:true}).waitFor();
+await page.getByLabel('Filtrar resultado por tipo',{exact:true}).selectOption('STOCK');
+await page.getByLabel('Filtrar resultado por mês',{exact:true}).waitFor();
+await screenshot('options-monthly-results-real');
 await page.getByRole('tab',{name:'Execuções',exact:true}).click();await page.getByRole('tab',{name:'Posições',exact:true}).click();
 await page.getByRole('tab',{name:'Cadeia de opções',exact:true}).click();await page.getByLabel('Ativo da cadeia',{exact:true}).fill('PETR4');
 const chainResponse=page.waitForResponse(r=>r.url().includes('/options/current/PETR4'),{timeout:90000});await page.getByRole('button',{name:'Consultar cadeia',exact:true}).click();const chain=await (await chainResponse).json();assert.ok(chain.options.length>0,'Real OPLAB chain missing');await page.getByRole('button',{name:chain.options[0].contract.option_id,exact:true}).waitFor();await screenshot('oplab-chain-real');await page.getByRole('tab',{name:'Posições',exact:true}).click();
