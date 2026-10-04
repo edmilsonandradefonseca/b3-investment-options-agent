@@ -53,6 +53,8 @@ def stock_purchase_payload(alternatives, packs, cutoff, dividend_evidence=None, 
                 ("volatility_60d", "max_drawdown", "average_dollar_volume_20d")},
             "history_start": pack.market.get("history_start"),
             "history_end": pack.market.get("history_end"),
+            "historical_returns": pack.market.get("historical_returns", {}),
+            "history_count": pack.market.get("history_count"),
             "portfolio": pack.portfolio, "source_refs": list(pack.source_refs),
             "evidence_refs": list(alternative.evidence_refs),
             "expected_return": None, "positive_return_probability": None,
@@ -74,11 +76,27 @@ def stock_purchase_payload(alternatives, packs, cutoff, dividend_evidence=None, 
             and left.get("period_type") == right.get("period_type"))
         comparisons.append({"metric": name, "status": "COMPARABLE" if comparable else "NONCOMPARABLE_OR_MISSING",
             "right_minus_left": right["value"] - left["value"] if comparable else None})
+    historical_comparisons = []
+    for period in ("1W", "1M", "3M", "6M", "1Y"):
+        left = rows[0]["historical_returns"].get(period, {})
+        right = rows[1]["historical_returns"].get(period, {})
+        same_dates = bool(
+            left.get("status") == right.get("status") == "AVAILABLE"
+            and str(left.get("start_at"))[:10] == str(right.get("start_at"))[:10]
+            and str(left.get("end_at"))[:10] == str(right.get("end_at"))[:10]
+        )
+        historical_comparisons.append({
+            "period": period,
+            "status": "COMPARABLE" if same_dates else "INSUFFICIENT_OR_DIFFERENT_DATES",
+            "right_minus_left_return_fraction": (
+                right["return_fraction"] - left["return_fraction"] if same_dates else None
+            ),
+        })
     same_window = bool(rows[0]["history_start"] and rows[0]["history_end"]
         and rows[0]["history_start"] == rows[1]["history_start"]
         and rows[0]["history_end"] == rows[1]["history_end"])
     return {"policy_version": "stock-buy-evidence-v1", "rows": rows,
-        "fundamental_comparisons": comparisons, "observed_risk_same_window": same_window,
+        "fundamental_comparisons": comparisons, "historical_comparisons": historical_comparisons, "observed_risk_same_window": same_window,
         "ranking": "UNKNOWN_NO_QUALIFIED_RETURN_OR_DIVIDEND_FORECAST",
         "limitations": [
             "Observed fundamentals are not future dividends, verified price targets or expected return.",
