@@ -188,6 +188,44 @@ def test_brokerage_upload_endpoint_parses_and_persists_note(monkeypatch, tmp_pat
 
 
 
+
+def test_brokerage_upload_persists_stock_rows_in_options_results_ledger(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+    from b3_agent import server
+
+    options = BrokerageNoteParser().parse_text(NOTE_TEXT, source_file="nota.pdf")
+    stock_note = NOTE_TEXT + "1-BOVESPA C VISTA PETR4 PN N2 100 32,05 3.205,00 D\\n"
+    stocks = BrokerageNoteParser().parse_stock_text(stock_note, source_file="nota.pdf")
+    monkeypatch.setattr(
+        server,
+        "settings",
+        type("TestSettings", (), {"data_dir": tmp_path})(),
+    )
+    monkeypatch.setattr(server.BrokerageNoteParser, "parse", lambda self, path: options)
+    monkeypatch.setattr(server.BrokerageNoteParser, "parse_stocks", lambda self, path: stocks)
+
+    client = TestClient(server.app)
+    response = client.post(
+        "/imports/brokerage-notes",
+        files={"file": ("nota.pdf", b"%PDF-1.4 fake", "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["parsed_count"] == 4
+    assert response.json()["inserted_count"] == 4
+    ledger = client.get("/options/ledger")
+    assert ledger.status_code == 200
+    stock_row = next(
+        row for row in ledger.json()["operations"]
+        if row["instrument_type"] == "STOCK"
+    )
+    assert stock_row["option_ticker"] == "PETR4"
+    assert stock_row["side"] == "BUY"
+    assert stock_row["quantity"] == 100
+    assert stock_row["execution_price"] == 32.05
+    assert stock_row["cash_flow"] == -3205.0
+
+
 def test_brokerage_batch_endpoint_processes_zip(monkeypatch, tmp_path):
     from io import BytesIO
     import zipfile
