@@ -1241,14 +1241,12 @@ class LiveStrategyComparisonService:
             "as_of": effective_as_of,
             "quality_status": comparison.quality_status,
             "summary": (
-                f"Comparação determinística construída para "
-                f"{alternatives[0].label} versus {alternatives[1].label} "
-                "com cotações atuais OPLAB separadas do histórico, indicadores "
-                "quantitativos, fundamentos disponíveis e contexto de carteira."
+                f"Leitura rápida: comparação de {alternatives[0].label} com {alternatives[1].label}. "
+                "O resultado reúne preços e desempenho histórico, fundamentos disponíveis e posições na carteira. "
                 + (
-                    " Política condicional aplicada aos cenários informados."
+                    "Os cenários informados foram comparados como hipóteses, não como previsão."
                     if scenario_analysis["ranking"] == "CONDITIONAL_RANKING"
-                    else " Ranking não aplicado."
+                    else "Não há vencedor econômico: os dados não permitem estimar qual ação terá maior retorno futuro."
                 )
             ),
             "strategy_comparison": asdict(comparison),
