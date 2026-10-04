@@ -107,7 +107,7 @@ export type CapitalProfile = {
 };
 
 export type BrokerageOperation = {
-  transaction_id: string; option_ticker: string; side: "BUY" | "SELL";
+  transaction_id: string; instrument_type?: "STOCK" | "OPTION"; option_ticker: string; side: "BUY" | "SELL";
   quantity: number; execution_price: number | null; cash_flow: number | null;
   trade_date: string | null; broker: string; note_number: string | null; source_ref: string;
 };
