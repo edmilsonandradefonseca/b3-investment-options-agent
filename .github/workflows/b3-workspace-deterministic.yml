@@ -90,7 +90,7 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/src
         run: |
-          timeout 360s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_async_economic_real.py
+          timeout 660s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_async_economic_real.py
 
       - name: Validate candidate app against real Ubuntu data
         env:

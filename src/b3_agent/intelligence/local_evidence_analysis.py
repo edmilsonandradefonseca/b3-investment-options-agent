@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -13,7 +14,7 @@ from b3_agent.llm.ollama_client import OllamaClient
 
 
 POLICY_VERSION = "v4.3-local-evidence-1"
-PROMPT_VERSION = "b3_local_evidence_analyst_v4"
+PROMPT_VERSION = "b3_local_evidence_analyst_v5"
 
 LOCAL_ANALYSIS_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -347,7 +348,12 @@ class LocalEvidenceQueue:
 
 class LocalEvidenceAnalyst:
     def __init__(self, client: OllamaClient | None = None):
-        self.client = client or OllamaClient(think=False,format_schema=LOCAL_ANALYSIS_SCHEMA)
+        self.client = client or OllamaClient(
+            think=False, format_schema=LOCAL_ANALYSIS_SCHEMA,
+            num_ctx=int(os.getenv("B3_LOCAL_EVIDENCE_NUM_CTX", "4096")),
+            num_predict=int(os.getenv("B3_LOCAL_EVIDENCE_NUM_PREDICT", "2048")),
+            timeout=float(os.getenv("B3_LOCAL_EVIDENCE_TIMEOUT_SECONDS", "600")),
+        )
 
     def analyze(self, request: LocalEvidenceAnalysisRequest) -> LocalEvidenceDossier:
         prompt = _analysis_prompt(request)
