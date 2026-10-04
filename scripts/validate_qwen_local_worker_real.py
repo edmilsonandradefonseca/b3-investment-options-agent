@@ -28,6 +28,8 @@ def main():
     with TemporaryDirectory(prefix="b3-qwen-admission-") as directory:
         queue = LocalEvidenceQueue(Path(directory))
         for raw in manifest["evidence"]:
+            if raw["metadata"]["extra"]["price_target"]["institution"] != "XP":
+                continue
             enqueue_target(queue, reviewed_evidence(raw, datetime.now(timezone.utc)))
         for request in queue.pending():
             started = monotonic()

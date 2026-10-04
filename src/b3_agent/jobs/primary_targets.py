@@ -7,7 +7,7 @@ from datetime import datetime,timezone
 import json
 from pathlib import Path
 from urllib.error import HTTPError
-from b3_agent.institution_target_ingestion import acquire_xp_report,reviewed_evidence
+from b3_agent.institution_target_ingestion import acquire_institution_report,reviewed_evidence
 from b3_agent.intelligence.local_evidence_analysis import LocalEvidenceQueue
 from b3_agent.config import settings
 
@@ -39,7 +39,7 @@ def enqueue_target(queue,item):
 
 
 class PrimaryTargetRefreshJob:
-    def __init__(self,*,acquire=acquire_xp_report,project=project_targets,queue=None):
+    def __init__(self,*,acquire=acquire_institution_report,project=project_targets,queue=None):
         self.acquire=acquire;self.project=project
         self.queue=queue or LocalEvidenceQueue(settings.data_dir/'derived'/'local_evidence_analyst')
 
@@ -65,5 +65,5 @@ class PrimaryTargetRefreshJob:
             except Exception as exc:
                 results.append({'ticker':ticker,'status':'UNAVAILABLE','error_type':type(exc).__name__})
         return {'policy_version':'primary-target-background-v1','llm_calls':0,'results':results,
-            'limitations':['Refresh covers reviewed URLs only; new report discovery and other institution adapters are not yet active.',
-                'DeepSeek consumes the existing queue separately and does not authorize numeric financial facts.']}
+            'limitations':['Refresh covers reviewed URLs only; new report discovery uses a separate bounded job with XP, Safra and Itau parsers.',
+                'The configured local model consumes the existing queue separately and does not authorize numeric financial facts.']}

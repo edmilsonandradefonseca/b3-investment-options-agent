@@ -35,12 +35,12 @@ def main():
         for raw in manifest['evidence']:
             enqueue_target(queue, reviewed_evidence(raw, datetime.now(timezone.utc)))
         started = monotonic()
-        result = LocalEvidenceAnalystJob(queue=queue).run_until_idle(limit=1, max_batches=3, max_seconds=240)
+        result = LocalEvidenceAnalystJob(queue=queue).run_until_idle(limit=1, max_batches=5, max_seconds=360)
         write_private_report(Path.home() / '.local/share/b3-investment-options-agent/live-validation/async-reliability',
                              {'manifest': result, 'dossiers': [json.loads(path.read_text()) for path in queue.runs_dir.glob('*.json')]})
         print(json.dumps({'case': 'REAL_MULTI_BATCH_QWEN', **{key: result[key] for key in ('batches', 'processed', 'ready', 'degraded', 'failed', 'deferred', 'remaining_queue')},
                           'elapsed_ms': round((monotonic() - started) * 1000, 1)}), flush=True)
-        assert result['processed'] == result['ready'] == 2 and result['batches'] == 2
+        assert result['processed'] == result['ready'] == len(manifest['evidence']) and result['batches'] == len(manifest['evidence'])
         assert result['remaining_queue'] == result['degraded'] == result['failed'] == result['deferred'] == 0
     print('ASYNC_RELIABILITY_REAL=PASS isolated-queue; source coverage states remain explicit', flush=True)
 

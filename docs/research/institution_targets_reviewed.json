@@ -109,6 +109,114 @@
       },
       "source_url": "https://conteudos.xpi.com.br/acoes/relatorios/bradesco-bbdc4-recuperacao-gradual-mas-com-ventos-macro-contrarios/",
       "content_hash": "926dbebd54ca2d1cd6c6dff145cf8ea3ae4deeaa2eb10a0d642b140a7d82ea27"
+    },
+    {
+      "evidence_id": "SAFRA:b4ecacbf2aee13b7e5b229821d3342cf882aeaafe729f08f6aef2b14393afb33",
+      "kind": "market_research",
+      "title": "Safra institutional target LIGT3",
+      "content": "Institution SAFRA; equity LIGT3; target BRL 4.2; horizon 2026-12-31; report version 2026-09-18T13:32:18+00:00.",
+      "metadata": {
+        "document_id": "SAFRA:b4ecacbf2aee13b7e5b229821d3342cf882aeaafe729f08f6aef2b14393afb33",
+        "source": "https://oespecialista.safra.com.br/analise/light-inicia-cobertura-preco-alvo-2026/",
+        "published_at": "2026-09-18T13:32:18+00:00",
+        "retrieved_at": "2026-10-04T01:49:16.297656+00:00",
+        "ticker_refs": [
+          "LIGT3"
+        ],
+        "sector_refs": [],
+        "event_refs": [],
+        "issuer_ref": null,
+        "cvm_code": null,
+        "provider_record_id": null,
+        "source_class": null,
+        "authority_tier": null,
+        "discovery_channel": null,
+        "transport_reliability": null,
+        "reference_at": null,
+        "first_seen_at": null,
+        "observed_at": null,
+        "source_status": null,
+        "acquisition_status": null,
+        "pit_status": null,
+        "materiality": null,
+        "materiality_reason": null,
+        "materiality_policy_version": null,
+        "topic": "price_target",
+        "source_quality": "primary",
+        "confidence": 1.0,
+        "valid_from": null,
+        "valid_to": null,
+        "retention_class": "market_evidence",
+        "decay_profile": "fast",
+        "extra": {
+          "price_target": {
+            "institution": "SAFRA",
+            "ticker": "LIGT3",
+            "price_brl": 4.2,
+            "currency": "BRL",
+            "horizon_date": "2026-12-31"
+          },
+          "parser_version": "safra-explicit-report-v1",
+          "source_content_sha256": "d958de72bedc02719fd6b64f6637659ae618507579a317ab938ac6b2a2d1ffcb",
+          "published_at_semantics": "EXPLICIT_REPORT_VERSION_MODIFIED_AT"
+        }
+      },
+      "source_url": "https://oespecialista.safra.com.br/analise/light-inicia-cobertura-preco-alvo-2026/",
+      "content_hash": "c4a3a62340d7e0544e2bd8160ee4ab0c6ba372f9357988f6b898507dbf8df5e0"
+    },
+    {
+      "evidence_id": "ITAU:d64f4318588cb299eb5e1044029a2d078a30c6b9617ed354a794ca3739895983",
+      "kind": "market_research",
+      "title": "Itau institutional target VALE3",
+      "content": "Institution ITAU; equity VALE3; target BRL 94.0; horizon 2027-12-31; report version 2026-08-18T11:31:00+00:00.",
+      "metadata": {
+        "document_id": "ITAU:d64f4318588cb299eb5e1044029a2d078a30c6b9617ed354a794ca3739895983",
+        "source": "https://www.itau.com.br/investimentos/analises/vale-vale3-recomendacao-preco-alvo-180826/",
+        "published_at": "2026-08-18T11:31:00+00:00",
+        "retrieved_at": "2026-10-04T01:49:16.303417+00:00",
+        "ticker_refs": [
+          "VALE3"
+        ],
+        "sector_refs": [],
+        "event_refs": [],
+        "issuer_ref": null,
+        "cvm_code": null,
+        "provider_record_id": null,
+        "source_class": null,
+        "authority_tier": null,
+        "discovery_channel": null,
+        "transport_reliability": null,
+        "reference_at": null,
+        "first_seen_at": null,
+        "observed_at": null,
+        "source_status": null,
+        "acquisition_status": null,
+        "pit_status": null,
+        "materiality": null,
+        "materiality_reason": null,
+        "materiality_policy_version": null,
+        "topic": "price_target",
+        "source_quality": "primary",
+        "confidence": 1.0,
+        "valid_from": null,
+        "valid_to": null,
+        "retention_class": "market_evidence",
+        "decay_profile": "fast",
+        "extra": {
+          "price_target": {
+            "institution": "ITAU",
+            "ticker": "VALE3",
+            "price_brl": 94.0,
+            "currency": "BRL",
+            "horizon_date": "2027-12-31"
+          },
+          "parser_version": "itau-explicit-report-v1",
+          "source_content_sha256": "a7c364dadf76309101a1aeb16de571d916697fae596df352d73abce7280d5722",
+          "published_at_semantics": "EXPLICIT_REPORT_VERSION_MODIFIED_AT"
+        }
+      },
+      "source_url": "https://www.itau.com.br/investimentos/analises/vale-vale3-recomendacao-preco-alvo-180826/",
+      "content_hash": "be3eb89cf4ac8455035c19b245637e6618f320a8c11af09a7c0e713dfeec5b9a"
     }
   ]
 }

@@ -6,7 +6,7 @@ import os
 from datetime import datetime,timezone
 from pathlib import Path
 from urllib.error import HTTPError
-from b3_agent.institution_target_ingestion import acquire_xp_report, reviewed_evidence
+from b3_agent.institution_target_ingestion import acquire_institution_report, reviewed_evidence
 
 
 def main():
@@ -23,7 +23,7 @@ def main():
         if fallback.get('schema_version')!='reviewed-primary-target-evidence-v1': raise ValueError('Unsupported reviewed manifest')
     for url in args.url:
         try:
-            evidence.append(acquire_xp_report(url));statuses.append('LIVE_PRIMARY_READ')
+            evidence.append(acquire_institution_report(url));statuses.append('LIVE_PRIMARY_READ')
         except HTTPError as exc:
             if exc.code!=403 or fallback is None: raise
             matches=[r for r in fallback['evidence'] if r['source_url']==url]

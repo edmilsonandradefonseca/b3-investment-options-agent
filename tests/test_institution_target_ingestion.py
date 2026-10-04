@@ -55,3 +55,35 @@ def test_background_refresh_uses_existing_local_queue_without_calling_model(tmp_
     assert first['results'][0]['queue_status']=='ENQUEUED'
     assert second['results'][0]['queue_status']=='ALREADY_QUEUED'
     assert len(queue.pending())==1 and projected[0].metadata.retrieved_at==NOW
+
+
+def test_safra_explicit_report_rejects_conflicts_and_cross_equity():
+    from b3_agent.institution_target_ingestion import safra_report_evidence
+    from datetime import datetime, timezone
+    url = 'https://oespecialista.safra.com.br/analise/light-inicia-cobertura-preco-alvo-2026/'
+    html = '<meta property="article:modified_time" content="2026-09-18T13:32:18+00:00"><div class="page-content"><p>Light (LIGT3). O preço-alvo para o final de 2026 é de R$ 4,20 por ação.</p></div>'
+    cutoff = datetime(2026, 10, 4, tzinfo=timezone.utc)
+    result = safra_report_evidence(url, html, cutoff)
+    assert result.metadata.extra['price_target']['price_brl'] == 4.2
+    assert result.metadata.extra['price_target']['horizon_date'] == '2026-12-31'
+    for bad in [html.replace('4,20', '4,20 e ITUB4'), html.replace('</p>', ' preço-alvo de R$ 5,00 por ação no final de 2026.</p>'), html.replace('final de 2026', 'próximo ano')]:
+        with pytest.raises(ValueError):
+            safra_report_evidence(url, bad, cutoff)
+
+
+def test_itau_article_uses_exact_metadata_equity_and_explicit_body_horizon():
+    import json
+    from datetime import datetime, timezone
+    from b3_agent.institution_target_ingestion import itau_report_evidence
+    url = 'https://www.itau.com.br/investimentos/analises/vale-vale3-recomendacao-preco-alvo-180826/'
+    metadata = {'@type':'NewsArticle', 'dateModified':'2026-08-18T11:31:00Z', 'mentions':[{'@id':'https://itau.com.br/investimentos/#corp-VALE3'}]}
+    body = '<p>Reduzimos o preço-alvo para R$ 94 ao fim de 2027, de R$ 95 anteriormente. Ticker: VALE3.</p>'
+    def page(text):
+        return '<script type="application/ld+json">' + json.dumps(metadata) + '</script><script>self.__next_f.push(' + json.dumps([1,text]) + ')</script>'
+    cutoff = datetime(2026, 10, 4, tzinfo=timezone.utc)
+    item = itau_report_evidence(url, page(body), cutoff)
+    assert item.metadata.extra['price_target']['price_brl'] == 94
+    assert item.metadata.extra['price_target']['horizon_date'] == '2027-12-31'
+    for bad in [body.replace('VALE3', 'PETR4'), body.replace('ao fim de 2027', 'no futuro'), body.replace('</p>', ' preço-alvo para R$ 93 ao fim de 2027.</p>')]:
+        with pytest.raises(ValueError):
+            itau_report_evidence(url, page(bad), cutoff)

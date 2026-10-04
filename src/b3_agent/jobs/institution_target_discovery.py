@@ -2,7 +2,7 @@
 from urllib.parse import urlparse
 
 from b3_agent.jobs.primary_targets import project_targets, enqueue_target
-from b3_agent.institution_target_ingestion import acquire_xp_report
+from b3_agent.institution_target_ingestion import acquire_institution_report
 from b3_agent.price_target_evidence import HOSTS
 from b3_agent.providers.searxng_news import SearxngNewsAdapter
 from b3_agent.intelligence.local_evidence_analysis import LocalEvidenceQueue
@@ -10,7 +10,7 @@ from b3_agent.config import settings
 
 
 class InstitutionTargetDiscoveryJob:
-    def __init__(self, *, search=None, acquire=acquire_xp_report, project=project_targets, queue=None):
+    def __init__(self, *, search=None, acquire=acquire_institution_report, project=project_targets, queue=None):
         self.search = search or SearxngNewsAdapter(timeout=8)
         self.acquire = acquire
         self.project = project
@@ -38,7 +38,7 @@ class InstitutionTargetDiscoveryJob:
                 seen.add(url)
                 accepted += 1
                 row = {'ticker': ticker, 'institution': institution, 'source_url': url}
-                if institution != 'XP' or parsed.hostname != 'conteudos.xpi.com.br' or not parsed.path.startswith('/acoes/relatorios/'):
+                if not ((institution == 'XP' and parsed.hostname == 'conteudos.xpi.com.br' and parsed.path.startswith('/acoes/relatorios/')) or (institution == 'SAFRA' and parsed.hostname == 'oespecialista.safra.com.br' and parsed.path.startswith('/analise/')) or (institution == 'ITAU' and parsed.hostname in {'www.itau.com.br', 'itau.com.br', 'hub-conteudo.cloud.itau.com.br'} and parsed.path.startswith('/investimentos/analises/'))):
                     row['status'] = 'CANDIDATE_NOT_ADMITTED_UNSUPPORTED_LAYOUT'
                 else:
                     try:
@@ -60,5 +60,5 @@ class InstitutionTargetDiscoveryJob:
                 rows.append({'ticker': ticker, 'status': 'NO_PRIMARY_CANDIDATES'})
         return {'policy_version': 'primary-target-discovery-v1', 'llm_calls': 0, 'results': rows,
                 'limitations': ['Search snippets never authorize target values or horizons.',
-                                'XP explicit single-report parser only; other institutional layouts remain unadmitted.',
+                                'XP, Safra and Itau explicit single-report parsers; other institutional layouts remain unadmitted.',
                                 'Source restrictions and unsupported layouts are not bypassed.']}

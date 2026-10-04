@@ -88,7 +88,9 @@ jobs:
         run: |
           timeout 120s /opt/b3-investment-options-agent/.venv/bin/python scripts/ingest_institution_targets.py --apply --reviewed-fallback docs/research/institution_targets_reviewed.json \
             --url https://conteudos.xpi.com.br/acoes/relatorios/itau-unibanco-itub4-ainda-faz-sentido-pagar-por-qualidade/ \
-            --url https://conteudos.xpi.com.br/acoes/relatorios/bradesco-bbdc4-recuperacao-gradual-mas-com-ventos-macro-contrarios/
+            --url https://conteudos.xpi.com.br/acoes/relatorios/bradesco-bbdc4-recuperacao-gradual-mas-com-ventos-macro-contrarios/ \
+            --url https://oespecialista.safra.com.br/analise/light-inicia-cobertura-preco-alvo-2026/ \
+            --url https://www.itau.com.br/investimentos/analises/vale-vale3-recomendacao-preco-alvo-180826/
 
       - name: Validate asynchronous dividends and one real local worker
         env:
