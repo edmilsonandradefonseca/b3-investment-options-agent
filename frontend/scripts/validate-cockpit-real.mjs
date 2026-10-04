@@ -56,6 +56,13 @@ await page.getByRole('heading',{name:'Market Intelligence',exact:true}).waitFor(
 await page.getByRole('button',{name:'Ativo · gráfico e indicadores',exact:true}).waitFor();
 await page.getByRole('img',{name:/Preço e volume em/}).waitFor({timeout:30000});
 await screenshot('opportunities-petr4-asset-analysis');
+await page.getByRole('heading',{name:'Leitura técnica',exact:true}).waitFor();
+const technicalRead=page.locator('.analysis-summary').filter({has:page.getByRole('heading',{name:'Leitura técnica',exact:true})});
+assert.ok((await technicalRead.innerText()).includes('Força relativa'));
+await page.getByRole('heading',{name:'Notícias e eventos verificados · PETR4',exact:true}).waitFor();
+const assetTask=[...requests].reverse().find(r=>r.context?.workspace==='Market Intelligence'&&r.context?.selected_ticker==='PETR4');
+assert.ok(assetTask?.task.includes('toda a carteira carregada'),'Asset analysis must ask the orchestrator to consider portfolio context');
+
 await nav('Opportunities');
 const opportunityForm=page.locator('form').filter({has:page.getByRole('button',{name:'Comparar / ordenar',exact:true})});await opportunityForm.getByLabel('Universo de ações (até 20)',{exact:true}).fill('ITUB4, BBDC4');await opportunityForm.locator('select').first().selectOption('LOWEST_REALIZED_VOLATILITY_60D');
 const opportunityResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().context?.opportunity_assets?.join(',')==='ITUB4,BBDC4',{timeout:120000});
