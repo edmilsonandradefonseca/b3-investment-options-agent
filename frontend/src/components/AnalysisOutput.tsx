@@ -277,7 +277,7 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
       </div>}
 
       {localIntelligence && <details>
-        <summary>DeepSeek local · inteligência B3 por ativo</summary>
+        <summary>Enriquecimento assíncrono · inteligência B3 por ativo</summary>
         {Object.entries(localIntelligence).map(([ticker, value]) => {
           const item = asObject(value);
           const analysis = asObject(item?.analysis);

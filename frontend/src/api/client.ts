@@ -103,7 +103,7 @@ async function upload<T>(path: string, file: File): Promise<T> {
 }
 
 export const b3Api = {
-  personalHistory: (ticker: string) => requestJson<Record<string, unknown>>(`/history/context?ticker=${encodeURIComponent(ticker.trim().toUpperCase())}`),
+  personalHistory: (ticker: string, since = "") => requestJson<Record<string, unknown>>(`/history/context?${new URLSearchParams({...(ticker.trim()?{ticker:ticker.trim().toUpperCase()}:{}),...(since?{since}:{})})}`),
   health: () => requestJson<HealthResponse>("/health"),
   portfolio: () => requestJson<PortfolioSnapshot>("/portfolio/current"),
   optionLedger: () => requestJson<BrokerageLedger>("/options/ledger"),

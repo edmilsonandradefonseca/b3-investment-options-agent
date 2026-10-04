@@ -93,7 +93,7 @@ export type PortfolioPosition = {
 };
 export type PortfolioSnapshot = {
   status: string; as_of: string | null; updated_at: string | null;
-  source_refs?: string[]; positions: PortfolioPosition[];
+  source_refs?: string[]; positions: PortfolioPosition[]; intelligence?: Record<string, unknown>;
   received_income?: {
     period_start: string; period_end: string; coverage: string; source_ref: string;
     duplicate_rows_omitted: number;

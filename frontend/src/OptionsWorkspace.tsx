@@ -1,58 +1,17 @@
-import { useMemo, useState } from 'react';
-import type { BrokerageOperation, PortfolioPosition } from './api/contracts';
-
-const money = (value: number | null | undefined) => value == null ? 'Sem nota conciliada' : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
-type Props = { positions: PortfolioPosition[]; operations: BrokerageOperation[]; ledgerAvailable: boolean; onSelect: (ticker: string) => void };
-
-export default function OptionsWorkspace({positions, operations, ledgerAvailable, onSelect}: Props) {
-  const [asset, setAsset] = useState('');
-  const [contract, setContract] = useState('');
-  const [kind, setKind] = useState('');
-  const [year, setYear] = useState('');
-  const [month, setMonth] = useState('');
-  const [selectedMonth, setSelectedMonth] = useState('');
-  const underlying = (ticker: string) => positions.find(p => p.ticker === ticker)?.underlying_ticker || ticker.slice(0, 4);
-  const assets = [...new Set([...positions.map(p => p.underlying_ticker || p.ticker.slice(0, 4)), ...operations.map(o => underlying(o.option_ticker))])].sort();
-  const contracts = [...new Set([...positions.map(p => p.ticker), ...operations.map(o => o.option_ticker)])].sort();
-  const selected = operations.filter(o => (!asset || underlying(o.option_ticker) === asset) && (!contract || o.option_ticker === contract) && (!kind || positions.find(p => p.ticker === o.option_ticker)?.option_type === kind) && (!year || o.trade_date?.startsWith(year)));
-  const visible = selected.filter(o => !month || o.trade_date?.slice(0, 7) === month).filter(o => !selectedMonth || o.trade_date?.slice(0, 7) === selectedMonth);
-  const open = positions.filter(p => (!asset || p.underlying_ticker === asset) && (!contract || p.ticker === contract) && (!kind || p.option_type === kind));
-  const months = useMemo(() => [...new Set(selected.map(o => o.trade_date?.slice(0, 7)).filter((v): v is string => Boolean(v)))].sort(), [operations, asset, contract, kind, year]);
-  const maximum = Math.max(1, ...months.map(m => Math.max(...selected.filter(o => o.trade_date?.startsWith(m)).map(o => Math.abs(o.cash_flow || 0)), 0)));
-  // Only an unchanged, single-direction note history matching the BTG quantity is attributed to an open lot.
-  // Mixed closes, incomplete notes, or a snapshot mismatch leave the opening premium explicitly unknown.
-  const opening = (p: PortfolioPosition) => {
-    const rows = operations.filter(o => o.option_ticker === p.ticker && (!o.trade_date || !p.expiration_date || o.trade_date <= p.expiration_date));
-    const direction = p.quantity < 0 ? 'SELL' : 'BUY';
-    const notesMatchPosition = rows.length > 0
-      && rows.every(o => o.side === direction && o.cash_flow != null && o.execution_price != null)
-      && Math.abs(rows.reduce((sum, o) => sum + (o.side === 'BUY' ? o.quantity : -o.quantity), 0) - p.quantity) <= 0.001;
-    if (!notesMatchPosition) return {
-      total: null,
-      price: p.average_cost,
-      priceSource: p.average_cost == null ? null : p.source_ref,
-    };
-    const noteQuantity = rows.reduce((sum, o) => sum + o.quantity, 0);
-    const notePrice = rows.reduce((sum, o) => sum + o.execution_price! * o.quantity, 0) / noteQuantity;
-    return {
-      total: Math.abs(rows.reduce((sum, o) => sum + (o.cash_flow || 0), 0)),
-      price: p.average_cost ?? notePrice,
-      priceSource: p.average_cost == null ? 'BTG: notas conciliadas' : p.source_ref,
-    };
-  };
-  const recent = [...visible].reverse();
-  return <div className="options-workspace">
-    <div className="option-filters">
-      <label>Ano<select value={year} onChange={e => {setYear(e.target.value); setSelectedMonth('')}}><option value="">Todos</option>{[...new Set(operations.map(o => o.trade_date?.slice(0, 4)).filter(Boolean))].sort().reverse().map(v => <option key={v}>{v}</option>)}</select></label>
-      <label>Ativo<select value={asset} onChange={e => setAsset(e.target.value)}><option value="">Todos</option>{assets.map(v => <option key={v}>{v}</option>)}</select></label>
-      <label>Contrato<select value={contract} onChange={e => setContract(e.target.value)}><option value="">Todos</option>{contracts.map(v => <option key={v}>{v}</option>)}</select></label>
-      <label>Tipo<select value={kind} onChange={e => setKind(e.target.value)}><option value="">PUT e CALL</option><option>PUT</option><option>CALL</option></select></label>
-      <label>Mês<select value={month} onChange={e => {setMonth(e.target.value);setSelectedMonth('')}}><option value="">Todos</option>{months.map(v => <option key={v}>{v}</option>)}</select></label>
-    </div>
-    <section className="panel"><h2>Fluxo das notas de corretagem por mês</h2><p className="muted">Entradas e saídas brutas nas operações selecionadas. Resultado realizado exige conciliação de abertura, fechamento, exercício e custos.</p>
-      <div className="option-bars">{months.map(m => {const sum = selected.filter(o => o.trade_date?.startsWith(m)).reduce((n, o) => n + (o.cash_flow || 0), 0);return <button title={`${m}: ${money(sum)}`} className={selectedMonth === m ? 'option-month active' : 'option-month'} key={m} onClick={() => setSelectedMonth(selectedMonth === m ? '' : m)}><span>{money(sum)}</span><i style={{height: `${Math.max(5, Math.min(120, Math.abs(sum)/maximum*105))}px`, background: sum >= 0 ? '#22c98a' : '#f46f7b'}}/><b>{m.slice(5)}/{m.slice(2, 4)}</b></button>})}</div>
-      {!months.length && <p className="muted">{ledgerAvailable ? 'Nenhuma nota encontrada para os filtros.' : 'Ainda não há operações de notas disponíveis neste backend.'}</p>}</section>
-    <section className="panel"><h2>Posições em aberto ({open.length})</h2><div className="table-wrap"><table><thead><tr>{['Ativo','Contrato','Tipo','Lado','Quantidade','Strike','Vencimento','Preço de aquisição/venda','Preço atual','Valor total de abertura (notas)','Custo para encerrar','Resultado se encerrada agora'].map(v => <th key={v}>{v}</th>)}</tr></thead><tbody>{open.map(p => {const opened = opening(p); const close = p.market_value == null ? null : Math.abs(p.market_value); const pnl = opened?.total == null || close == null ? null : (p.quantity < 0 ? opened.total - close : close - opened.total);return <tr key={p.position_id} onClick={() => onSelect(p.ticker)}><td>{p.underlying_ticker || '—'}</td><td>{p.ticker}</td><td>{p.option_type}</td><td>{p.quantity < 0 ? 'Vendida' : 'Comprada'}</td><td>{Math.abs(p.quantity)}</td><td>{money(p.strike)}</td><td>{p.expiration_date || '—'}</td><td title={opened?.priceSource || 'Sem preço de aquisição/venda canônico ou notas conciliadas'}>{money(opened?.price)}</td><td>{money(p.market_price)}</td><td>{money(opened?.total)}</td><td>{p.quantity < 0 ? money(close) : '—'}</td><td>{pnl == null ? 'Sem conciliação' : money(pnl)}</td></tr>})}</tbody></table></div></section>
-    <section className="panel"><h2>Histórico de operações das notas ({recent.length})</h2><div className="table-wrap"><table><thead><tr>{['Data','Ativo','Contrato','Operação','Quantidade','Preço unitário','Valor recebido / pago','Nota BTG'].map(v => <th key={v}>{v}</th>)}</tr></thead><tbody>{recent.map(o => <tr key={o.transaction_id} title={o.source_ref} onClick={() => onSelect(o.option_ticker)}><td>{o.trade_date || '—'}</td><td>{underlying(o.option_ticker)}</td><td>{o.option_ticker}</td><td>{o.side === 'SELL' ? 'Venda' : 'Compra'}</td><td>{o.quantity}</td><td>{money(o.execution_price)}</td><td>{money(o.cash_flow)}</td><td>{o.note_number || '—'}</td></tr>)}</tbody></table></div></section>
-  </div>;
+import {useState} from 'react';
+import {b3Api} from './api/client';
+import type {BrokerageOperation,PortfolioPosition,CurrentOptionRow,OrchestrateResponse} from './api/contracts';
+import {money,rows,date,State,Source} from './components/cockpit';
+type Props={positions:PortfolioPosition[];operations:BrokerageOperation[];ledgerAvailable:boolean;onSelect:(ticker:string)=>void;result?:OrchestrateResponse|null};
+export default function OptionsWorkspace({positions,operations,ledgerAvailable,onSelect,result}:Props){
+ const [tab,setTab]=useState('Posições'),[query,setQuery]=useState(''),[kind,setKind]=useState(''),[underlying,setUnderlying]=useState(''),[chain,setChain]=useState<CurrentOptionRow[]>([]),[loading,setLoading]=useState(false),[error,setError]=useState(''),[asOf,setAsOf]=useState(''),[page,setPage]=useState(0);
+ const visible=positions.filter(p=>(!kind||p.option_type===kind)&&p.ticker.toLowerCase().includes(query.toLowerCase()));
+ const notes=operations.filter(o=>o.option_ticker.toLowerCase().includes(query.toLowerCase()));
+ const canonical=rows(result?.result.option_positions);
+ async function fetchChain(){setLoading(true);setError('');try{const r=await b3Api.currentOptions(underlying,kind==='CALL'?'CALL':'PUT',150);setChain(r.options);setAsOf(r.as_of)}catch(e){setError(e instanceof Error?e.message:String(e));setChain([])}finally{setLoading(false)}}
+ return <div className="options-workspace"><div className="workspace-tabs" role="tablist">{['Posições','Cadeia de opções','Execuções','Resultados'].map(t=><button role="tab" aria-selected={tab===t} className={tab===t?'selected':''} key={t} onClick={()=>setTab(t)}>{t}</button>)}</div><div className="toolbar"><label>Buscar contrato<input aria-label="Buscar contrato" value={query} onChange={e=>{setQuery(e.target.value);setPage(0)}} placeholder="PETR…"/></label>{tab==='Posições'&&<label>Tipo<select value={kind} onChange={e=>setKind(e.target.value)}><option value="">PUT e CALL</option><option>PUT</option><option>CALL</option></select></label>}</div>
+ {tab==='Posições'&&<section className="panel"><div className="section-head"><h2>Posições abertas ({visible.length})</h2><span className="badge">Snapshot BTG</span></div><div className="table-wrap"><table><thead><tr>{['Ativo','Contrato','Tipo','Direção','Quantidade','Strike','Vencimento','DTE no snapshot','Preço entrada','Preço snapshot','Valor snapshot'].map(s=><th key={s}>{s}</th>)}</tr></thead><tbody>{visible.map(p=><tr key={p.position_id}><td>{p.underlying_ticker??'Indisponível'}</td><td><button className="text-button" onClick={()=>onSelect(p.ticker)}>{p.ticker}</button></td><td>{p.option_type}</td><td>{p.quantity<0?'Vendida':'Comprada'}</td><td>{p.quantity}</td><td>{money(p.strike)}</td><td>{p.expiration_date??'Indisponível'}</td><td>{String(canonical.find(r=>r.position_id===p.position_id)?.dte??'Indisponível')}</td><td>{money(p.average_cost)}</td><td>{money(p.market_price)}</td><td>{money(p.market_value)}</td></tr>)}</tbody></table></div>{!visible.length&&<State title="Nenhuma posição para este filtro">Ajuste os filtros ou importe o snapshot de opções.</State>}</section>}
+ {tab==='Cadeia de opções'&&<section className="panel"><h2>Cotações e Greeks fornecidos pela OPLAB</h2><form className="inline-controls" onSubmit={e=>{e.preventDefault();void fetchChain()}}><label>Ativo<input required aria-label="Ativo da cadeia" value={underlying} onChange={e=>setUnderlying(e.target.value.toUpperCase())} placeholder="VALE3" pattern="[A-Z]{4}[0-9]{1,2}"/></label><label>Tipo<select value={kind||'PUT'} onChange={e=>setKind(e.target.value)}><option>PUT</option><option>CALL</option></select></label><button disabled={loading}>Consultar cadeia</button></form>{loading&&<State kind="loading" title="Consultando opções">Aguardando o provedor.</State>}{error&&<State kind="error" title="Cadeia indisponível">{error}</State>}<Source asOf={asOf} source="OPLAB"/><div className="table-wrap"><table><thead><tr>{['Contrato','Strike','Vencimento','Bid','Ask','Último','IV','Delta','Gamma','Theta','Vega','Volume','OI'].map(s=><th key={s}>{s}</th>)}</tr></thead><tbody>{chain.filter(r=>r.contract.option_id.toLowerCase().includes(query.toLowerCase())).map(r=><tr key={r.contract.option_id}><td><button className="text-button" onClick={()=>onSelect(r.contract.option_id)}>{r.contract.option_id}</button></td><td>{money(r.contract.strike)}</td><td>{r.contract.expiration_date}</td><td>{money(r.quote.bid)}</td><td>{money(r.quote.ask)}</td><td>{money(r.quote.last)}</td>{['implied_volatility','delta','gamma','theta','vega','volume','open_interest'].map(k=><td key={k}>{String(r.quote[k as keyof typeof r.quote]??'Indisponível')}</td>)}</tr>)}</tbody></table></div>{!chain.length&&!loading&&!error&&<State title="Escolha um ativo e consulte a cadeia">Nenhuma cotação foi carregada.</State>}</section>}
+ {tab==='Execuções'&&<section className="panel"><h2>Execuções observadas ({notes.length})</h2><p className="muted">Fluxo recebido/pago na nota; não é lucro realizado. Vínculo com o ativo e fechamento não são inferidos.</p>{!ledgerAvailable&&<State kind="limited" title="Ledger indisponível">Importe notas de corretagem para reconstruir a história.</State>}<div className="table-wrap"><table><thead><tr>{['Data','Contrato','Direção','Quantidade','Preço','Fluxo bruto','Nota / fonte'].map(s=><th key={s}>{s}</th>)}</tr></thead><tbody>{notes.slice(page*30,page*30+30).map(o=><tr key={o.transaction_id}><td>{date(o.trade_date)}</td><td><button className="text-button" onClick={()=>onSelect(o.option_ticker)}>{o.option_ticker}</button></td><td>{o.side==='SELL'?'Venda':'Compra'}</td><td>{o.quantity}</td><td>{money(o.execution_price)}</td><td>{money(o.cash_flow)}</td><td><details><summary>{o.note_number??'Fonte'}</summary>{o.source_ref}</details></td></tr>)}</tbody></table></div><div className="pagination"><button disabled={!page} onClick={()=>setPage(page-1)}>Anterior</button><span>Página {page+1}</span><button disabled={(page+1)*30>=notes.length} onClick={()=>setPage(page+1)}>Próxima</button></div>{!notes.length&&ledgerAvailable&&<State title="Nenhuma execução para este filtro">Ajuste a busca ou carregue notas.</State>}</section>}
+ {tab==='Resultados'&&<State kind="limited" title="Resultado mensal e acumulado · LIMITED">O endpoint de notas não certifica abertura, encerramento, exercício, rolagem e custos completos. Não convertemos fluxo de caixa em lucro. Consulte History &amp; Learning para ver a evidência observada e os requisitos de admissão.</State>}</div>;
 }
