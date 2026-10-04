@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
+
+import pytest
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -16,6 +19,55 @@ from b3_agent.intelligence.local_evidence_analysis import (
 )
 from b3_agent.intelligence.senior_context import SeniorEvidenceContextBuilder
 from b3_agent.jobs.local_evidence_analyst import LocalEvidenceAnalystJob
+from b3_agent.llm.ollama_client import OllamaClient
+
+
+@pytest.mark.parametrize("empty_refs", [False, True])
+def test_generation_schema_restricts_refs_without_mutating_shared_client(monkeypatch, empty_refs):
+    request = build_request("PETR4", _events())
+    if empty_refs:
+        request = replace(request, source_refs=())
+    client = OllamaClient(model="deepseek-r1:8b", num_ctx=4096,
+                          num_predict=2048, think=False,
+                          format_schema=LOCAL_ANALYSIS_SCHEMA)
+    observed = []
+
+    def ask(runtime_client, prompt):
+        observed.append(runtime_client)
+        result = FakeClient().ask(prompt)
+        payload = json.loads(result.content)
+        payload["evidence_refs"] = list(request.source_refs)
+        result.content = json.dumps(payload)
+        return result
+
+    monkeypatch.setattr(OllamaClient, "ask", ask)
+    assert LocalEvidenceAnalyst(client).analyze(request).status == LocalAnalysisStatus.READY
+    generated = observed[0]
+    assert generated is not client
+    refs = generated.format_schema["properties"]["evidence_refs"]
+    if empty_refs:
+        assert refs["maxItems"] == 0
+        assert "enum" not in refs["items"]
+    else:
+        assert refs["items"]["enum"] == list(request.source_refs)
+    assert "enum" not in LOCAL_ANALYSIS_SCHEMA["properties"]["evidence_refs"]["items"]
+    for field in ("base_url", "model", "timeout", "num_ctx", "num_predict", "keep_alive", "think"):
+        assert getattr(generated, field) == getattr(client, field)
+
+
+@pytest.mark.parametrize("field,value", [("risks", [123]), ("evidence_refs", [123]), ("extra", "unexpected")])
+def test_post_generation_validation_rejects_malformed_structured_fields(field, value):
+    class MalformedClient(FakeClient):
+        def ask(self, prompt):
+            result = super().ask(prompt)
+            payload = json.loads(result.content)
+            payload[field] = value
+            result.content = json.dumps(payload)
+            return result
+
+    dossier = LocalEvidenceAnalyst(MalformedClient()).analyze(build_request("PETR4", _events()))
+    assert dossier.status == LocalAnalysisStatus.DEGRADED
+    assert "INVALID_SCHEMA" in dossier.quality_flags
 
 
 def _events():
@@ -287,4 +339,4 @@ def test_default_local_analyst_is_bounded_non_thinking_structured_extraction():
     analyst=LocalEvidenceAnalyst()
     assert analyst.client.think is False
     assert analyst.client.format_schema==LOCAL_ANALYSIS_SCHEMA
-    assert build_request('ITUB4',_events()).prompt_version=='b3_local_evidence_analyst_v3'
+    assert build_request('ITUB4',_events()).prompt_version=='b3_local_evidence_analyst_v4'

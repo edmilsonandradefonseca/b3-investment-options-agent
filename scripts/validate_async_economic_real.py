@@ -41,7 +41,8 @@ def main():
             print(json.dumps({'case':'READ_ONLY_DIVIDEND_PATH','workspace':request['context']['workspace'],'http':200,'elapsed_ms':round((monotonic()-started)*1000,1),'provider_dividend_calls':blocked.call_count}),flush=True)
         assert blocked.call_count==0
     queue=LocalEvidenceQueue(settings.data_dir/'derived'/'local_evidence_analyst')
-    pending=[r for r in queue.pending() if any(e.get('evidence_type')=='institution_price_target' for e in r.evidence_events)]
+    from b3_agent.intelligence.local_evidence_analysis import PROMPT_VERSION
+    pending=[r for r in queue.pending() if r.prompt_version == PROMPT_VERSION and any(e.get('evidence_type')=='institution_price_target' for e in r.evidence_events)]
     if pending:
         selected=pending[0]
         class FocusedQueue:

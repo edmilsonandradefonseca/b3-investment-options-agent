@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
@@ -12,7 +13,7 @@ from b3_agent.llm.ollama_client import OllamaClient
 
 
 POLICY_VERSION = "v4.3-local-evidence-1"
-PROMPT_VERSION = "b3_local_evidence_analyst_v3"
+PROMPT_VERSION = "b3_local_evidence_analyst_v4"
 
 LOCAL_ANALYSIS_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -350,7 +351,21 @@ class LocalEvidenceAnalyst:
 
     def analyze(self, request: LocalEvidenceAnalysisRequest) -> LocalEvidenceDossier:
         prompt = _analysis_prompt(request)
-        result = self.client.ask(prompt)
+        client = self.client
+        if isinstance(client, OllamaClient):
+            schema = deepcopy(LOCAL_ANALYSIS_SCHEMA)
+            refs_schema = schema["properties"]["evidence_refs"]
+            if request.source_refs:
+                refs_schema["items"]["enum"] = list(request.source_refs)
+            else:
+                refs_schema["maxItems"] = 0
+            client = OllamaClient(
+                base_url=client.base_url, model=client.model,
+                timeout=client.timeout, num_ctx=client.num_ctx,
+                num_predict=client.num_predict, keep_alive=client.keep_alive,
+                think=client.think, format_schema=schema,
+            )
+        result = client.ask(prompt)
         quality_flags: list[str] = []
 
         analysis: dict[str, Any] | None
@@ -379,6 +394,12 @@ class LocalEvidenceAnalyst:
             if any(
                 key not in analysis or not isinstance(analysis.get(key), expected)
                 for key, expected in required.items()
+            ):
+                quality_flags.append("INVALID_SCHEMA")
+            if set(analysis) - set(required) or any(
+                not isinstance(analysis.get(key), list)
+                or any(not isinstance(item, str) for item in analysis[key])
+                for key, expected in required.items() if expected is list
             ):
                 quality_flags.append("INVALID_SCHEMA")
 
