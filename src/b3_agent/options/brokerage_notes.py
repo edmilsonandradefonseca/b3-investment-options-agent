@@ -32,10 +32,10 @@ _EXTENDED_TRADE_RE = re.compile(
 )
 
 _STOCK_TRADE_RE = re.compile(
-    r"^\\s*\\S+\\s+(?P<side>[CV])\\s+VISTA\\s+"
-    r"(?P<ticker>[A-Z0-9]+)(?:\\s+(?:ON|PN|UNT|CI|N[0-9]+|NM|ED|DRN|DR3|F|D|#\\d+))*\\s+"
-    r"(?:D\\s+)?(?P<quantity>[\\d.]+)\\s+(?P<price>[\\d.,]+)\\s+"
-    r"(?P<amount>[\\d.,]+)\\s+(?P<cash_side>[DC])\\s*$"
+    r"^\s*\S+\s+(?P<side>[CV])\s+VISTA\s+"
+    r"(?P<ticker>[A-Z0-9]+)(?:\s+(?:ON|PN|UNT|CI|N[0-9]+|NM|ED|DRN|DR3|F|D|#\d+))*\s+"
+    r"(?:D\s+)?(?P<quantity>[\d.]+)\s+(?P<price>[\d.,]+)\s+"
+    r"(?P<amount>[\d.,]+)\s+(?P<cash_side>[DC])\s*$"
 )
 
 _NOTE_RE = re.compile(r"(?m)^\s*(?P<note>\d{6,})\s*$")
