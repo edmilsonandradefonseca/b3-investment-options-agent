@@ -55,6 +55,33 @@ Q Negociação C/V Tipo Mercado Prazo Especificação do título Obs. (*) Quanti
     assert transaction.total_amount == 1040.0
 
 
+
+def test_parse_btg_stock_trade_rows_with_price_and_total_value():
+    text = NOTE_TEXT + (
+        "1-BOVESPA C VISTA PETR4 PN N2 100 32,05 3.205,00 D\\n"
+        "1-BOVESPA V VISTA ITUB4 PN N1 50 38,10 1.905,00 C\\n"
+    )
+    rows = BrokerageNoteParser().parse_stock_text(text, source_file="nota.pdf")
+
+    assert len(rows) == 2
+    assert rows[0].ticker == "PETR4"
+    assert rows[0].instrument_type == "STOCK"
+    assert rows[0].action == "BUY"
+    assert rows[0].quantity == 100
+    assert rows[0].price == 32.05
+    assert rows[0].source_ref == "BTG:NotaCorretagem:34515456:nota.pdf"
+    assert rows[1].ticker == "ITUB4"
+    assert rows[1].action == "SELL"
+    assert rows[1].quantity == 50
+    assert rows[1].price == 38.10
+
+
+def test_unsupported_cash_market_row_rejects_partial_stock_import():
+    text = NOTE_TEXT + "1-BOVESPA C VISTA PETR4 PN UNKNOWN 100 32,05 3.205,00 D\\n"
+    with pytest.raises(ValueError, match="avoid partial stock execution history"):
+        BrokerageNoteParser().parse_stock_text(text)
+
+
 def test_ledger_is_append_only_and_deduplicates(tmp_path):
     transactions = BrokerageNoteParser().parse_text(
         NOTE_TEXT,
