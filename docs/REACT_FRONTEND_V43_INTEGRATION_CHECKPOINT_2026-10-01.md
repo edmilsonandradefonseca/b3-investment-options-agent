@@ -90,3 +90,18 @@ No new visual design should be invented before functional E2E validation.
 4. Run real `/health`, `/portfolio/current`, `/options/ledger` and `/orchestrate` smoke tests.
 5. Exercise Copilot from the browser and confirm request → response rendering.
 6. Continue UC-01…UC-12 audit against real responses.
+
+## React cockpit integration and visual acceptance — 2026-10-04
+
+The replacement React cockpit passed real-backend browser acceptance on the Ubuntu runner at commit `32450047dc3f570afc27d0d3ab1e8ec1d4ea05f6`.
+
+- Visual acceptance workflow: run [37208174936](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37208174936), SUCCESS.
+- CI workflow: run [37208177987](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37208177987), SUCCESS.
+- Acceptance report: `status=PASS`, `real_backend=true`, zero browser page errors.
+- Eight workspaces were inspected at 1920, 1440, and 1366 pixels: Overview, Portfolio, Options, Opportunities, Strategy Lab, Market Intelligence, History & Learning, and Risk & Stress.
+- Real interactions covered portfolio consistency, option chain from OPLAB, buy comparison and canonical scenarios, opportunities detail, stress, history, market context, price range/volume/zoom controls, and contextual Copilot.
+- The workflow captured 41 screens/evidence files; raw backend payloads were not uploaded.
+
+The selector failure in the preceding attempt was fixed by scoping the Opportunities controls to their form. The accepted rerun confirms the full browser walk completed.
+
+Acceptance is limited to the tested desktop sizes and current API/data state. Learning and similarity correctly remain LIMITED with zero samples; option P&L remains LIMITED where the backend has no certified monthly series. This does not claim full AC01–28 closure or a packaged Windows installer acceptance.
