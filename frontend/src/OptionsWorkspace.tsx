@@ -49,17 +49,27 @@ function closedOptionCycles(operations:BrokerageOperation[],knownAssets:string[]
  }
  return out.sort((a,b)=>a.month.localeCompare(b.month)||a.underlying.localeCompare(b.underlying)||a.ticker.localeCompare(b.ticker));
 }
+function MonthlyBars({values,title,aria}:{values:Array<[string,number]>;title:string;aria:string}){
+ const max=Math.max(1,...values.map(([,v])=>Math.abs(v))),zero=110;
+ return <div className="panel" role="group" aria-label={aria}>
+  <h3>{title}</h3>
+  <svg viewBox="0 0 900 250" role="img" aria-label={aria} style={{width:'100%',height:'auto'}}>
+   <line x1="30" x2="880" y1={zero} y2={zero} stroke="currentColor" opacity=".5"/>
+   {values.map(([m,v],i)=>{const slot=820/values.length,x=45+i*slot,w=Math.max(8,slot*.55),h=Math.abs(v)/max*85;return <g key={m}><rect x={x} y={v>=0?zero-h:zero} width={w} height={Math.max(1,h)} fill={v>=0?'#24a36a':'#e05d5d'}><title>{m}: {money(v)}</title></rect><text x={x+w/2} y="224" textAnchor="middle" fontSize="11" fill="currentColor">{m.slice(5)}/{m.slice(0,4)}</text></g>})}
+  </svg>
+ </div>;
+}
 function ResultsPanel({cycles,stockFlows,ledgerAvailable}:{cycles:ClosedOptionCycle[];stockFlows:MonthlyStockFlow[];ledgerAvailable:boolean}){
  const [asset,setAsset]=useState(''),[kind,setKind]=useState(''),[month,setMonth]=useState('');
  const assets=[...new Set([...cycles.map(x=>x.underlying),...stockFlows.map(x=>x.ticker)])].sort();
  const months=[...new Set([...cycles.map(x=>x.month),...stockFlows.map(x=>x.month)])].sort();
  const visible=cycles.filter(x=>kind!=='STOCK'&&(!asset||x.underlying===asset)&&(!kind||x.kind===kind)&&(!month||x.month===month));
  const visibleStocks=stockFlows.filter(x=>(!asset||x.ticker===asset)&&(!kind||kind==='STOCK')&&(!month||x.month===month));
- const byMonth=new Map<string,number>();
- for(const x of visible)byMonth.set(x.month,(byMonth.get(x.month)||0)+x.cash);
- for(const x of visibleStocks)byMonth.set(x.month,(byMonth.get(x.month)||0)+x.cash);
- const values=[...byMonth.entries()].sort(([a],[b])=>a.localeCompare(b));
- const max=Math.max(1,...values.map(([,v])=>Math.abs(v))),zero=110;
+ const optionByMonth=new Map<string,number>(),stockByMonth=new Map<string,number>();
+ for(const x of visible)optionByMonth.set(x.month,(optionByMonth.get(x.month)||0)+x.cash);
+ for(const x of visibleStocks)stockByMonth.set(x.month,(stockByMonth.get(x.month)||0)+x.cash);
+ const optionValues=[...optionByMonth.entries()].sort(([a],[b])=>a.localeCompare(b));
+ const stockValues=[...stockByMonth.entries()].sort(([a],[b])=>a.localeCompare(b));
  return <section className="panel">
   <h2>Resultado por ativo e mês</h2>
   <p className="muted">Opções: saldo de vendas e recompras em ciclos encerrados. Ações: entradas e saídas líquidas de caixa conforme as notas; esse fluxo não representa, por si só, lucro realizado. Os valores ainda não incluem custos e tributos da nota.</p>
@@ -69,13 +79,8 @@ function ResultsPanel({cycles,stockFlows,ledgerAvailable}:{cycles:ClosedOptionCy
    <label>Tipo<select aria-label="Filtrar resultado por tipo" value={kind} onChange={e=>setKind(e.target.value)}><option value="">Ação, PUT e CALL</option><option value="STOCK">AÇÃO</option><option value="PUT">PUT</option><option value="CALL">CALL</option><option value="UNKNOWN">Tipo não identificado</option></select></label>
    <label>Mês<select aria-label="Filtrar resultado por mês" value={month} onChange={e=>setMonth(e.target.value)}><option value="">Todos</option>{months.map(x=><option key={x}>{x}</option>)}</select></label>
   </div>
-  {values.length>0&&<div className="panel" role="group" aria-label="Gráfico mensal de resultado por ativo">
-   <h3>Saldo mensal · filtro atual</h3>
-   <svg viewBox="0 0 900 250" role="img" aria-label="Resultado mensal agregado das operações filtradas" style={{width:'100%',height:'auto'}}>
-    <line x1="30" x2="880" y1={zero} y2={zero} stroke="currentColor" opacity=".5"/>
-    {values.map(([m,v],i)=>{const slot=820/values.length,x=45+i*slot,w=Math.max(8,slot*.55),h=Math.abs(v)/max*85;return <g key={m}><rect x={x} y={v>=0?zero-h:zero} width={w} height={Math.max(1,h)} fill={v>=0?'#24a36a':'#e05d5d'}><title>{m}: {money(v)}</title></rect><text x={x+w/2} y="224" textAnchor="middle" fontSize="11" fill="currentColor">{m.slice(5)}/{m.slice(0,4)}</text></g>})}
-   </svg>
-  </div>}
+  {optionValues.length>0&&kind!=='STOCK'&&<MonthlyBars values={optionValues} title="Opções encerradas · resultado bruto por mês" aria="Gráfico mensal do resultado dos ciclos de opções"/>}
+  {stockValues.length>0&&(!kind||kind==='STOCK')&&<MonthlyBars values={stockValues} title="Ações · fluxo líquido de caixa por mês" aria="Gráfico mensal do fluxo de caixa das ações"/>}
   {kind!=='STOCK'&&<div className="table-wrap"><h3>Ciclos de opções encerrados</h3><table><thead><tr><th>Ativo-base</th><th>Contrato</th><th>Tipo</th><th>Mês do encerramento</th><th>Quantidade pareada</th><th>Lançamentos</th><th>Saldo bruto</th></tr></thead><tbody>
    {visible.map((x,i)=><tr key={x.ticker+':'+x.month+':'+i}><td>{x.underlying}</td><td>{x.ticker}</td><td>{x.kind==='UNKNOWN'?'Não identificado':x.kind}</td><td>{x.month}</td><td>{x.quantity}</td><td>{x.trades}</td><td>{money(x.cash)}</td></tr>)}
   </tbody></table></div>}
