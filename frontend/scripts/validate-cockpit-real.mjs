@@ -19,6 +19,7 @@ const health=await backend('/health');assert.ok(health.status);
 async function nav(label){await page.locator('nav').getByRole('button',{name:label,exact:true}).click();await page.locator('h1').filter({hasText:label}).waitFor();}
 async function screenshot(name){await page.screenshot({path:resolve(out,name+'.png'),fullPage:false});}
 async function noOverflow(){const size=await page.evaluate(()=>({scroll:document.documentElement.scrollWidth,width:innerWidth}));assert.ok(size.scroll<=size.width+1,`Global horizontal overflow ${size.scroll}/${size.width}`)}
+try {
 await page.goto(base+'/#/portfolio');
 await page.getByRole('button',{name:'Carregando…',exact:true}).waitFor({state:'hidden',timeout:60000});
 await page.getByRole('heading',{name:'Ações na carteira',exact:true}).waitFor();
@@ -75,4 +76,5 @@ assert.ok(requests.some(r=>r.context?.ticker_price_shocks?.PETR4===-0.1),'Percen
 assert.ok(requests.some(r=>r.context?.comparison_assets?.join(',')==='ITUB4,BBDC4'&&r.context.analysis_mode==='deterministic'));
 const report={status:'PASS',real_backend:true,resolutions:[1920,1440,1366],screens:routes,interaction_checks:['route','portfolio coherence','filter continuity','option limited state','OPLAB chain with source Greeks','UC06 limited state','UC08 and UC09 real zero sample','macro and stored event queries','buy comparison','opportunity detail','stress','personal history','price ranges','volume','zoom','copilot close/open','copilot health'],page_errors:consoleErrors,raw_payloads_uploaded:false};
 await writeFile(resolve(out,'acceptance.json'),JSON.stringify(report,null,2));
-console.log(JSON.stringify(report));await browser.close();
+console.log(JSON.stringify(report));
+} catch(error){await screenshot('failure-current-screen');await writeFile(resolve(out,'failure.json'),JSON.stringify({status:'FAIL',url:page.url(),reason:error.message,page_errors:consoleErrors},null,2));throw error} finally{await browser.close()}
