@@ -58,8 +58,8 @@ Q Negociação C/V Tipo Mercado Prazo Especificação do título Obs. (*) Quanti
 
 def test_parse_btg_stock_trade_rows_with_price_and_total_value():
     text = NOTE_TEXT + (
-        "1-BOVESPA C VISTA PETR4 PN N2 100 32,05 3.205,00 D\\n"
-        "1-BOVESPA V VISTA ITUB4 PN N1 50 38,10 1.905,00 C\\n"
+        "1-BOVESPA C VISTA PETR4 PN N2 100 32,05 3.205,00 D\n"
+        "1-BOVESPA V VISTA ITUB4 PN N1 50 38,10 1.905,00 C\n"
     )
     rows = BrokerageNoteParser().parse_stock_text(text, source_file="nota.pdf")
 
@@ -77,7 +77,7 @@ def test_parse_btg_stock_trade_rows_with_price_and_total_value():
 
 
 def test_unsupported_cash_market_row_rejects_partial_stock_import():
-    text = NOTE_TEXT + "1-BOVESPA C VISTA PETR4 PN UNKNOWN 100 32,05 3.205,00 D\\n"
+    text = NOTE_TEXT + "1-BOVESPA C VISTA PETR4 PN UNKNOWN 100 32,05 3.205,00 D\n"
     with pytest.raises(ValueError, match="avoid partial stock execution history"):
         BrokerageNoteParser().parse_stock_text(text)
 
