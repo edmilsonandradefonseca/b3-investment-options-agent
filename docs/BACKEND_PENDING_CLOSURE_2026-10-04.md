@@ -44,3 +44,11 @@ Final Ubuntu run 37169879967 completed successfully, including deterministic wor
 Remaining backend closure: correct issuer declaration-day calculation from UTC to America/Sao_Paulo, add a midnight-boundary regression, run relevant tests/CI and install the tested revision; then authenticated `sudo systemctl restart b3-runtime.service` and focused active HTTP acceptance of BBDC4 stored primary dividends, BUY comparison and Opportunities. Do not mark the backend activated before this check.
 
 The four requested functional blocks are substantially implemented; block 4 activation is incomplete. New React visual validation remains later. Current BTG report coverage and complete complementary dividend coverage remain explicit limitations, not invented data. Advanced personal Outcome/Experience/Learning acceptance remains outside this scoped closure; its canonical ownership/configuration is not established.
+
+## 2026-10-04 timezone correction and focused installation
+
+Block 1 step 4 corrected declaration classification to `observed_at.astimezone(ZoneInfo('America/Sao_Paulo')).date()`. Eight midnight regressions cover both ON/PN classes at 00:00, 01:30, 02:59 and 03:00 UTC, retaining gross amounts, provenance and partial coverage. Local full suite: 924 passed.
+
+Revision `a3dced7729f460187aaf44ba6a9809101bcc95d5`: CI run 37202675923 SUCCESS. Ubuntu focused run 37202673290 passed the CI gate and 21 relevant tests, then installed this exact revision at `/opt/b3-investment-options-agent` on 2026-10-04 12:37:19 UTC. `sudo -n systemctl restart b3-runtime.service` failed because interactive authentication is required. The user-reported earlier restart predates installation and does not activate the corrected revision.
+
+Block 4 step 3 remains pending an authenticated restart after installation. Read-only post-restart acceptance verifies the installed correction ancestry, process start after provider installation, health, BBDC4 primary RI/12 monthly events/partial coverage, BUY ITUB4×BBDC4 and Opportunities. It does not replay Qwen or drain the production queue. Reports remain private on Ubuntu. No new frontend implementation has started.
