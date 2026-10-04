@@ -29,8 +29,11 @@ class StoredDividendService:
         for meta in candidates:
             available=_timestamp(meta.get('retrieved_at'))
             extra=meta.get('extra') or {}
-            if (meta.get('topic')!='issuer_dividend_snapshot' or ticker not in meta.get('ticker_refs',[]) or meta.get('source_quality')!='provider'
-                    or meta.get('source')!='https://brapi.dev/api/v2/dividends' or not available or available>cutoff
+            if not isinstance(extra,dict): continue
+            primary = (meta.get('source_quality')=='primary' and meta.get('source')=='https://www.bradescori.com.br/informacoes-ao-mercado/remuneracao-aos-acionistas/' and ticker in {'BBDC3','BBDC4'} and extra.get('parser_version')=='bradesco-monthly-jcp-v1')
+            provider = meta.get('source_quality')=='provider' and meta.get('source')=='https://brapi.dev/api/v2/dividends'
+            if (meta.get('topic')!='issuer_dividend_snapshot' or ticker not in meta.get('ticker_refs',[]) or not (primary or provider)
+                    or not available or available>cutoff
                     or not meta.get('document_id') or not isinstance(extra,dict) or extra.get('ticker')!=ticker or extra.get('policy_version')!='async-dividends-v1'
                     or extra.get('collection_status') not in {'READ_OK','PROVIDER_UNAVAILABLE','UNSUPPORTED_PROVIDER'}
                     or not isinstance(extra.get('records'),list) or len(extra['records'])>200): continue
@@ -41,4 +44,5 @@ class StoredDividendService:
         available,doc,extra=winners[0]
         if cutoff-available>timedelta(hours=72): return {'status':'STALE_STORED_SNAPSHOT','records':[],'snapshot_available_at':available}
         return {'status':extra['collection_status'],'records':extra['records'],'error_type':extra.get('error_type'),
+            'coverage_status':extra.get('coverage_status','UNKNOWN_PROVIDER_COMPLETENESS'),
             'http_status':extra.get('http_status'),'read_origin':'STORED_ASYNC_SNAPSHOT','snapshot_available_at':available,'snapshot_document_id':doc}

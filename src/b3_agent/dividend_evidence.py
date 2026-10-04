@@ -68,7 +68,7 @@ def dividend_payload(ticker, evidence, cutoff):
         "provider_error_type": evidence.get("error_type"), "provider_http_status": evidence.get("http_status"),
         "observed_paid_365d_gross_per_share_brl": sum(event["gross_amount_per_share_brl"] for event in trailing) if trailing else None,
         "announced_conditional_gross_per_share_brl": sum(event["gross_amount_per_share_brl"] for event in possible) if possible else None,
-        "coverage_status": "UNKNOWN_PROVIDER_COMPLETENESS", "net_amount": None,
+        "coverage_status": evidence.get("coverage_status", "UNKNOWN_PROVIDER_COMPLETENESS"), "net_amount": None,
         "limitations": ["Observed distributions are issuer events, not personal received income or a dividend forecast.",
             "Future record-date entitlement is conditional on a timely eligible purchase, settlement and issuer rules; same-day or missing dates remain UNKNOWN.",
             "Absent events do not establish zero dividends. Provider completeness and net taxes remain UNKNOWN."]}
