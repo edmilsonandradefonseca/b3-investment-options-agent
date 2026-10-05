@@ -100,3 +100,37 @@ Workflow legado37321575811: economia candidata PASS; checkout produção avanço
 - Histórico Yahoo exige symbol e BRL nos metadados; identidade ausente não é inferida como validada.
 - VALE3 e outros emissores podem ter cotação BRL e demonstrações USD. O adapter passa a admitir razões sem moeda e montantes financeiros na moeda declarada, distinguindo marketCap na moeda da cotação. Não converter FX implicitamente nem atribuir moeda aos dados por ação/enterpriseValue com origem ambígua entre moedas; esses campos ficam para fallback qualificado.
 - forwardPE/forwardEps recebem flags de estimativa agregada e horizonte não verificado; não representam lucro realizado nem relatório individual. O teste real é ampliado paraVALE3. CI e runner deste incremento precisam ser conferidos antes de ativação.
+
+
+## Evidência ampliada de fontes — candidato 2b5d9a8
+
+Runner37328946904 PASS; CI37328957768 PASS. Os 40 testes direcionados passaram no ambiente isolado com yfinance1.7.0. Leitura real via APIs candidatas:
+
+| Ativo | Pontos de histórico | Fundamentos | Latência histórico / fundamentos |
+|---|---:|---:|---|
+| PETR4 | 270 | 33 | 0,63s /0,80s |
+| ITUB4 | 270 | 27 | 0,34s /0,80s |
+| BBDC4 | 270 | 27 | 0,63s /1,10s |
+| VALE3 | 270 | 33 | 0,31s /1,03s |
+
+Séries COTAHIST + Yahoo, fundamentos Yahoo. VALE3 retornou moeda BRL neste snapshot: o caso real comprova disponibilidade; a segregação de moedas USD/BRL foi verificada em teste controlado, não por esse snapshot. Cotação PETR4 observada14:43:43UTC, coleta14:58:43UTC, potencialmente atrasada e não executável. Zero tentativas HTTP BRAPI; quota local bloqueada. Serviço systemd não foi alterado.
+
+Runner37328946825: ingestão de relatórios e validações assíncronas PASS; Qwen drenou4 lotes/4 itens, todos READY, sem falhas, em111,77s. O gate de gráfico falhou porque seu critério ainda limitava a120 dias, enquanto a API entregava corretamente270 sessões na janela395. Não foi falha de ingestão nem de renderização. Correção6d1ecdb valida requested_history_days=395 e deriva dessa janela os limites, mantendo checks de persistência, duplicidade, freshness, timestamps e ausência de cadeia. CI37329813396 e runner37329795381 disparados; conclusão pendente ao registrar este checkpoint.
+
+Aceite visual37324999672 PASS para frontend d79ab6c; alterações2b5d9a8/6d1ecdb não mudam esse frontend. Processo Ubuntu e instalação Windows continuam exigindo confirmação de versão ativa. Dependência yfinance precisa estar instalada no ambiente de produção antes da ativação; restart requer autenticação sudo interativa já observada. E2 Opportunities automática, E4 panorama completo e E5 multi-pernas não são considerados concluídos por estes resultados.
+
+
+## Correção dos gates e conclusão — candidato 0c9d7c8
+
+CI37331054232 PASS; workflow Ubuntu37331045904 PASS completo.
+
+- 6d1ecdb: critério do gráfico deriva de requested_history_days=395, mantendo mínimos, cobertura persistida, duplicidade, freshness e disponibilidade.
+- 44ba979: falha no Qwen não impede o diagnóstico independente dos contratos API, mas continua reprovando o workflow. Flags públicas identificam a categoria do adiamento sem imprimir conteúdo/erro sensível.
+- Runner37330254041 identificou LOCAL_REASONING_BUSY em duas tentativas: três itens READY, um restante. O bloqueio compartilhado foi respeitado; não houve falha terminal do modelo. A exigência anterior de exatamente quatro batches/tentativas desconsiderava o adiamento previsto no contrato da fila.
+- 0c9d7c8: validação espera requests elegíveis após o backoff persistido, por até360 segundos, mantendo lock e schedule de produção. Exige quatro IDs distintos READY, fila vazia, zero FAILED/DEGRADED. Adiamentos intermediários não equivalem a falha quando há conclusão. Este resultado não valida todos os caminhos possíveis de retentativa.
+- Nova execução: quatro lotes/quatro itens READY, nenhum adiamento ou erro, fila vazia,106,71s. A contenda anterior permanece registrada; sucesso posterior não comprova ausência de contenda futura.
+- API candidata PETR4:270 pontos e contrato PASS em0,23s, usando COTAHIST + OPLAB neste ambiente de dependências do runtime. Distinta da validação Yahoo no ambiente isolado37328946904.
+- Contratos Opportunities/Strategy Lab e comparação natural explícita PASS. Opportunities manteve20 candidatos e DEFERRED_INCOMPLETE_CONTEXT: não é prova de busca material automática ou cobertura de todaB3.
+- Screening existente: ranking de volatilidade com universo parcial e diferenças de janela explicitadas; fundamentos indisponíveis neste ambiente. Não declarar resolvida essa cobertura só porque o gate estrutural passa. Duas sínteses sênior retornaram HTTP200 e duas avaliações por alternativa,102,68s e112,61s. Evidência estrutural/econômica, sem aceite qualitativo integral.
+- Verificações HTTP do serviço ativo passaram, mas PETR4 continua85 pontos, sem requested_history_days. Checkout produção485e521; PID51544, início05/10 às10:05:22 SãoPaulo. O processo iniciou antes da atualização anterior de checkout; não inferir SHA carregado a partir desse checkout. Ativação foi SKIPPED neste push. A dependência Yahoo e o restart devem acompanhar a atualização antes de concluir deploy.
+- Windows segue não verificado. E2 automático/universo completo, E4 panorama/fontes completas e E5 multi-pernas continuam abertos. Próximo passo operacional: atualizar produção para o candidato validado, preparar dependências e reiniciar com autenticação sudo; confirmar API de395 dias e fontes depois. Próxima entrega funcional: E2 com seleção material e ciclo automático/manual, sem pesquisa automática de cadeias.
