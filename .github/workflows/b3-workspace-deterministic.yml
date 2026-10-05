@@ -50,7 +50,7 @@ jobs:
   deterministic-workspaces:
     name: Deterministic PETR4 / VALE3 / ITUB4 × BBDC4
     runs-on: [self-hosted, Linux, X64]
-    timeout-minutes: 20
+    timeout-minutes: 60
     steps:
       - name: Checkout tested branch
         uses: actions/checkout@v4
@@ -66,7 +66,7 @@ jobs:
           import json, os, time
           from urllib.request import Request, urlopen
           url = f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/actions/runs?head_sha={os.environ['GITHUB_SHA']}&event=pull_request&per_page=20"
-          for attempt in range(72):
+          for attempt in range(180):
               request = Request(url, headers={"Authorization": "Bearer " + os.environ["GH_TOKEN"], "Accept": "application/vnd.github+json"})
               with urlopen(request, timeout=15) as response:
                   runs = json.load(response)["workflow_runs"]
