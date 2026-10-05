@@ -197,3 +197,25 @@ def test_dividend_fallback_rejects_sibling_ticker_and_missing_module(monkeypatch
         monkeypatch.setattr("urllib.request.urlopen",get)
         with pytest.raises(ValueError,match="exact ticker"):
             BrapiFundamentalsAdapter().get_dividends("BBDC4")
+
+
+def test_financial_report_date_uses_sao_paulo_date_for_utc_timestamp(monkeypatch):
+    payload = {
+        "results": [{
+            "symbol": "ITUB4",
+            "data": {
+                "symbol": "ITUB4",
+                "updatedAt": "2026-10-05T00:23:00.000Z",
+                "financialCurrency": "BRL",
+                "marketCap": 1000,
+            },
+        }]
+    }
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda *args, **kwargs: FakeResponse(payload),
+    )
+
+    records = BrapiFundamentalsAdapter().get_financial_data("ITUB4")
+
+    assert records[0].report_date == date(2026, 10, 4)
