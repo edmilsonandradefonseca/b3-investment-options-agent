@@ -29,6 +29,40 @@ const asArray = (value: unknown): unknown[] => Array.isArray(value) ? value : []
 const asText = (value: unknown): string | null =>
   typeof value === 'string' && value.trim() ? value.trim() : null;
 
+const fundamentalLabels: Record<string, string> = {
+  currentRatio: 'Liquidez corrente',
+  quickRatio: 'Liquidez imediata',
+  debtToEquity: 'Dívida sobre patrimônio líquido',
+  earningsGrowth: 'Crescimento do lucro · TTM',
+  earningsGrowthAnnual: 'Crescimento anual do lucro',
+  freeCashflow: 'Fluxo de caixa livre',
+  operatingCashflow: 'Fluxo de caixa operacional',
+  grossMargins: 'Margem bruta',
+  profitMargins: 'Margem líquida',
+  operatingMargins: 'Margem operacional',
+  grossProfits: 'Lucro bruto',
+  returnOnEquity: 'Retorno sobre patrimônio líquido (ROE)',
+  returnOnAssets: 'Retorno sobre ativos (ROA)',
+  priceEarnings: 'Preço / lucro (P/L)',
+  priceToBook: 'Preço / valor patrimonial (P/VP)',
+  earningsPerShare: 'Lucro por ação (LPA)',
+  marketCap: 'Valor de mercado',
+  dividendYield: 'Dividend yield informado pela fonte',
+};
+const fundamentalLabel = (key: string) =>
+  fundamentalLabels[key] ?? key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/^./, value => value.toUpperCase());
+const fundamentalDisplay = (key: string, metric: Obj | null): string => {
+  const value = numberValue(metric?.value);
+  if (value == null) return 'Sem valor elegível';
+  const unit = asText(metric?.unit);
+  const proportional = /^(earningsGrowth|earningsGrowthAnnual|grossMargins|profitMargins|operatingMargins|returnOnEquity|returnOnAssets|dividendYield)$/i.test(key);
+  if (proportional) return pct(value) ?? 'Indisponível';
+  if (unit === 'ratio') return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}×`;
+  if (unit === 'BRL' || unit === 'BRL/share') return brl(value) ?? 'Indisponível';
+  if (unit === 'percent') return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`;
+  return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 4 })}${unit ? ` ${unit}` : ' · unidade não informada'}`;
+};
+
 const numberValue = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) ? value : null;
 
@@ -99,6 +133,17 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
   const economicRows = asArray(economic?.rows).map(asObject).filter((row):row is Obj=>row!==null);
   const stockPurchase = asObject(result.stock_purchase_comparison);
   const stockPurchaseRows = asArray(stockPurchase?.rows).map(asObject).filter((row):row is Obj=>row!==null);
+  const stockPurchaseByTicker = new Map(stockPurchaseRows.map(row => [asText(row.ticker) ?? '', row]));
+  const stockComparisonTickers = strategyAlternatives.map(item => asText(item.subject_id)).filter((ticker): ticker is string => Boolean(ticker));
+  const stockPurchaseTickers = stockComparisonTickers.length === 2
+    ? stockComparisonTickers
+    : stockPurchaseRows.map(row => asText(row.ticker)).filter((ticker): ticker is string => Boolean(ticker));
+  const historicalComparisons = asArray(stockPurchase?.historical_comparisons).map(asObject).filter((row):row is Obj=>row!==null);
+  const fundamentalComparisons = asArray(stockPurchase?.fundamental_comparisons).map(asObject).filter((row):row is Obj=>row!==null);
+  const fundamentalMetricNames = [...new Set(stockPurchaseRows.flatMap(row => [
+    ...Object.keys(asObject(row.fundamental_metrics) ?? {}),
+    ...asArray(row.excluded_metrics).map(asObject).map(item => asText(item?.metric)).filter((name):name is string => Boolean(name)),
+  ]))].sort((a,b) => fundamentalLabel(a).localeCompare(fundamentalLabel(b), 'pt-BR'));
   const putPair = asObject(result.put_pair_comparison);
   const putPairRows = asArray(putPair?.rows).map(asObject).filter((row):row is Obj=>row!==null);
   const fundedSwitch = asObject(result.funded_switch);
@@ -181,7 +226,55 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
     {summary && <section className="analysis-summary"><h3>Resumo</h3><p>{summary}</p></section>}
 
     {economic&&<section className="analysis-section"><h3>Decisão econômica · compras com capital comparável</h3><p>{economic.ranking==='CONDITIONAL_USER_SCENARIOS_ONLY'?'Preferência condicional ao pior cenário informado':economic.ranking==='TIE'?'Empate nos cenários informados':economic.ranking==='UNKNOWN_INCOMPLETE_INPUTS'?'Dados incompletos: sem preferência líquida':'Comparação sem preferência'} · {asText(economic.horizon)??'Horizonte não informado'}</p><div className="table-wrap"><table><thead><tr><th>Ação / ordem condicional</th><th>Orçamento</th><th>Quantidade inteira</th><th>Compra / custo de entrada</th><th>Caixa residual</th><th>Distribuição observada 365d / preço atual</th></tr></thead><tbody>{economicRows.map(row=><tr key={asText(row.alternative_id)}><td>{asText(row.ticker)} / {numberValue(row.rank)??'—'}</td><td>{brl(numberValue(row.budget_brl))??'UNKNOWN'}</td><td>{numberValue(row.quantity)??'UNKNOWN'}</td><td>{brl(numberValue(row.purchase_notional_brl))??'UNKNOWN'} / {brl(numberValue(row.entry_costs_brl))??'UNKNOWN'}</td><td>{brl(numberValue(row.residual_cash_brl))??'UNKNOWN'}</td><td>{pct(numberValue(row.observed_distribution_yield_365d_fraction))??'UNKNOWN'}<small>Cobertura não comprovada; não é dividend yield futuro</small></td></tr>)}</tbody></table></div><div className="table-wrap"><table><thead><tr><th>Ação / cenário</th><th>Preço terminal</th><th>Dividendos por ação · hipótese</th><th>Custos de saída · hipótese</th><th>Resultado líquido / retorno</th><th>Preço terminal de equilíbrio</th><th>Ganho da alternativa não escolhida</th></tr></thead><tbody>{economicRows.flatMap(row=>asArray(row.scenarios).map(asObject).map((scenario,index)=><tr key={asText(row.alternative_id)+':'+index}><td>{asText(row.ticker)} / {asText(scenario?.name)}</td><td>{brl(numberValue(scenario?.terminal_price_brl))}</td><td>{brl(numberValue(scenario?.user_gross_dividend_per_share_brl))??'UNKNOWN'}</td><td>{brl(numberValue(scenario?.user_exit_costs_brl))??'UNKNOWN'}</td><td>{brl(numberValue(scenario?.net_scenario_pnl_brl))??'UNKNOWN'} / {pct(numberValue(scenario?.net_scenario_return_fraction))??'UNKNOWN'}</td><td>{brl(numberValue(scenario?.breakeven_terminal_price_brl))??'UNKNOWN'}</td><td>{brl(numberValue(scenario?.opportunity_cost_brl))??'UNKNOWN'}</td></tr>))}</tbody></table></div><details><summary>Premissas da decisão</summary><ul>{asStrings(economic.limitations).map((item,index)=><li key={index}>{item}</li>)}</ul></details></section>}
-    {stockPurchase&&<section className="analysis-section"><h3>Compra entre ações · fundamentos e perspectivas</h3><p>Retorno esperado, probabilidade de valorização, dividendos futuros e alvos verificados: UNKNOWN enquanto faltarem evidências qualificadas.</p><p>{stockPurchase.observed_risk_same_window===true?'Histórico com janela comum':'Janelas históricas diferentes: risco observado não define ordem comparativa'}</p><div className="table-wrap"><table><thead><tr><th>Ação / fontes</th><th>Cotação / capital</th><th>Fundamentos observados</th><th>Risco histórico</th><th>Lacunas de previsão</th></tr></thead><tbody>{stockPurchaseRows.map(row=><tr key={asText(row.alternative_id)}><td>{asText(row.ticker)}<small>{asStrings(row.source_refs).join(' · ')}</small></td><td>{brl(numberValue(row.current_price_brl))??'UNKNOWN'} / {brl(numberValue(row.capital_required_brl))??'UNKNOWN'}<small>{when(row.quote_observed_at)}</small></td><td>{Object.entries(asObject(row.fundamental_metrics)??{}).map(([name,value])=>{const metric=asObject(value);return <p key={name}>{name}: {numberValue(metric?.value)??'UNKNOWN'} {asText(metric?.unit)}<small>{asText(metric?.report_date)} · {asText(metric?.period_type)} · {asText(metric?.source)} · {asText(metric?.quality_status)}</small></p>;})}</td><td>Volatilidade 60d: {pct(numberValue(asObject(row.observed_risk)?.volatility_60d))??'UNKNOWN'}<br/>Drawdown: {pct(numberValue(asObject(row.observed_risk)?.max_drawdown))??'UNKNOWN'}</td><td>Retorno / dividendos / preço-alvo: UNKNOWN{asArray(row.excluded_metrics).map(asObject).map((metric,index)=><small key={index}>{asText(metric?.metric)}: {asText(metric?.reason)}</small>)}</td></tr>)}</tbody></table></div><details><summary>Critérios e limitações</summary><ul>{asStrings(stockPurchase.limitations).map((item,index)=><li key={index}>{item}</li>)}</ul></details></section>}
+    {stockPurchase&&<section className="analysis-section stock-pair-comparison">
+      <h3>Comparação de ações · {stockPurchaseTickers.join(' × ') || 'ativos'}</h3>
+      <p>Dados observados até {when(asOf)}. O histórico mostra desempenho passado; não é previsão nem escolhe, sozinho, a melhor compra.</p>
+      <h4>Desempenho histórico lado a lado</h4>
+      <div className="table-wrap"><table aria-label="Desempenho histórico comparável das ações">
+        <thead><tr><th>Período</th>{stockPurchaseTickers.map(ticker=><th key={ticker}>{ticker} · retorno observado</th>)}<th>Diferença entre ativos</th></tr></thead>
+        <tbody>{['1W','1M','3M','6M','1Y'].map(period=>{
+          const comparison=historicalComparisons.find(row=>asText(row.period)===period);
+          const difference=numberValue(comparison?.right_minus_left_return_fraction);
+          return <tr key={period}><th scope="row">{({1W:'1 semana',1M:'1 mês',3M:'3 meses',6M:'6 meses',1Y:'1 ano'} as Record<string,string>)[period]}</th>
+            {stockPurchaseTickers.map(ticker=>{
+              const history=asObject(asObject(stockPurchaseByTicker.get(ticker)?.historical_returns)?.[period]);
+              const observed=numberValue(history?.return_fraction);
+              const status=asText(history?.status);
+              return <td key={ticker}>{observed==null?(status==='INSUFFICIENT_HISTORY'?`Amostra insuficiente · ${numberValue(history?.available_observations)??0}/${numberValue(history?.sessions)??'—'} pregões`:'Indisponível'):<>{pct(observed)}<small>{when(history?.start_at)} a {when(history?.end_at)} · {asText(history?.price_basis)??'base de preço não informada'}</small></>}</td>;
+            })}
+            <td>{asText(comparison?.status)==='COMPARABLE'&&difference!=null?pct(difference):'Sem comparação: janelas ou datas diferentes'}</td>
+          </tr>;
+        })}</tbody>
+      </table></div>
+      <p className="muted">Diferença = retorno de {stockPurchaseTickers[1]??'B'} menos {stockPurchaseTickers[0]??'A'}, somente quando o backend confirma datas comuns.</p>
+      <h4>Fundamentos reportados</h4>
+      <p>{fundamentalComparisons.filter(row=>asText(row.status)==='COMPARABLE').length} de {fundamentalMetricNames.length} métricas têm unidade, período e data compatíveis. A tabela mostra os valores de cada ativo e sinaliza métricas excluídas pelo corte ou sem comparação equivalente.</p>
+      {fundamentalMetricNames.length>0?<div className="table-wrap"><table aria-label="Fundamentos comparados lado a lado">
+        <thead><tr><th>Métrica</th>{stockPurchaseTickers.map(ticker=><th key={ticker}>{ticker}</th>)}<th>Comparabilidade / período</th></tr></thead>
+        <tbody>{fundamentalMetricNames.map(name=>{
+          const comparison=fundamentalComparisons.find(row=>asText(row.metric)===name);
+          const leftMetric=asObject(asObject(stockPurchaseByTicker.get(stockPurchaseTickers[0]??'')?.fundamental_metrics)?.[name]);
+          const rightMetric=asObject(asObject(stockPurchaseByTicker.get(stockPurchaseTickers[1]??'')?.fundamental_metrics)?.[name]);
+          const leftExcluded=asArray(stockPurchaseByTicker.get(stockPurchaseTickers[0]??'')?.excluded_metrics).map(asObject).find(item=>asText(item?.metric)===name);
+          const rightExcluded=asArray(stockPurchaseByTicker.get(stockPurchaseTickers[1]??'')?.excluded_metrics).map(asObject).find(item=>asText(item?.metric)===name);
+          const status=asText(comparison?.status);
+          const periodText=(metric:Obj|null)=>metric?[asText(metric.report_date),asText(metric.period_type)].filter(Boolean).join(' · '):'';
+          const cell=(metric:Obj|null,excluded:Obj|null)=>metric?<>{fundamentalDisplay(name,metric)}<small>{periodText(metric)}{asText(metric.quality_status)==='WARNING'?' · qualidade WARNING: disponibilidade histórica da fonte não comprovada':''}</small></>:excluded?<>{asText(excluded.reason)==='UNQUALIFIED_OR_FUTURE_FUNDAMENTAL'?'Excluída do corte':'Não qualificada'}<small>Data do registro: {asText(excluded.report_date)??'indisponível'} · não usada na comparação</small></>:'Sem dado elegível';
+          return <tr key={name}><th scope="row">{fundamentalLabel(name)}</th><td>{cell(leftMetric,leftExcluded)}</td>{stockPurchaseTickers.length>1&&<td>{cell(rightMetric,rightExcluded)}</td>}<td>{status==='COMPARABLE'?'Comparável':status==='NONCOMPARABLE_OR_MISSING'?'Não comparável: falta dado equivalente ou período/unidade coincide':'Sem par comparável'}</td></tr>;
+        })}</tbody>
+      </table></div>:<p className="muted">Nenhuma métrica fundamental passou pelos critérios de data, unidade e qualidade neste corte.</p>}
+      <h4>Risco histórico observado</h4>
+      <div className="table-wrap"><table aria-label="Risco histórico por ativo"><thead><tr><th>Ativo</th><th>Volatilidade realizada · 60 pregões</th><th>Drawdown máximo observado</th></tr></thead>
+        <tbody>{stockPurchaseTickers.map(ticker=>{const risk=asObject(stockPurchaseByTicker.get(ticker)?.observed_risk);return <tr key={ticker}><th scope="row">{ticker}</th><td>{pct(numberValue(risk?.volatility_60d))??'Indisponível'}</td><td>{pct(numberValue(risk?.max_drawdown))??'Indisponível'}</td></tr>;})}</tbody>
+      </table></div>
+      <p>Retorno futuro, probabilidade de valorização, dividendos futuros e preço-alvo qualificado: indisponíveis sem evidências específicas. A qualidade WARNING informa limites de proveniência; não significa por si só que o valor esteja incorreto.</p>
+      <details><summary>Fontes, métricas excluídas e limitações</summary>
+        <ul>{stockPurchaseRows.map(row=><li key={asText(row.ticker)}>{asText(row.ticker)} · fontes: {asStrings(row.source_refs).join(' · ')||'indisponíveis'}</li>)}
+          {stockPurchaseRows.flatMap(row=>asArray(row.excluded_metrics).map(asObject).map((item,index)=><li key={`${asText(row.ticker)}:${asText(item?.metric)}:${index}`}>{asText(row.ticker)} · {fundamentalLabel(asText(item?.metric)??'Métrica')} · registro {asText(item?.report_date)??'sem data'} excluído do corte.</li>))}
+          {asStrings(stockPurchase.limitations).map((item,index)=><li key={`limit:${index}`}>{item}</li>)}
+        </ul>
+      </details>
+    </section>}
     {stockPurchase&&stockPurchaseRows.map(row=>{const dividends=asObject(row.dividends);return dividends&&<section className="analysis-section" key={'dividends:'+asText(row.alternative_id)}><h3>Dividendos e JCP · {asText(row.ticker)}</h3><p>Coleta: {asText(dividends.collection_status)} · cobertura da fonte não comprovada</p><p>Pagamentos observados em 365 dias por ação, bruto: {brl(numberValue(dividends.observed_paid_365d_gross_per_share_brl))??'UNKNOWN'} · Anunciados com data-com futura, condicionais: {brl(numberValue(dividends.announced_conditional_gross_per_share_brl))??'UNKNOWN'}</p><div className="table-wrap"><table><thead><tr><th>Tipo / valor bruto por ação</th><th>Anúncio</th><th>Data-com / ex</th><th>Pagamento</th><th>Elegibilidade de nova compra</th><th>Fonte / qualidade</th></tr></thead><tbody>{asArray(dividends.events).map(asObject).map((event,index)=><tr key={index}><td>{asText(event?.payment_type)} / {brl(numberValue(event?.gross_amount_per_share_brl))??'UNKNOWN'}</td><td>{asText(event?.announcement_date)??'UNKNOWN'}</td><td>{asText(event?.record_date)??'UNKNOWN'} / {asText(event?.ex_date)??'UNKNOWN'}</td><td>{asText(event?.payment_date)??'UNKNOWN'}<small>{asText(event?.payment_status)}</small></td><td>{event?.new_purchase_entitlement==='EXCLUDED_FOR_NEW_PURCHASE'?'Data-com passada · excluído para nova compra':event?.new_purchase_entitlement==='CONDITIONAL_FUTURE_RECORD_DATE'?'Condicional · data-com futura':'UNKNOWN'}</td><td>{asText(event?.source)} · {asText(event?.quality_status)}<small>{asText(event?.source_record_id)}</small></td></tr>)}</tbody></table></div><details><summary>Premissas e exclusões</summary><ul>{asStrings(dividends.limitations).map((item,index)=><li key={index}>{item}</li>)}{asArray(dividends.exclusions).map(asObject).map((item,index)=><li key={'excluded:'+index}>{asText(item?.source_record_id)} · {asText(item?.reason)}</li>)}</ul></details></section>;})}
     {stockPurchase&&stockPurchaseRows.map(row=>{const targets=asObject(row.institution_targets);return targets&&<section className="analysis-section" key={'targets:'+asText(row.alternative_id)}><h3>Preços-alvo institucionais · {asText(row.ticker)}</h3><p>{asText(targets.status)} · opiniões das instituições, sem consenso ou retorno esperado inferido</p><div className="table-wrap"><table><thead><tr><th>Instituição</th><th>Preço-alvo</th><th>Publicação</th><th>Horizonte</th><th>Fonte</th></tr></thead><tbody>{asArray(targets.rows).map(asObject).map((target,index)=><tr key={index}><td>{asText(target?.institution)}</td><td>{brl(numberValue(target?.price_brl))}</td><td>{when(target?.published_at)}</td><td>{asText(target?.horizon_date)}</td><td>{asText(target?.source_url)}<small>{asText(target?.document_id)}</small></td></tr>)}</tbody></table></div><ul>{asStrings(targets.limitations).map((item,index)=><li key={index}>{item}</li>)}</ul></section>;})}
     {putPair&&<section className="analysis-section"><h3>Duas PUTs · prêmio, risco e prazo</h3><p>{putPair.ranking==='NOT_REQUESTED'?'Comparação sem vencedor':putPair.ranking==='TIE'?'Empate no objetivo informado':putPair.ranking==='UNKNOWN_OBJECTIVE_INPUTS'?'Dados insuficientes para ordenar':'Ordem condicionada ao objetivo informado'} · {putPair.objective==='LOWEST_MODEL_EXPIRY_ITM'?'menor estimativa de ITM no próprio vencimento':putPair.objective==='HIGHEST_GROSS_PREMIUM_PER_CAPITAL_30D'?'maior prêmio bruto por capital normalizado a 30 dias':'prêmio, risco e prazo'}</p>{putPair.different_expiries===true&&<p className="muted">Vencimentos distintos: riscos cobrem prazos diferentes. Os cenários terminais não definem um vencedor comum.</p>}<div className="table-wrap"><table><thead><tr><th>Ordem condicional</th><th>Contrato</th><th>Vencimento / dias</th><th>Bid / ask · volume / OI</th><th>Prêmio bruto</th><th>Capital</th><th>Ação / strike / break-even</th><th>Margem até strike / break-even</th><th>Perda máxima pré-custos</th><th>Prêmio/capital · 30 dias</th><th>ITM / toque · modelo</th><th>Exercício antecipado</th></tr></thead><tbody>{putPairRows.map(row=><tr key={asText(row.option_id)}><td>{numberValue(row.rank)??'—'}</td><td>{asText(row.option_id)} · {asText(row.underlying_ticker)}</td><td>{asText(row.expiration_date)} / {numberValue(row.days_to_expiration)}</td><td>{brl(numberValue(row.bid))} / {brl(numberValue(row.ask))??'UNKNOWN'} · {numberValue(row.volume)??'UNKNOWN'} / {numberValue(row.open_interest)??'UNKNOWN'}<small>{when(row.quote_observed_at)}</small></td><td>{brl(numberValue(row.premium_total_one_contract_brl))}</td><td>{brl(numberValue(row.capital_required_one_contract_brl))}</td><td>{brl(numberValue(row.underlying_price))??'UNKNOWN'} / {brl(numberValue(row.strike))} / {brl(numberValue(row.breakeven_price))}</td><td>{pct(numberValue(row.downside_to_strike_fraction))??'UNKNOWN'} / {pct(numberValue(row.breakeven_cushion_fraction))??'UNKNOWN'}</td><td>{brl(numberValue(row.maximum_loss_one_contract_before_costs_brl))}</td><td>{numberValue(row.gross_premium_per_capital_30d_pct)?.toFixed(3)}%</td><td>{numberValue(row.expiry_itm_probability)===null?'UNKNOWN':pct(numberValue(row.expiry_itm_probability))} / {numberValue(row.touch_probability)===null?'UNKNOWN':pct(numberValue(row.touch_probability))}</td><td>{row.exercise_style==='EUROPEAN'?'Europeia, conforme provedor':'UNKNOWN · estilo americano ou não informado'}</td></tr>)}</tbody></table></div><p className="muted">Estimativas não calibradas; custos e retorno líquido esperado permanecem UNKNOWN.</p><details><summary>Premissas e limitações</summary><ul>{asStrings(putPair.limitations).map((item,index)=><li key={index}>{item}</li>)}</ul></details></section>}
