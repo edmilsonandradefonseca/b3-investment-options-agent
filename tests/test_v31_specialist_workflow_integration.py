@@ -66,6 +66,7 @@ def test_full_specialist_path_preserves_deterministic_analysis(tmp_path: Path):
 
     result = workflow.invoke({
         "user_question": "PETR4 investment thesis valuation",
+        "lab_conversation": [{"question": "E se cair 5%?", "response": {"summary": "Hipótese anterior"}}],
         "portfolio_context": {"quality_status": "VALIDATED"},
         "market_analysis": {"deterministic": "market-fact"},
         "options_analysis": {"deterministic": "options-fact"},
@@ -98,6 +99,8 @@ def test_full_specialist_path_preserves_deterministic_analysis(tmp_path: Path):
     assert '"portfolio_agent_analysis"' in synthesis_input
     assert '"options_agent_analysis"' in synthesis_input
     assert '"market-fact"' in synthesis_input
+    assert "HISTORICAL_CONVERSATION_NOT_CURRENT_FACTS" in synthesis_input
+    assert "E se cair 5%?" in synthesis_input
 
     decision_input = next(call["input_text"] for call in llm.calls if call["schema_name"] == "investment_decision")
     assert '"synthesis"' in decision_input
