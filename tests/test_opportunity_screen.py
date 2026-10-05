@@ -86,11 +86,85 @@ def test_portfolio_union_preserves_short_and_outside_classification(monkeypatch)
     assert all(r['rank'] is None for r in rows.values())
 
 
-@pytest.mark.parametrize('objective,tickers', [('invented',['ITUB4']),('COMPARE_ONLY',['WWEGE3']),('COMPARE_ONLY',[f'AAAA{i}' for i in range(21)])])
-def test_invalid_objectives_symbols_and_oversized_universe_fail_before_providers(objective,tickers):
+@pytest.mark.parametrize('objective,tickers', [('invented',['ITUB4']),('COMPARE_ONLY',['WWEGE3'])])
+def test_invalid_objectives_and_symbols_fail_before_providers(objective,tickers):
     screen,provider=service({})
     with pytest.raises(ValueError): screen.build(tickers,objective=objective)
     assert provider.quote_calls==0
+
+
+def test_complete_candidate_and_portfolio_union_has_no_twenty_asset_ceiling():
+    candidates=[f'AAAA{index}' for index in range(1,22)]
+    records={ticker:history(ticker) for ticker in candidates}
+    portfolio=PortfolioContext(as_of=date(2026,10,2),positions=(
+        Position(position_id='held-1',ticker='BBBB1',instrument_type='STOCK',quantity=100),
+        Position(position_id='held-2',ticker='CCCC1',instrument_type='STOCK',quantity=50),
+    ))
+    records.update({'BBBB1':history('BBBB1'),'CCCC1':history('CCCC1')})
+    screen,_=service(records)
+
+    result=screen.build(candidates,include_portfolio=True,portfolio=portfolio)
+
+    requested=result['opportunity_screen']['requested_universe']
+    assert len(requested)==23
+    assert requested[:len(candidates)]==candidates
+    assert set(requested[-2:])=={'BBBB1','CCCC1'}
+    assert len(result['opportunity_screen']['rows'])==23
+    assert result['opportunity_screen']['portfolio_scope']['status']=='INCLUDED'
+
+
+def test_missing_portfolio_keeps_candidate_analysis_and_marks_portfolio_gap(monkeypatch):
+    monkeypatch.setattr('b3_agent.opportunity_screen.load_active_snapshots',lambda *_:{})
+    screen,_=service({'ITUB4':history('ITUB4')})
+
+    result=screen.build(['ITUB4'],include_portfolio=True,portfolio=None)
+
+    assert result['opportunity_screen']['requested_universe']==['ITUB4']
+    assert result['opportunity_screen']['portfolio_scope']['status']=='UNAVAILABLE'
+    assert 'CURRENT_PORTFOLIO_UNAVAILABLE' in result['opportunity_screen']['limitations'][-1]
+    assert result['opportunity_screen']['rows'][0]['portfolio']['held'] is None
+
+
+def test_opportunity_context_exposes_open_option_and_covered_call_exposure():
+    records={'AAAA1':history('AAAA1')}
+    portfolio=PortfolioContext(as_of=date(2026,10,2),positions=(
+        Position(position_id='stock',ticker='AAAA1',instrument_type='STOCK',quantity=50),
+        Position(position_id='put',ticker='AAAA1P2610',instrument_type='OPTION',quantity=-2,
+            strike=10,expiration_date=date(2026,10,16),option_type='PUT',underlying_ticker='AAAA1',contract_multiplier=100),
+        Position(position_id='call',ticker='AAAA1C2610',instrument_type='OPTION',quantity=-1,
+            strike=15,expiration_date=date(2026,10,16),option_type='CALL',underlying_ticker='AAAA1',contract_multiplier=100),
+    ))
+    screen,_=service(records)
+
+    row=screen.build(['AAAA1'],include_portfolio=True,portfolio=portfolio)['opportunity_screen']['rows'][0]
+
+    assert row['portfolio']['open_option_count']==2
+    assert row['portfolio']['short_put_assignment_capital_brl']==2000
+    assert row['portfolio']['short_call_units']==100
+    assert row['portfolio']['covered_call_units']==50
+    assert row['portfolio']['covered_call_status']=='PARTIALLY_COVERED'
+    assert {item['option_type'] for item in row['portfolio']['open_options']}=={'PUT','CALL'}
+
+
+def test_option_only_underlying_is_context_and_never_ranked_as_discovery():
+    records={ticker:history(ticker) for ticker in ('ITUB4','BBDC4','PETR4')}
+    portfolio=PortfolioContext(as_of=date(2026,10,2),positions=(
+        Position(position_id='put',ticker='PETRK300',instrument_type='OPTION',quantity=-1,
+            strike=30,expiration_date=date(2026,10,16),option_type='PUT',underlying_ticker='PETR4',contract_multiplier=100),
+    ))
+    screen,_=service(records)
+
+    result=screen.build(['ITUB4','BBDC4'],objective='LOWEST_REALIZED_VOLATILITY_60D',
+        include_portfolio=True,portfolio=portfolio)
+
+    output=result['opportunity_screen']
+    assert output['portfolio_option_underlying_universe']==['PETR4']
+    context_row=next(row for row in output['rows'] if row['ticker']=='PETR4')
+    assert context_row['scope_role']=='OPTION_UNDERLYING_CONTEXT'
+    assert context_row['discovery_eligible'] is False
+    assert context_row['rank'] is None
+    assert context_row['portfolio']['open_option_count']==1
+    assert output['ranked_count']==2
 
 
 def test_http_deterministic_screen_never_configures_senior(monkeypatch):
