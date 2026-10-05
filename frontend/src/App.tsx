@@ -192,6 +192,7 @@ export default function App(){
    const finishedAt=new Date().toISOString();
    const responseResult=response?.result&&typeof response.result==='object'?response.result:{};
    const failed=!response||Boolean(response.error)||Object.keys(responseResult).length===0||responseResult.derived_synthesis_status==='FAILED';
+   if(!failed)setWorkspaceResults(previous=>({...previous,Opportunities:response}));
    const sourceRefs=responseResult.source_refs;
    const sources=Array.from(new Set(response?[...(response.sources??[]),...(Array.isArray(sourceRefs)?sourceRefs:[])]:workspaceResults.Opportunities?.sources??[])).filter(Boolean);
    setOpportunityRun(previous=>({...previous,status:failed?'error':'complete',finishedAt,sources,message:failed?'A nova busca não concluiu normalmente. A análise anterior foi preservada; confira as lacunas e tente novamente.':null}));
