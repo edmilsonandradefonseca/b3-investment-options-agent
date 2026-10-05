@@ -153,3 +153,17 @@ Fonte normativa: `main/docs/ARCHITECTURE_V4.4.md` e `main/docs/FRONTEND_DECISION
 - O frontend candidate passou no runner, mas não foi instalado no Windows. A API Ubuntu ativa continua em estado separado do checkout; esta entrega não reiniciou nem alterou `b3-runtime.service`.
 
 Próximo bloco conforme sequência aprovada: desenhar/implementar OPP-01 e OPP-04 completos sobre o contrato backend, incluindo snapshot vigente e universo com lotes/coorte global sem truncamento, materialidade determinística/sênior, status consultável e atualização manual idempotente. Não ativar busca ampla até demonstrar orçamento/latência e cobertura no runner.
+
+
+## Implementação em curso — OPP-02/OPP-06: escopo íntegro de carteira, 05/10/2026
+
+Este registro atualiza o diagnóstico antigo acima, que descrevia o checkbox e teto de 20 ativos observados antes desta revisão. Fonte funcional normativa permanece `FRONTEND_DECISION_WORKSPACES_SPEC_V1.2.md`; opções em Opportunities são apenas contexto e não acionam chain.
+
+- O frontend removeu o opt-in de carteira: toda busca manual envia `include_portfolio_stocks=true`, mantém os candidatos acompanhados e explica que opções abertas são contexto.
+- `StockOpportunityScreenService` une candidatos com todos os tickers de ações do snapshot vigente, sem truncamento de 20, e consulta ativos com até quatro trabalhadores concorrentes. Ordem de apresentação permanece estável. Erro por ativo é localizado; falha de snapshot não apaga a análise dos candidatos e sinaliza `CURRENT_PORTFOLIO_UNAVAILABLE`.
+- Opções do snapshot entram como contexto em cada ativo-objeto. Underlyings existentes somente em opções também são consultados para compor a exposição, recebem `OPTION_UNDERLYING_CONTEXT` e são excluídos do ranking de descoberta. O fluxo não solicita cadeias.
+- Detalhe exibe quantidade de ações, opções abertas, obrigação de PUT vendida com strike/multiplicador observados e cobertura de CALL vendida. Termos ausentes não são convertidos em zero; não há multiplicador fixo presumido.
+- IDs rastreados: `OPP-02` PARTIAL (lista/detalhe com exposição; decisão material, seleção persistida e apresentação do agente ainda faltam); `OPP-04` PARTIAL (universo de ações observado sem truncamento de carteira, mas sem seleção material/coorte ampla); `OPP-06` PARTIAL (contexto de posições e ausência de chain cobertos estruturalmente; aceite com carteira real pendente). `OPP-01` segue MISSING. O status amarelo/verde/vermelho é somente refresh manual existente.
+- Testes adicionados para união de 23 ativos sem teto, snapshot ausente com continuidade e exposição de PUT/CALL incluindo ativo-objeto somente de opção. Validação backend/frontend ainda precisa rodar neste candidato; não declarar aceite do runner/produção.
+
+Próximos gates: validar build e suíte de domínio; resolver/diagnosticar o teste HTTP que pendura no Python local; rodar CI em Python suportado; executar cenário do runner com snapshot vigente sanitizado; então revisar custo/latência e fechar uma seleção material versionada antes de implementar análise automática OPP-01.
