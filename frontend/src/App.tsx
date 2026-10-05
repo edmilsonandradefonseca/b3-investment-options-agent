@@ -44,6 +44,18 @@ function isOperationalStatusQuestion(task:string){
  return /^(vc |voce |copilot |sistema )?(esta|ta) (on|online|conectado|funcionando)$/.test(normalized)
    || /^(status|status do sistema|esta conectado|esta funcionando)$/.test(normalized);
 }
+function isCompletedOpportunityReview(response:OrchestrateResponse|null|undefined):boolean{
+ if(!response||response.error)return false;
+ const result=response.result as Record<string,unknown>|undefined;
+ if(!result||result.derived_synthesis_status!=='COMPLETED')return false;
+ const screen=result.opportunity_screen&&typeof result.opportunity_screen==='object'?result.opportunity_screen as Record<string,unknown>:{};
+ const scope=result.opportunity_research_scope&&typeof result.opportunity_research_scope==='object'?result.opportunity_research_scope as Record<string,unknown>:{};
+ const synthesis=result.synthesis&&typeof result.synthesis==='object'?result.synthesis as Record<string,unknown>:{};
+ const rawProposal=result.decision_proposal??result.proposal;
+ const proposal=rawProposal&&typeof rawProposal==='object'?rawProposal as Record<string,unknown>:{};
+ const narrative=[synthesis.summary,proposal.thesis,proposal.rationale,result.summary].find(value=>typeof value==='string'&&value.trim().length>0);
+ return typeof screen.policy_version==='string'&&typeof scope.policy_version==='string'&&typeof narrative==='string';
+}
 export default function App(){
  const inspectionSequence=useRef(0), expectedHash=useRef<string|null>(null), opportunitySearchInFlight=useRef(false), opportunityAutoReviews=useRef(new Set<string>()), opportunityReviewSequence=useRef(0);
  const [copilotOpen,setCopilotOpen]=useState(true),[sidebarCollapsed,setSidebarCollapsed]=useState(false),[marketTab,setMarketTab]=useState('regime');
@@ -147,7 +159,7 @@ export default function App(){
       setOnline(true);
       return r;
     }
-    if(!conversation&&context.analysis_mode!=='deterministic'&&['Opportunities','Strategy Lab'].includes(page)){
+    if(!conversation&&context.analysis_mode!=='deterministic'&&page==='Strategy Lab'){
     deterministicResult=await b3Api.orchestrate({task,ticker:requestTicker,context:{...context,analysis_mode:'deterministic',research_mode:'stored_only'}});
     if(!current())return null;
       if(deterministicResult.result&&typeof deterministicResult.result==='object')setAnalysis({...deterministicResult,result:{...deterministicResult.result,derived_synthesis_status:'PENDING'}});
@@ -155,17 +167,20 @@ export default function App(){
     const r=await b3Api.orchestrate({task,ticker:requestTicker,context});
     if(!current())return null;
     const hasResult=!!r.result&&typeof r.result==='object'&&!Array.isArray(r.result);
-    const apiError=r.error||(!hasResult?'A API concluiu a requisição sem retornar resultado.':null);
+    const opportunityIncomplete=!conversation&&page==='Opportunities'&&!isCompletedOpportunityReview(r);
+    const apiError=r.error||(!hasResult?'A API concluiu a requisição sem retornar resultado.':opportunityIncomplete?'A revisão não entregou a síntese integrada e a cobertura de pesquisa esperadas.':null);
     if(conversation){
       setChat(v=>v.map((item,index)=>index===pendingIndex?{...item,r}:item));
     }else{
       const hasDeterministicResult=!!deterministicResult?.result&&typeof deterministicResult.result==='object';
       const displayed:OrchestrateResponse=apiError&&hasDeterministicResult?{...deterministicResult!,error:apiError}:r;
-      if(!apiError||!options?.preservePrevious||hasDeterministicResult)setAnalysis({...displayed,result:{...(displayed.result||{}),derived_synthesis_status:apiError?'FAILED':context.analysis_mode==='deterministic'?'NOT_REQUESTED':'COMPLETED'}});
+      const priorOpportunity=page==='Opportunities'&&options?.preservePrevious===true&&workspaceResults.Opportunities!==null&&workspaceResults.Opportunities!==undefined;
+      const serverSynthesisStatus=typeof displayed.result?.derived_synthesis_status==='string'?displayed.result.derived_synthesis_status:context.analysis_mode==='deterministic'?'NOT_REQUESTED':'COMPLETED';
+      if(!priorOpportunity||!apiError)setAnalysis({...displayed,result:{...(displayed.result||{}),derived_synthesis_status:apiError?'FAILED':serverSynthesisStatus}});
       if(apiError)setNotice(`Análise: ${apiError}`);
     }
     setOnline(true);
-    return r;
+    return apiError?null:r;
   }catch(e){
     if(!current())return null;
     const message=err(e);
@@ -191,7 +206,7 @@ export default function App(){
    const response=await run(`UC-03: revise ${assets.join(', ')} e todas as ações vigentes da carteira para identificar teses materiais que merecem atenção agora. Considere opções já possuídas somente como exposição e cobertura; não busque cadeia de opções. Explique por que cada tese importa, evidências favoráveis e contrárias, impacto conhecido na carteira e o que mudaria a leitura. Separar oportunidade de ação de item para acompanhar; não transforme risco ou liquidez observados em previsão de retorno nem em recomendação automática.`,false,{ticker:null,preservePrevious:true,context:{workspace:'Opportunities',selected_ticker:null,opportunity_assets:assets,opportunity_objective:opportunityObjective,include_portfolio_stocks:true,research_mode:researchMode}});
    const finishedAt=new Date().toISOString();
    const responseResult=response?.result&&typeof response.result==='object'?response.result:{};
-   const failed=!response||Boolean(response.error)||Object.keys(responseResult).length===0||responseResult.derived_synthesis_status==='FAILED';
+   const failed=!response||Boolean(response.error)||Object.keys(responseResult).length===0||!isCompletedOpportunityReview(response);
    if(!failed)setWorkspaceResults(previous=>({...previous,Opportunities:response}));
    const sourceRefs=responseResult.source_refs;
    const sources=Array.from(new Set(response?[...(response.sources??[]),...(Array.isArray(sourceRefs)?sourceRefs:[])]:workspaceResults.Opportunities?.sources??[])).filter(Boolean);
@@ -221,7 +236,7 @@ export default function App(){
    .then(response=>{
     if(reviewSequence!==opportunityReviewSequence.current)return;
     const result=response?.result&&typeof response.result==='object'?response.result:{};
-    const failed=!response||Boolean(response.error)||Object.keys(result).length===0||result.derived_synthesis_status==='FAILED';
+    const failed=!response||Boolean(response.error)||Object.keys(result).length===0||!isCompletedOpportunityReview(response);
     const finishedAt=new Date().toISOString();
     if(!failed)setWorkspaceResults(previous=>({...previous,Opportunities:response}));
     const sourceRefs=result.source_refs;

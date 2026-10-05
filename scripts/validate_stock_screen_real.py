@@ -55,6 +55,7 @@ def _safe_symbol_profile(data):
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--senior',action='store_true')
+    parser.add_argument('--opportunities-senior',action='store_true')
     args=parser.parse_args()
     pid=subprocess.check_output(['systemctl','show','b3-runtime.service','--property=MainPID','--value'],text=True,timeout=10).strip()
     assert pid.isdecimal() and int(pid)>0
@@ -146,6 +147,52 @@ def main():
         assert all(row['expected_return'] is None for row in screen['rows'])
         print(json.dumps({'case':'stock_screen','objective':objective,'status':screen['status'],'elapsed_ms':round((monotonic()-started)*1000,1),'candidate_count':len(screen['candidate_universe']),'portfolio_stock_count':len(screen['portfolio_stock_universe']),'option_position_count':screen['portfolio_scope']['option_position_count'],'option_underlying_context_count':len(screen['portfolio_option_underlying_universe']),'requested_universe_count':len(screen['requested_universe']),'ranked_count':screen['ranked_count'],'llm_calls':0,'real_portfolio_union':'PASS' if include_portfolio else 'NOT_REQUESTED'}),flush=True)
         write_private_report(Path.home()/'.local/share/b3-investment-options-agent/live-validation/stock-screen'/objective,{'instance':'candidate ASGI with real production inputs','request':request,'response':data})
+    if args.opportunities_senior:
+        request={
+            'task':'UC-03: faça a revisão integrada das ações acompanhadas e de toda a carteira vigente. Use a triagem determinística, contexto de ações/opções já possuídas, alvos institucionais e pesquisa permitida. Traga uma síntese sênior não vazia; se nenhuma tese for material, explique a cobertura, evidências e o motivo, sem inferir ausência a partir de falha. Não consulte cadeia de opções nem invente retorno, recomendação ou probabilidade.',
+            'ticker':None,
+            'context':{'workspace':'Opportunities','selected_ticker':None,'opportunity_assets':assets,
+                'opportunity_objective':'LOWEST_REALIZED_VOLATILITY_60D','include_portfolio_stocks':True,
+                'research_mode':'stored_only'},
+        }
+        started=monotonic()
+        response=client.post('/orchestrate',json=request,timeout=240)
+        data=response.json()
+        result=data.get('result') or {}
+        screen=result.get('opportunity_screen') or {}
+        scope=result.get('opportunity_research_scope') or {}
+        synthesis=result.get('synthesis') or {}
+        proposal=result.get('decision_proposal') or result.get('proposal') or {}
+        narrative=next((value for value in (synthesis.get('summary'),proposal.get('thesis'),proposal.get('rationale'),result.get('summary')) if isinstance(value,str) and value.strip()),None)
+        assert response.status_code==200 and not data.get('error'), 'Integrated Opportunities request failed'
+        assert result.get('derived_synthesis_status')=='COMPLETED', 'Opportunities screen did not complete senior synthesis'
+        assert narrative, 'Opportunities returned no usable senior conclusion'
+        assert screen.get('candidate_universe')==assets
+        assert set(screen.get('requested_universe') or [])==expected_union, 'Integrated screen lost candidate/portfolio/option exposure coverage'
+        assert len(screen.get('rows') or [])==len(expected_union)
+        assert scope.get('policy_version')=='B3_OPPORTUNITY_RESEARCH_ENRICHMENT_V1'
+        option_only=expected_option_underlyings-expected_stock_tickers-set(assets)
+        eligible_count=len(expected_union-option_only)
+        assert scope.get('screened_stock_count')==eligible_count
+        assert len(scope.get('context_tickers') or [])<=8
+        assert scope.get('contextual_research_count')==len(scope.get('context_tickers') or [])
+        assert scope.get('screened_stock_count')==scope.get('contextual_research_count',0)+scope.get('deterministic_only_count',0)
+        assert scope.get('status') in {'COMPLETE','PARTIAL'}
+        material=screen.get('material_candidates') or []
+        assert all(item.get('why_now') and item.get('evidence_refs') for item in material), 'Material review item lacks thesis/evidence provenance'
+        telemetry=result.get('telemetry') or {}
+        elapsed=round((monotonic()-started)*1000,1)
+        write_private_report(Path.home()/'.local/share/b3-investment-options-agent/live-validation/stock-screen/opportunities-integrated',{
+            'instance':'candidate ASGI with current portfolio snapshot; real integrated Opportunities synthesis',
+            'request':request,'response':data,
+        })
+        print(json.dumps({'case':'opportunities_integrated','status':'PASS','elapsed_ms':elapsed,
+            'synthesis_status':result.get('derived_synthesis_status'),'narrative_present':True,
+            'candidate_count':len(screen.get('candidate_universe') or []),'portfolio_stock_count':len(screen.get('portfolio_stock_universe') or []),
+            'option_underlying_count':len(screen.get('portfolio_option_underlying_universe') or []),
+            'requested_universe_count':len(screen.get('requested_universe') or []),'research_context_count':scope.get('contextual_research_count'),
+            'deterministic_only_count':scope.get('deterministic_only_count'),'material_review_count':len(material),
+            'source_count':len(data.get('sources') or []),'telemetry_keys':sorted(telemetry.keys())}),flush=True)
     long_position=next((position for position in portfolio.positions if position.instrument_type.upper()=='STOCK' and position.quantity>=1), None)
     assert long_position is not None, 'No admissible long stock position for funded switch acceptance'
     sell=long_position.ticker

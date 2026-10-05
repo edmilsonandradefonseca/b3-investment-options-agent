@@ -165,7 +165,7 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/src
         run: |
-          timeout 300s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_stock_screen_real.py
+          timeout 300s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_stock_screen_real.py --opportunities-senior
           timeout 300s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_economic_decision_real.py --senior
 
       - name: Update and restart the prepared Ubuntu runtime
