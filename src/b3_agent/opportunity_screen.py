@@ -71,15 +71,35 @@ class StockOpportunityScreenService:
         candidates = list(dict.fromkeys(_validated_equity_ticker(t) for t in tickers))
         portfolio_stock_tickers = []
         portfolio_option_underlying_tickers = []
+        unresolved_stock_position_count = 0
+        unresolved_option_underlying_count = 0
+
+        def canonical_position_ticker(position):
+            raw = (position.underlying_ticker
+                if position.instrument_type.upper() == 'OPTION' and position.underlying_ticker
+                else position.ticker)
+            try:
+                return _validated_equity_ticker(raw)
+            except (TypeError, ValueError):
+                return None
+
         if portfolio is not None and include_portfolio:
-            portfolio_stock_tickers = list(dict.fromkeys(
-                _validated_equity_ticker(p.ticker) for p in portfolio.positions
-                if p.instrument_type.upper() == 'STOCK'
-            ))
-            portfolio_option_underlying_tickers = list(dict.fromkeys(
-                _validated_equity_ticker(p.underlying_ticker) for p in portfolio.positions
-                if p.instrument_type.upper() == 'OPTION' and p.underlying_ticker
-            ))
+            for position in portfolio.positions:
+                instrument_type = position.instrument_type.upper()
+                if instrument_type == 'STOCK':
+                    ticker = canonical_position_ticker(position)
+                    if ticker is None:
+                        unresolved_stock_position_count += 1
+                    else:
+                        portfolio_stock_tickers.append(ticker)
+                elif instrument_type == 'OPTION':
+                    ticker = canonical_position_ticker(position)
+                    if ticker is None:
+                        unresolved_option_underlying_count += 1
+                    else:
+                        portfolio_option_underlying_tickers.append(ticker)
+            portfolio_stock_tickers = list(dict.fromkeys(portfolio_stock_tickers))
+            portfolio_option_underlying_tickers = list(dict.fromkeys(portfolio_option_underlying_tickers))
         universe = list(candidates)
         if include_portfolio and portfolio is not None:
             universe.extend(portfolio_stock_tickers)
@@ -151,7 +171,9 @@ class StockOpportunityScreenService:
             quant = asdict(compute_quant_features(eligible, as_of=cutoff)) if eligible else {}
             quote = quote if quote is not None and _admissible(quote, ticker, cutoff) and isinstance(quote.close, (int, float)) and not isinstance(quote.close, bool) and math.isfinite(quote.close) and quote.close > 0 else None
             funds = [r for r in fundamentals if _admissible(r, ticker, cutoff) and isinstance(r.value, (int, float)) and not isinstance(r.value, bool) and math.isfinite(r.value)]
-            positions = [] if portfolio is None or portfolio.as_of > cutoff.date() else [p for p in portfolio.positions if (p.underlying_ticker if p.instrument_type.upper() == 'OPTION' and p.underlying_ticker else p.ticker).upper() == ticker]
+            positions = [] if portfolio is None or portfolio.as_of > cutoff.date() else [
+                p for p in portfolio.positions if canonical_position_ticker(p) == ticker
+            ]
             portfolio_known = portfolio is not None and portfolio.as_of <= cutoff.date()
             stock_positions = [p for p in positions if p.instrument_type.upper() == 'STOCK']
             option_positions = [p for p in positions if p.instrument_type.upper() == 'OPTION']
@@ -259,13 +281,25 @@ class StockOpportunityScreenService:
             'Assets with different objective observation windows are not silently compared.']
         if include_portfolio and portfolio is None:
             limitations.append('CURRENT_PORTFOLIO_UNAVAILABLE: candidate analysis completed, but portfolio positions and option exposure could not be joined to this run.')
+        unresolved_position_count = unresolved_stock_position_count + unresolved_option_underlying_count
+        if include_portfolio and unresolved_position_count:
+            limitations.append(
+                f'UNRESOLVED_PORTFOLIO_IDENTITY: {unresolved_position_count} position(s) have no valid B3 equity ticker identity and were not joined to an asset; portfolio coverage is partial.'
+            )
         if historical:
             limitations.append('Historical replay excludes current quotes, fundamentals and the current portfolio snapshot.')
         portfolio_scope = {
-            'status': 'INCLUDED' if portfolio is not None and include_portfolio else 'UNAVAILABLE' if include_portfolio else 'NOT_REQUESTED',
+            'status': (
+                'UNAVAILABLE' if include_portfolio and portfolio is None else
+                'NOT_REQUESTED' if not include_portfolio else
+                'PARTIAL' if unresolved_position_count else 'INCLUDED'
+            ),
             'snapshot_as_of': portfolio.as_of if portfolio is not None and include_portfolio else None,
             'stock_ticker_count': len(portfolio_stock_tickers),
             'option_position_count': sum(p.instrument_type.upper() == 'OPTION' for p in portfolio.positions) if portfolio is not None and include_portfolio else None,
+            'unresolved_identity_position_count': unresolved_position_count if portfolio is not None and include_portfolio else None,
+            'unresolved_stock_position_count': unresolved_stock_position_count if portfolio is not None and include_portfolio else None,
+            'unresolved_option_underlying_count': unresolved_option_underlying_count if portfolio is not None and include_portfolio else None,
         }
         return {'as_of':cutoff, 'opportunity_screen':{'policy_version':POLICY, 'objective':objective, 'metric':metric, 'direction':direction, 'status':status,
             'maximum_history_age_days':7, 'tie_tolerance':{'relative':1e-9,'absolute':1e-12}, 'sample_observations':window, 'reference_window_start':reference[0] if reference else None, 'reference_window_end':reference[-1] if reference else None,
