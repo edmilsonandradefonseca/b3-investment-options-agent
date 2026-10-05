@@ -29,6 +29,7 @@ from b3_agent.repositories.source_manifest import SourceManifestRecord, SourceMa
 from b3_agent.schemas.transaction import Transaction
 from b3_agent.storage.sqlite import SQLiteStore
 from b3_agent.orchestration import OrchestratorRequest, OrchestratorResponse, b3_orchestrator, configure_default_workflow
+from b3_agent.orchestration.fast_dispatch import FastRouteDispatcher
 from b3_agent.orchestration.live_providers import LiveProviderService
 from b3_agent.providers.searxng_news import SearxngNewsAdapter
 from b3_agent.research_events import ResearchEventService
@@ -103,8 +104,20 @@ app.add_middleware(
 
 @lru_cache(maxsize=1)
 def _configure_runtime() -> None:
-    """Compose the production workflow once, on first orchestration request."""
+    """Compose the production workflow once, only when senior reasoning is needed."""
     configure_default_workflow()
+
+
+_fast_route_dispatcher = FastRouteDispatcher()
+
+
+def _dispatch_fast_route(request: OrchestratorRequest) -> OrchestratorResponse | None:
+    """Return a deterministic V4.1 result or None to escalate to OpenClaw."""
+    return _fast_route_dispatcher.dispatch(
+        task=request.task,
+        ticker=request.ticker,
+        context=request.context,
+    )
 
 
 def _transaction_repository() -> TransactionRepository:
@@ -484,6 +497,10 @@ def orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
             ticker=request.ticker,
             context=request.context,
         )
+        fast_response = _dispatch_fast_route(normalized)
+        if fast_response is not None:
+            return _response_to_model(fast_response)
+
         _configure_runtime()
         response = b3_orchestrator(
             task=normalized.task,
