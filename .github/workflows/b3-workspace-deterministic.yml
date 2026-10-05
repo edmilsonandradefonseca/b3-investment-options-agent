@@ -58,6 +58,7 @@ jobs:
           ref: ${{ github.sha }}
 
       - name: Require green CI before runtime update
+        id: ci_gate
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -102,6 +103,7 @@ jobs:
         run: timeout 660s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_async_reliability_real.py
 
       - name: Validate candidate workspace contracts against real Ubuntu data
+        if: ${{ !cancelled() && steps.ci_gate.conclusion == 'success' }}
         env:
           PYTHONPATH: ${{ github.workspace }}/src
         run: |
