@@ -46,7 +46,7 @@ export default function StrategySession(){
  }
  const label={idle:'Aguardando',running:'Em processamento · avaliando dados e evidências',done:'Concluído',error:'Problema na análise'}[status];
  return <section className="panel strategy-session" aria-label="Pergunta e análise do Strategy Lab">
-  <h2>O que você deseja analisar?</h2>
+  <div className="section-head"><h2>O que você deseja analisar?</h2><div className="action-row"><span role="status" aria-live="polite"><span aria-hidden="true" style={{color:{idle:'#94a3b8',running:'#eab308',done:'#22c55e',error:'#ef4444'}[status]}}>● </span>{label}</span><button type="button" disabled={status==='running'} onClick={()=>{setTurns([]);setQuestion('');setRetryQuestion('');setStatus('idle')}}>Nova análise</button></div></div>
   <p>Escreva uma pergunta, uma tese ou as alternativas que deseja comparar.</p>
   {!turns.length&&<div className="workspace-tabs">{examples.map(text=><button key={text} type="button" disabled={status==='running'} onClick={()=>setQuestion(text)}>{text}</button>)}</div>}
   {turns.map((turn,i)=><article className="panel" key={i} aria-label={`Análise ${i+1}`}>
@@ -59,9 +59,9 @@ export default function StrategySession(){
    <label htmlFor="strategy-thesis">{turns.length?'Ajustar ou aprofundar esta análise':'Sua pergunta ou tese'}</label>
    <textarea id="strategy-thesis" value={question} onChange={e=>setQuestion(e.target.value)} rows={4} required disabled={status==='running'} placeholder="Descreva seu objetivo, a tese ou as alternativas…" style={{display:'block',width:'100%',boxSizing:'border-box',margin:'12px 0'}}/>
    <div className="toolbar"><button disabled={status==='running'||!question.trim()}>{turns.length?'Enviar continuação':'Analisar pergunta ou tese'}</button>
-   <button type="button" disabled={status==='running'} onClick={()=>{setTurns([]);setQuestion('');setRetryQuestion('');setStatus('idle')}}>Nova análise</button>
+   
    {status==='error'&&<button type="button" onClick={()=>void analyze(retryQuestion)}>Tentar novamente</button>}
-   <span role="status" aria-live="polite"><span aria-hidden="true" style={{color:{idle:'#94a3b8',running:'#eab308',done:'#22c55e',error:'#ef4444'}[status]}}>● </span>{label}</span></div>
+   </div>
   </form>
  </section>;
 }
