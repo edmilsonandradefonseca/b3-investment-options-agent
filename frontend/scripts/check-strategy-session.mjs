@@ -1,6 +1,8 @@
 // LAB-01/02/06, WS-05: browser contract test with explicit fixtures, not live acceptance.
 import {chromium} from '@playwright/test';
 import assert from 'node:assert/strict';
+import {mkdir} from 'node:fs/promises';
+import {resolve} from 'node:path';
 const browser=await chromium.launch({headless:true});
 try{
  const page=await browser.newPage({viewport:{width:1440,height:900}});
@@ -30,6 +32,9 @@ try{
  await panel.getByRole('button',{name:'Enviar continuação',exact:true}).click();
  await panel.getByRole('article',{name:'Análise 2'}).getByText('Resposta de fixture: tese exige verificar premissas.',{exact:true}).waitFor();
  assert.equal(requests[1].context.lab_conversation[0].question,'Avalie minha tese sobre PETR4.');
+ const out=resolve(process.env.B3_VISUAL_OUTPUT||'visual-output');await mkdir(out,{recursive:true});
+ for(const [width,height] of [[1440,900],[1180,720]]){await page.setViewportSize({width,height});await page.screenshot({path:resolve(out,`lab-central-fixture-${width}.png`),animations:'disabled'});}
+
  await panel.getByRole('button',{name:'Nova análise',exact:true}).click();
  assert.equal(await panel.locator('article').count(),0);
  await panel.getByLabel('Sua pergunta ou tese').fill('Nova tese sobre VALE3.');
