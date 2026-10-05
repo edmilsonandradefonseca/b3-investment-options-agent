@@ -1139,9 +1139,21 @@ def orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
         if fast_response is not None:
             if normalized.context.get('analysis_mode') == 'deterministic' or normalized.context.get('as_of') is not None:
                 return _response_to_model(fast_response)
+            from b3_agent.opportunity_materiality import build_opportunity_research_scope
+            screen = fast_response.result['opportunity_screen']
+            research_scope = build_opportunity_research_scope(
+                screen, screen.get('requested_universe', ())
+            )
+            fast_response = OrchestratorResponse(
+                status=fast_response.status,
+                result={**fast_response.result, 'opportunity_research_scope':research_scope},
+                sources=fast_response.sources, audit=fast_response.audit,
+                error=fast_response.error,
+            )
             normalized = OrchestratorRequest(task=normalized.task, ticker=None, context={
                 **normalized.context, 'selected_ticker':None,
-                'opportunity_assets':fast_response.result['opportunity_screen']['requested_universe'],
+                'opportunity_assets':research_scope['context_tickers'],
+                'opportunity_research_scope':research_scope,
             })
         else:
             fast_response = _dispatch_fast_route(normalized)
