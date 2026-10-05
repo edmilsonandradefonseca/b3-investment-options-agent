@@ -38,3 +38,14 @@ def test_stale_future_or_unavailable_quote_is_not_current_price():
     for change in ({"observation_timestamp": NOW-timedelta(days=8)}, {"available_timestamp": NOW+timedelta(seconds=1)}, {"close": float("nan")}):
         pack.market["current_quote"] = {"close": 30., "observation_timestamp": NOW, "available_timestamp": NOW, **change}
         assert stock_purchase_payload([alt,alt], [pack,pack], NOW)["rows"][0]["current_price_brl"] is None
+
+
+def test_fundamental_report_date_uses_sao_paulo_calendar_cutoff():
+    cutoff = datetime(2026, 10, 5, 0, 23, tzinfo=timezone.utc)  # Oct 4, 21:23 in São Paulo
+    pack, alt = build(report_date="2026-10-05", available_timestamp=cutoff)
+    result = stock_purchase_payload([alt, alt], [pack, pack], cutoff)
+
+    assert result["rows"][0]["fundamental_metrics"] == {}
+    excluded = result["rows"][0]["excluded_metrics"][0]
+    assert excluded["report_date"] == "2026-10-05"
+    assert excluded["reason"] == "UNQUALIFIED_OR_FUTURE_FUNDAMENTAL"
