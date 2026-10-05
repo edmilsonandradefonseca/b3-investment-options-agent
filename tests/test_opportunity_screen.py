@@ -259,3 +259,16 @@ def test_opportunity_context_budget_never_truncates_deterministic_screen():
     assert scope['deterministic_only_count']==17
     assert scope['option_underlying_context_count']==5
     assert scope['context_tickers'][:5]==['ABCD1','ABCD2','ABCD20','ABCD21','ABCD22']
+
+
+def test_research_scope_tolerates_missing_requested_universe():
+    from b3_agent.opportunity_materiality import build_opportunity_research_scope
+
+    scope = build_opportunity_research_scope(
+        {"rows": [{"ticker": "ITUB4", "discovery_eligible": True}], "requested_universe": None},
+        ["ITUB4"],
+    )
+
+    assert scope["screened_stock_count"] == 1
+    assert scope["option_underlying_context_count"] == 0
+    assert scope["context_tickers"] == ["ITUB4"]
