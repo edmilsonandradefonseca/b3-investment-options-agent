@@ -255,6 +255,8 @@ class StockOpportunityScreenService:
                 'institution_targets':row['institution_targets'],
                 'observed_risk':{k:row.get(k) for k in ('volatility_60d','max_drawdown','liquidity_proxy_20d')}}
             row['economic_evidence']=economic_evidence(projection,budget=budget,entry_cost=costs.get(ticker),portfolio=portfolio)
+            from b3_agent.opportunity_materiality import classify_stock_materiality
+            row['materiality']=classify_stock_materiality(row,cutoff)
             row['source_refs'].extend(t['source_url'] for t in row['institution_targets']['rows'])
             row['source_refs'].extend(e['source'] for e in row['dividends']['events'])
             row['source_refs']=list(dict.fromkeys(row['source_refs']))
@@ -278,6 +280,11 @@ class StockOpportunityScreenService:
         else:
             status = 'COMPARED_WITHOUT_RANKING' if not metric else 'INSUFFICIENT_COMPARABLE_ASSETS'
         rows.sort(key=lambda r:(r['rank'] is None, r['rank'] or 0, r['ticker']))
+        material_candidates=[r['materiality'] for r in rows if r.get('discovery_eligible') and r.get('materiality',{}).get('status')=='MATERIAL_REVIEW']
+        monitor_candidates=[r['materiality'] for r in rows if r.get('discovery_eligible') and r.get('materiality',{}).get('status')=='MONITOR']
+        incomplete_candidates=[r['materiality'] for r in rows if r.get('discovery_eligible') and r.get('materiality',{}).get('status')=='INCOMPLETE']
+        material_candidates.sort(key=lambda item:(-(item.get('conditional_price_only_upside_fraction') or 0),item['ticker']))
+        materiality_status=('EVIDENCE_INCOMPLETE' if incomplete_candidates else 'MATERIAL_REVIEW_ITEMS_FOUND' if material_candidates else 'NO_TARGET_REVIEW_ITEM_FOUND')
         limitations = ['Conditional ordering of observed risk or liquidity, not an expected-return or overall BUY ranking.',
             'Liquidity is an approximation: mean of adjusted close when available (otherwise close) times volume over 20 observations; not actual traded financial turnover.',
             'Targets, valuation, future dividends, costs and trade sizing are not inferred; personal outcomes are not required for this observed-data objective.',
@@ -309,5 +316,11 @@ class StockOpportunityScreenService:
             'candidate_universe':candidates, 'portfolio_stock_universe':portfolio_stock_tickers,
             'portfolio_option_underlying_universe':portfolio_option_underlying_tickers,
             'portfolio_scope':portfolio_scope, 'requested_universe':universe,
-            'ranked_count':sum(r['rank'] is not None for r in rows), 'rows':rows, 'limitations':limitations},
+            'ranked_count':sum(r['rank'] is not None for r in rows), 'rows':rows,
+            'materiality_policy_version':'B3_STOCK_MATERIALITY_TARGET_REVIEW_V1',
+            'materiality_status':materiality_status,
+            'material_candidates':material_candidates,
+            'monitor_candidates':monitor_candidates,
+            'incomplete_materiality_count':len(incomplete_candidates),
+            'limitations':limitations},
             'economic_target_ranking':economic_ranking, 'asset_evidence':packs, 'limitations':limitations, 'source_refs':list(dict.fromkeys(s for r in rows for s in r['source_refs']))}
