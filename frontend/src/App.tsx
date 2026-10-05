@@ -201,6 +201,7 @@ export default function App(){
   }finally{
    if(reviewedSnapshotKey)opportunityAutoReviews.current.add(reviewedSnapshotKey);
    opportunitySearchInFlight.current=false;
+   setOpportunityRun(previous=>({...previous}));
    if(reviewSequence!==opportunityReviewSequence.current)return;
   }
  }
@@ -232,8 +233,9 @@ export default function App(){
    })
    .finally(()=>{
     opportunitySearchInFlight.current=false;
+    setOpportunityRun(previous=>({...previous}));
    });
- },[online,portfolio,busy,opportunityRun.status,opportunityAssets,opportunityObjective,researchMode]);
+ },[online,portfolio,busy,opportunityRun,opportunityAssets,opportunityObjective,researchMode]);
  function openInStrategyLab(response:OrchestrateResponse|null=null){
   ++inspectionSequence.current;
   navigate('Strategy Lab');setBusy(false);setNotice('');
