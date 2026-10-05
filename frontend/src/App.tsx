@@ -148,17 +148,21 @@ export default function App(){
       return r;
     }
     if(!conversation&&context.analysis_mode!=='deterministic'&&['Opportunities','Strategy Lab'].includes(page)){
-      deterministicResult=await b3Api.orchestrate({task,ticker:requestTicker,context:{...context,analysis_mode:'deterministic',research_mode:'stored_only'}});
-      if(!current())return null;
-      setAnalysis({...deterministicResult,result:{...deterministicResult.result,derived_synthesis_status:'PENDING'}});
+    deterministicResult=await b3Api.orchestrate({task,ticker:requestTicker,context:{...context,analysis_mode:'deterministic',research_mode:'stored_only'}});
+    if(!current())return null;
+      if(deterministicResult.result&&typeof deterministicResult.result==='object')setAnalysis({...deterministicResult,result:{...deterministicResult.result,derived_synthesis_status:'PENDING'}});
     }
     const r=await b3Api.orchestrate({task,ticker:requestTicker,context});
     if(!current())return null;
+    const hasResult=!!r.result&&typeof r.result==='object'&&!Array.isArray(r.result);
+    const apiError=r.error||(!hasResult?'A API concluiu a requisição sem retornar resultado.':null);
     if(conversation){
       setChat(v=>v.map((item,index)=>index===pendingIndex?{...item,r}:item));
     }else{
-      const displayed=r.error&&deterministicResult?{...deterministicResult,error:r.error}:r;
-      setAnalysis({...displayed,result:{...displayed.result,derived_synthesis_status:r.error?'FAILED':context.analysis_mode==='deterministic'?'NOT_REQUESTED':'COMPLETED'}});
+      const hasDeterministicResult=!!deterministicResult?.result&&typeof deterministicResult.result==='object';
+      const displayed:OrchestrateResponse=apiError&&hasDeterministicResult?{...deterministicResult!,error:apiError}:r;
+      if(!apiError||!options?.preservePrevious||hasDeterministicResult)setAnalysis({...displayed,result:{...(displayed.result||{}),derived_synthesis_status:apiError?'FAILED':context.analysis_mode==='deterministic'?'NOT_REQUESTED':'COMPLETED'}});
+      if(apiError)setNotice(`Análise: ${apiError}`);
     }
     setOnline(true);
     return r;
@@ -168,7 +172,7 @@ export default function App(){
     if(conversation){
       setChat(v=>v.map((item,index)=>index===pendingIndex?{...item,error:message}:item));
     }else{
-      if(deterministicResult)setAnalysis({...deterministicResult,result:{...deterministicResult.result,derived_synthesis_status:'FAILED'}});
+      if(deterministicResult?.result&&typeof deterministicResult.result==='object')setAnalysis({...deterministicResult,result:{...deterministicResult.result,derived_synthesis_status:'FAILED'}});
       setNotice(`Análise: ${message}`);
     }
     return null;
@@ -183,10 +187,14 @@ export default function App(){
   try{
    const response=await run(`UC-03: revise ${assets.join(', ')} e todas as ações vigentes da carteira para identificar teses materiais que merecem atenção agora. Considere opções já possuídas somente como exposição e cobertura; não busque cadeia de opções. Explique por que cada tese importa, evidências favoráveis e contrárias, impacto conhecido na carteira e o que mudaria a leitura. Separar oportunidade de ação de item para acompanhar; não transforme risco ou liquidez observados em previsão de retorno nem em recomendação automática.`,false,{ticker:null,preservePrevious:true,context:{workspace:'Opportunities',selected_ticker:null,opportunity_assets:assets,opportunity_objective:opportunityObjective,include_portfolio_stocks:true,research_mode:researchMode}});
    const finishedAt=new Date().toISOString();
-   const failed=!response||Boolean(response.error)||response.result.derived_synthesis_status==='FAILED';
-   const sourceRefs=response?.result.source_refs;
+   const responseResult=response?.result&&typeof response.result==='object'?response.result:{};
+   const failed=!response||Boolean(response.error)||Object.keys(responseResult).length===0||responseResult.derived_synthesis_status==='FAILED';
+   const sourceRefs=responseResult.source_refs;
    const sources=Array.from(new Set(response?[...(response.sources??[]),...(Array.isArray(sourceRefs)?sourceRefs:[])]:workspaceResults.Opportunities?.sources??[])).filter(Boolean);
    setOpportunityRun(previous=>({...previous,status:failed?'error':'complete',finishedAt,sources,message:failed?'A nova busca não concluiu normalmente. A análise anterior foi preservada; confira as lacunas e tente novamente.':null}));
+  }catch(e){
+   const finishedAt=new Date().toISOString();
+   setOpportunityRun(previous=>({...previous,status:'error',finishedAt,message:`A nova busca falhou: ${err(e)}. A análise anterior foi preservada.`}));
   }finally{opportunitySearchInFlight.current=false}
  }
  function openInStrategyLab(response:OrchestrateResponse|null=null){
