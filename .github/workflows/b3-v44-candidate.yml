@@ -1,0 +1,21 @@
+name: B3 V4.4 candidate Lab acceptance (Ubuntu)
+on:
+  push:
+    branches: [feature/react-functional-v43-integration]
+    paths: [.github/workflows/b3-v44-candidate.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: b3-v44-candidate
+  cancel-in-progress: false
+jobs:
+  candidate:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate candidate API and senior on real data without restarting service
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: timeout 480s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_v44_lab_candidate.py
