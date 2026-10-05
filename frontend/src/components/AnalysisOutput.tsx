@@ -133,17 +133,6 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
   const economicRows = asArray(economic?.rows).map(asObject).filter((row):row is Obj=>row!==null);
   const stockPurchase = asObject(result.stock_purchase_comparison);
   const stockPurchaseRows = asArray(stockPurchase?.rows).map(asObject).filter((row):row is Obj=>row!==null);
-  const stockPurchaseByTicker = new Map(stockPurchaseRows.map(row => [asText(row.ticker) ?? '', row]));
-  const stockComparisonTickers = strategyAlternatives.map(item => asText(item.subject_id)).filter((ticker): ticker is string => Boolean(ticker));
-  const stockPurchaseTickers = stockComparisonTickers.length === 2
-    ? stockComparisonTickers
-    : stockPurchaseRows.map(row => asText(row.ticker)).filter((ticker): ticker is string => Boolean(ticker));
-  const historicalComparisons = asArray(stockPurchase?.historical_comparisons).map(asObject).filter((row):row is Obj=>row!==null);
-  const fundamentalComparisons = asArray(stockPurchase?.fundamental_comparisons).map(asObject).filter((row):row is Obj=>row!==null);
-  const fundamentalMetricNames = [...new Set(stockPurchaseRows.flatMap(row => [
-    ...Object.keys(asObject(row.fundamental_metrics) ?? {}),
-    ...asArray(row.excluded_metrics).map(asObject).map(item => asText(item?.metric)).filter((name):name is string => Boolean(name)),
-  ]))].sort((a,b) => fundamentalLabel(a).localeCompare(fundamentalLabel(b), 'pt-BR'));
   const putPair = asObject(result.put_pair_comparison);
   const putPairRows = asArray(putPair?.rows).map(asObject).filter((row):row is Obj=>row!==null);
   const fundedSwitch = asObject(result.funded_switch);
@@ -172,6 +161,17 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
   const strategyAlternatives = asArray(strategyComparison?.alternatives)
     .map(asObject)
     .filter((item): item is Obj => item !== null);
+  const stockPurchaseByTicker = new Map(stockPurchaseRows.map(row => [asText(row.ticker) ?? '', row]));
+  const stockComparisonTickers = strategyAlternatives.map(item => asText(item.subject_id)).filter((ticker): ticker is string => Boolean(ticker));
+  const stockPurchaseTickers = stockComparisonTickers.length === 2
+    ? stockComparisonTickers
+    : stockPurchaseRows.map(row => asText(row.ticker)).filter((ticker): ticker is string => Boolean(ticker));
+  const historicalComparisons = asArray(stockPurchase?.historical_comparisons).map(asObject).filter((row):row is Obj=>row!==null);
+  const fundamentalComparisons = asArray(stockPurchase?.fundamental_comparisons).map(asObject).filter((row):row is Obj=>row!==null);
+  const fundamentalMetricNames = [...new Set(stockPurchaseRows.flatMap(row => [
+    ...Object.keys(asObject(row.fundamental_metrics) ?? {}),
+    ...asArray(row.excluded_metrics).map(asObject).map(item => asText(item?.metric)).filter((name):name is string => Boolean(name)),
+  ]))].sort((a,b) => fundamentalLabel(a).localeCompare(fundamentalLabel(b), 'pt-BR'));
   const optionEvidenceEntries = optionEvidence
     ? Object.entries(optionEvidence)
         .map(([key, value]) => [key, asObject(value)] as const)
@@ -260,7 +260,7 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
           const status=asText(comparison?.status);
           const periodText=(metric:Obj|null)=>metric?[asText(metric.report_date),asText(metric.period_type)].filter(Boolean).join(' · '):'';
           const cell=(metric:Obj|null,excluded:Obj|null)=>metric?<>{fundamentalDisplay(name,metric)}<small>{periodText(metric)}{asText(metric.quality_status)==='WARNING'?' · qualidade WARNING: disponibilidade histórica da fonte não comprovada':''}</small></>:excluded?<>{asText(excluded.reason)==='UNQUALIFIED_OR_FUTURE_FUNDAMENTAL'?'Excluída do corte':'Não qualificada'}<small>Data do registro: {asText(excluded.report_date)??'indisponível'} · não usada na comparação</small></>:'Sem dado elegível';
-          return <tr key={name}><th scope="row">{fundamentalLabel(name)}</th><td>{cell(leftMetric,leftExcluded)}</td>{stockPurchaseTickers.length>1&&<td>{cell(rightMetric,rightExcluded)}</td>}<td>{status==='COMPARABLE'?'Comparável':status==='NONCOMPARABLE_OR_MISSING'?'Não comparável: falta dado equivalente ou período ou unidade não coincide':'Sem par comparável'}</td></tr>;
+          return <tr key={name}><th scope="row">{fundamentalLabel(name)}</th><td>{cell(leftMetric,leftExcluded??null)}</td>{stockPurchaseTickers.length>1&&<td>{cell(rightMetric,rightExcluded??null)}</td>}<td>{status==='COMPARABLE'?'Comparável':status==='NONCOMPARABLE_OR_MISSING'?'Não comparável: falta dado equivalente ou período ou unidade não coincide':'Sem par comparável'}</td></tr>;
         })}</tbody>
       </table></div>:<p className="muted">Nenhuma métrica fundamental passou pelos critérios de data, unidade e qualidade neste corte.</p>}
       <h4>Risco histórico observado</h4>
