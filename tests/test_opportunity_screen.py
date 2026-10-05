@@ -205,3 +205,36 @@ def test_unsupported_or_incomplete_economic_inputs_fail_before_acquisition():
     for inputs in ({'budget_brl':float('nan')},{'entry_costs_brl':{'BBDC4':0}},{'target_institution':'XP'},{'target_institution':'XP','target_horizon':'future'},{'forecast':99}):
         with pytest.raises(ValueError): screen.build(['ITUB4'],economic_inputs=inputs)
     assert provider.quote_calls==0
+
+
+def test_materiality_emits_review_candidate_and_keeps_observed_rank_separate():
+    screen,_=service({'ITUB4':history('ITUB4'),'BBDC4':history('BBDC4')})
+    def targets(ticker,cutoff):
+        target_price=60 if ticker=='ITUB4' else 54
+        return {'status':'QUALIFIED_OBSERVATIONS','rows':[{'institution':'XP','price_brl':target_price,
+            'horizon_date':date(2027,12,31),'published_at':CUTOFF-timedelta(days=1),
+            'document_id':ticker,'source_url':'https://example.test/'+ticker}]}
+    screen.target_service=SimpleNamespace(build=targets)
+    result=screen.build(['ITUB4','BBDC4'])
+    opportunity=result['opportunity_screen']
+    assert opportunity['materiality_policy_version']=='B3_STOCK_MATERIALITY_TARGET_REVIEW_V1'
+    assert opportunity['materiality_status']=='MATERIAL_REVIEW_ITEMS_FOUND'
+    assert [item['ticker'] for item in opportunity['material_candidates']]==['ITUB4']
+    assert opportunity['material_candidates'][0]['category']=='POTENCIAL_ENTRADA_PARA_REVISAO'
+    assert opportunity['material_candidates'][0]['conditional_price_only_upside_fraction']>=0.15
+    assert opportunity['monitor_candidates'][0]['ticker']=='BBDC4'
+    assert all(row['rank'] is None for row in opportunity['rows'])
+    assert all(row['economic_evidence']['expected_return'] is None for row in opportunity['rows'])
+
+
+def test_materiality_distinguishes_unavailable_targets_from_valid_no_target_review():
+    screen,_=service({'ITUB4':history('ITUB4')})
+    screen.target_service=SimpleNamespace(build=lambda ticker,cutoff:{
+        'status':'STORE_UNAVAILABLE','rows':[]})
+    result=screen.build(['ITUB4'])
+    assert result['opportunity_screen']['materiality_status']=='EVIDENCE_INCOMPLETE'
+    assert result['opportunity_screen']['material_candidates']==[]
+    assert result['opportunity_screen']['incomplete_materiality_count']==1
+    row=result['opportunity_screen']['rows'][0]
+    assert row['materiality']['status']=='INCOMPLETE'
+    assert 'falhou' in row['materiality']['reason']
