@@ -38,6 +38,20 @@ def _failure_category(status, data):
     return 'API_REJECTION'
 
 
+def _safe_symbol_profile(data):
+    """Describe malformed equity identity without logging the held symbol."""
+    detail = data.get('detail') or data.get('error') or ''
+    if isinstance(detail, (dict, list)):
+        detail = json.dumps(detail, ensure_ascii=False)
+    match = __import__('re').search(r"invalid B3 equity ticker ['\\\"]([^'\\\"]+)['\\\"]", str(detail), __import__('re').I)
+    if not match:
+        return None
+    symbol = match.group(1).strip().upper()
+    shape = ''.join('L' if char.isalpha() else 'D' if char.isdigit() else 'X' for char in symbol)
+    return {'length':len(symbol),'shape':shape,'has_outer_whitespace':symbol != match.group(1).upper(),
+            'has_fractional_suffix':symbol.endswith('F') and len(symbol) > 5}
+
+
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--senior',action='store_true')
@@ -87,7 +101,8 @@ def main():
             })
             print(json.dumps({'case':'stock_screen','status':'FAIL','objective':objective,
                 'http_status':response.status_code,'error_category':category,
-                'detail_present':bool(data.get('detail') or data.get('error'))}),flush=True)
+                'detail_present':bool(data.get('detail') or data.get('error')),
+                'safe_symbol_profile':_safe_symbol_profile(data)}),flush=True)
             raise AssertionError(f'Opportunities API rejected real screen: HTTP {response.status_code}; {category}')
         result=data['result']; screen=result['opportunity_screen']
         assert result['telemetry']['llm_calls']==0
