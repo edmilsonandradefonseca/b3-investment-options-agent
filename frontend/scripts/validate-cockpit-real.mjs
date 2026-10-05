@@ -57,7 +57,11 @@ const assetSynthesisResponse=page.waitForResponse(r=>r.url().endsWith('/orchestr
 await page.getByLabel('Ativo para análise detalhada',{exact:true}).fill('PETR4');
 await page.getByRole('button',{name:'Ver gráfico e análise',exact:true}).click();
 const assetMarket=await (await assetAnalysisResponse).json();
-const assetSynthesis=await (await assetSynthesisResponse).json();
+const assetSynthesisHttp=await assetSynthesisResponse;
+const assetSynthesis=await assetSynthesisHttp.json();
+if(assetSynthesisHttp.status()!==200||!assetSynthesis.result){console.log(JSON.stringify({case:'Market Intelligence PETR4',http:assetSynthesisHttp.status(),response_fields:Object.keys(assetSynthesis),error_type:typeof assetSynthesis.detail==='string'?assetSynthesis.detail.split(':')[0].slice(0,100):'unknown'}));}
+assert.equal(assetSynthesisHttp.status(),200,'Market synthesis HTTP failed');
+assert.ok(assetSynthesis.result,'Market synthesis result missing');
 assert.ok(assetMarket.market.price_history.length>0,'Single-ticker analysis must load canonical price history');
 assert.ok(!assetSynthesis.error,'Asset synthesis must complete');
 assert.equal(assetSynthesis.result.derived_synthesis_status,'COMPLETED','Asset analysis must run the senior synthesis');
