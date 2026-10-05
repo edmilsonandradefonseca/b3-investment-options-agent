@@ -134,3 +134,22 @@ CI37331054232 PASS; workflow Ubuntu37331045904 PASS completo.
 - Screening existente: ranking de volatilidade com universo parcial e diferenças de janela explicitadas; fundamentos indisponíveis neste ambiente. Não declarar resolvida essa cobertura só porque o gate estrutural passa. Duas sínteses sênior retornaram HTTP200 e duas avaliações por alternativa,102,68s e112,61s. Evidência estrutural/econômica, sem aceite qualitativo integral.
 - Verificações HTTP do serviço ativo passaram, mas PETR4 continua85 pontos, sem requested_history_days. Checkout produção485e521; PID51544, início05/10 às10:05:22 SãoPaulo. O processo iniciou antes da atualização anterior de checkout; não inferir SHA carregado a partir desse checkout. Ativação foi SKIPPED neste push. A dependência Yahoo e o restart devem acompanhar a atualização antes de concluir deploy.
 - Windows segue não verificado. E2 automático/universo completo, E4 panorama/fontes completas e E5 multi-pernas continuam abertos. Próximo passo operacional: atualizar produção para o candidato validado, preparar dependências e reiniciar com autenticação sudo; confirmar API de395 dias e fontes depois. Próxima entrega funcional: E2 com seleção material e ciclo automático/manual, sem pesquisa automática de cadeias.
+
+
+## Retomada do checkpoint — OPP-01/OPP-02 UI de atualização, 05/10/2026
+
+Fonte normativa: `main/docs/ARCHITECTURE_V4.4.md` e `main/docs/FRONTEND_DECISION_WORKSPACES_SPEC_V1.2.md`. A V1.2 mantém a busca de ações explícita, sem varrer chains; este incremento implementa o fluxo manual e a apresentação do estado, sem declarar concluída a descoberta automática/material.
+
+- Commit GitHub `045a34db8c460ceaddc9bc9047873712b468fbfa`: Opportunities ganhou CTA único “Buscar novas oportunidades”, estado neutro/amarelo/verde/vermelho, início/término, fontes, trava contra duplo envio e preservação da análise anterior enquanto uma atualização está em andamento ou falha. O pedido continua usando o screening determinístico existente seguido da síntese disponível; ranking observado não vira score geral ou recomendação de compra.
+- O primeiro aceite visual `37342748354` comprovou no runner Ubuntu o caso normal e um 503 controlado: tabela anterior permaneceu visível e LED ficou vermelho. A caminhada depois parou numa asserção de Histórico ambígua (quatro linhas com o mesmo rótulo), não em Opportunities.
+- Commit `d51c793b02e12de406b1e547fc31bafd34ab4b54` ajustou o seletor para exigir presença de um resultado repetido sem exigir unicidade. CI `37343614434` PASS; caminhada visual real `37343607577` PASS em todas as etapas após o ajuste, contra API Ubuntu e fixtures/visuais configurados pelo workflow.
+- Verificação local do commit de UI: `npm ci`, `npm run build`, `node scripts/check-decision-rendering.mjs`, `node --check scripts/validate-cockpit-real.mjs` e `git diff --check` PASS. Pytest local não estava instalado; o job de testes Python do CI passou.
+
+### Estado restante — não coberto por estes commits
+
+- OPP-01 automático na abertura/snapshot ainda MISSING; não há deduplicação de revisão/sessão ligada ao snapshot.
+- OPP-04 materialidade e cobertura completa da carteira/universo continuam PARTIAL. Screening manual segue teto explícito de 20 ativos e objetivos observados de volatilidade/liquidez; não há varredura geral B3, seleção material de tese ou processamento em lotes validado para carteiras maiores. O checkbox de carteira não substitui esse aceite.
+- O LED cobre o refresh manual; não representa job automático, scheduler ou última análise persistida após reiniciar a aplicação.
+- O frontend candidate passou no runner, mas não foi instalado no Windows. A API Ubuntu ativa continua em estado separado do checkout; esta entrega não reiniciou nem alterou `b3-runtime.service`.
+
+Próximo bloco conforme sequência aprovada: desenhar/implementar OPP-01 e OPP-04 completos sobre o contrato backend, incluindo snapshot vigente e universo com lotes/coorte global sem truncamento, materialidade determinística/sênior, status consultável e atualização manual idempotente. Não ativar busca ampla até demonstrar orçamento/latência e cobertura no runner.
