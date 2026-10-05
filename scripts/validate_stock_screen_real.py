@@ -24,26 +24,47 @@ def main():
     from fastapi.testclient import TestClient
     from b3_agent.server import app
     from validate_live_workspace_outputs import write_private_report
+    from b3_agent.config import settings
+    from b3_agent.portfolio.snapshot import load_active_snapshots
     client=TestClient(app)
     assets=['VALE3','RENT3','VIVT3','BBAS3']
-    for objective in ('LOWEST_REALIZED_VOLATILITY_60D','HIGHEST_OBSERVED_LIQUIDITY_20D'):
+    portfolio=load_active_snapshots(settings.data_dir).get('portfolio_context')
+    if portfolio is None:
+        raise AssertionError('Current portfolio snapshot unavailable for Opportunities acceptance')
+    stock_positions=[p for p in portfolio.positions if p.instrument_type.upper()=='STOCK']
+    option_positions=[p for p in portfolio.positions if p.instrument_type.upper()=='OPTION']
+    expected_stock_tickers={p.ticker.upper() for p in stock_positions}
+    expected_option_underlyings={p.underlying_ticker.upper() for p in option_positions if p.underlying_ticker}
+    joined_option_count=sum(bool(p.underlying_ticker) for p in option_positions)
+    expected_union=set(assets)|expected_stock_tickers|expected_option_underlyings
+    for index,objective in enumerate(('LOWEST_REALIZED_VOLATILITY_60D','HIGHEST_OBSERVED_LIQUIDITY_20D')):
+        include_portfolio=index==0
         started=monotonic()
-        request={'task':'Compare the explicitly selected assets by the observed objective; never infer valuation or future return.', 'ticker':None,'context':{'workspace':'Opportunities','opportunity_assets':assets,'opportunity_objective':objective,'analysis_mode':'deterministic','research_mode':'stored_only'}}
+        request={'task':'Compare watched assets and the full current stock portfolio by the observed objective; include owned options only as exposure context; never infer valuation or future return.', 'ticker':None,'context':{'workspace':'Opportunities','opportunity_assets':assets,'opportunity_objective':objective,'include_portfolio_stocks':include_portfolio,'analysis_mode':'deterministic','research_mode':'stored_only'}}
         response=client.post('/orchestrate',json=request)
         data=response.json()
         assert response.status_code==200 and not data.get('error')
         result=data['result']; screen=result['opportunity_screen']
         assert result['telemetry']['llm_calls']==0
-        assert set(result['asset_evidence'])==set(assets)
-        assert len(screen['rows'])==4
+        assert screen['candidate_universe']==assets
+        assert set(result['asset_evidence'])==set(screen['requested_universe'])
+        assert len(screen['rows'])==len(screen['requested_universe'])
+        assert len(screen['requested_universe'])==len(set(screen['requested_universe']))
+        if include_portfolio:
+            assert set(screen['requested_universe'])==expected_union, 'Candidate/portfolio/option-underlying union was truncated or incomplete'
+            assert screen['portfolio_scope']['status']=='INCLUDED'
+            assert set(screen['portfolio_stock_universe'])==expected_stock_tickers
+            assert set(screen['portfolio_option_underlying_universe'])==expected_option_underlyings
+            observed_option_count=sum(row['portfolio']['open_option_count'] or 0 for row in screen['rows'])
+            assert observed_option_count==joined_option_count, 'Open option positions were not joined to their underlyings'
+            context_only=[row for row in screen['rows'] if row['scope_role']=='OPTION_UNDERLYING_CONTEXT']
+            assert all(not row['discovery_eligible'] and row['rank'] is None for row in context_only)
+        else:
+            assert len(screen['rows'])==4
         assert screen['ranked_count']>=2, 'Real provider data did not yield two comparable assets'
         assert all(row['expected_return'] is None for row in screen['rows'])
-        print(json.dumps({'case':'stock_screen','objective':objective,'status':screen['status'],'elapsed_ms':round((monotonic()-started)*1000,1),'ranked_count':screen['ranked_count'],'rows':[{'ticker':r['ticker'],'history_count':r['history_count'],'rank_present':r['rank'] is not None,'exclusions':r['exclusions']} for r in screen['rows']],'llm_calls':0}),flush=True)
+        print(json.dumps({'case':'stock_screen','objective':objective,'status':screen['status'],'elapsed_ms':round((monotonic()-started)*1000,1),'candidate_count':len(screen['candidate_universe']),'portfolio_stock_count':len(screen['portfolio_stock_universe']),'option_position_count':screen['portfolio_scope']['option_position_count'],'option_underlying_context_count':len(screen['portfolio_option_underlying_universe']),'requested_universe_count':len(screen['requested_universe']),'ranked_count':screen['ranked_count'],'llm_calls':0,'real_portfolio_union':'PASS' if include_portfolio else 'NOT_REQUESTED'}),flush=True)
         write_private_report(Path.home()/'.local/share/b3-investment-options-agent/live-validation/stock-screen'/objective,{'instance':'candidate ASGI with real production inputs','request':request,'response':data})
-    from b3_agent.config import settings
-    from b3_agent.portfolio.snapshot import load_active_snapshots
-    portfolio=load_active_snapshots(settings.data_dir).get('portfolio_context')
-    assert portfolio is not None, 'Real portfolio unavailable for funded switch acceptance'
     long_position=next((position for position in portfolio.positions if position.instrument_type.upper()=='STOCK' and position.quantity>=1), None)
     assert long_position is not None, 'No admissible long stock position for funded switch acceptance'
     sell=long_position.ticker
