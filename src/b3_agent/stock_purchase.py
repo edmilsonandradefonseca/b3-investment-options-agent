@@ -1,5 +1,6 @@
 """Decision-ready BUY pair projection from existing evidence, without forecasts."""
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import math
 
 
@@ -19,6 +20,7 @@ def _timestamp(value):
 
 def stock_purchase_payload(alternatives, packs, cutoff, dividend_evidence=None, target_evidence=None, portfolio=None, economic_inputs=None):
     rows = []
+    cutoff_local_date = cutoff.astimezone(ZoneInfo("America/Sao_Paulo")).date().isoformat()
     for alternative, pack in zip(alternatives, packs, strict=True):
         quote = pack.market.get("current_quote") or {}
         observed = _timestamp(quote.get("observation_timestamp"))
@@ -34,10 +36,10 @@ def stock_purchase_payload(alternatives, packs, cutoff, dividend_evidence=None, 
             metric = dict(raw)
             at = _timestamp(metric.get("available_timestamp"))
             report = str(metric.get("report_date") or "")[:10]
-            if (not at or at > cutoff or not report or report > cutoff.date().isoformat()
+            if (not at or at > cutoff or not report or report > cutoff_local_date
                     or metric.get("quality_status") == "REJECTED"
                     or not metric.get("source") or _number(metric.get("value")) is None):
-                excluded.append({"metric": name, "reason": "UNQUALIFIED_OR_FUTURE_FUNDAMENTAL"})
+                excluded.append({"metric": name, "report_date": report or None, "available_timestamp": metric.get("available_timestamp"), "reason": "UNQUALIFIED_OR_FUTURE_FUNDAMENTAL"})
                 continue
             admitted[name] = metric
         from b3_agent.dividend_evidence import dividend_payload
