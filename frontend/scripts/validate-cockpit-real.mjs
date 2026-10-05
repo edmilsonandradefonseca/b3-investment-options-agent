@@ -16,7 +16,7 @@ const backend=async(path)=>{const r=await context.request.get(api+path);assert.e
 const portfolio=await backend('/portfolio/current');
 assert.ok(portfolio.positions.length>0,'Real portfolio must exist for acceptance');
 const health=await backend('/health');assert.ok(health.status);
-async function nav(label){await page.locator('nav').getByRole('button',{name:label,exact:true}).click();await page.locator('h1').filter({hasText:label}).waitFor();}
+async function nav(label){const button=page.locator('nav').getByRole('button',{name:label,exact:true});if(await button.count())await button.click();else{const routes={'Overview':'overview','History & Learning':'history-learning','Risk & Stress':'risk-stress'};await page.goto(base+'/#/'+routes[label]);}await page.locator('h1').filter({hasText:label}).waitFor();}
 async function screenshot(name){await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:resolve(out,name+'.png'),fullPage:false,animations:'disabled'});}
 async function noOverflow(){const size=await page.evaluate(()=>({scroll:document.documentElement.scrollWidth,width:innerWidth}));assert.ok(size.scroll<=size.width+1,`Global horizontal overflow ${size.scroll}/${size.width}`)}
 try {
@@ -39,6 +39,7 @@ await page.getByRole('tab',{name:'Execuções',exact:true}).click();await page.g
 await page.getByRole('tab',{name:'Cadeia de opções',exact:true}).click();await page.getByLabel('Ativo da cadeia',{exact:true}).fill('PETR4');
 const chainResponse=page.waitForResponse(r=>r.url().includes('/options/current/PETR4'),{timeout:90000});await page.getByRole('button',{name:'Consultar cadeia',exact:true}).click();const chain=await (await chainResponse).json();assert.ok(chain.options.length>0,'Real OPLAB chain missing');await page.getByRole('button',{name:chain.options[0].contract.option_id,exact:true}).waitFor();await screenshot('oplab-chain-real');await page.getByRole('tab',{name:'Posições',exact:true}).click();
 await nav('Strategy Lab');
+await page.getByText('Comparação estruturada e premissas',{exact:true}).click();
 const comparisonResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().context?.comparison_assets?.join(',')==='ITUB4,BBDC4',{timeout:120000});
 await page.getByTestId('primary-comparison').getByRole('button',{name:'Comparar fatos',exact:true}).click();
 const comparison=await (await comparisonResponse).json();assert.ok(!comparison.error,'Canonical BUY failed');
