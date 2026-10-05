@@ -30,7 +30,7 @@ with tempfile.TemporaryDirectory(prefix="b3-v44-sources-") as directory:
     from b3_agent.providers.brapi.budget import BrapiBudget
     client = TestClient(app)
     failures = []
-    for ticker in ("PETR4", "ITUB4", "BBDC4"):
+    for ticker in ("PETR4", "ITUB4", "BBDC4", "VALE3"):
         start = monotonic()
         response = client.get(f"/analysis/live/{ticker}")
         body = response.json()

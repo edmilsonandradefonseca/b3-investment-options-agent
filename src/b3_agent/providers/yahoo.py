@@ -54,7 +54,7 @@ class YahooAdapter:
             metadata = instrument.get_history_metadata()
         except Exception as exc:
             raise ProviderRequestError(f"Yahoo history unavailable: {type(exc).__name__}") from exc
-        if metadata.get("currency") != "BRL" or metadata.get("symbol", yahoo_symbol(ticker)) != yahoo_symbol(ticker):
+        if metadata.get("currency") != "BRL" or metadata.get("symbol") != yahoo_symbol(ticker):
             raise ValueError("Yahoo identity or currency mismatch")
         now = datetime.now(timezone.utc)
         records = []
@@ -115,8 +115,10 @@ class YahooAdapter:
 
     def get_financial_data(self, ticker):
         info = self._info(ticker)
-        if info.get("financialCurrency") != "BRL":
-            raise ValueError("Yahoo financial currency missing or incompatible")
+        quote_currency = info.get("currency")
+        financial_currency = info.get("financialCurrency")
+        quote_currency = quote_currency if isinstance(quote_currency, str) and re.fullmatch(r"[A-Z]{3}", quote_currency) else None
+        financial_currency = financial_currency if isinstance(financial_currency, str) and re.fullmatch(r"[A-Z]{3}", financial_currency) else None
         now = datetime.now(timezone.utc)
         aliases = {"trailingPE": "priceEarnings", "trailingEps": "earningsPerShare", "trailingAnnualDividendYield": "dividendYield"}
         fields = FRACTIONS | MONEY | MULTIPLES | PER_SHARE | {"debtToEquity"}
@@ -125,12 +127,30 @@ class YahooAdapter:
             value = finite(info.get(field))
             if value is None:
                 continue
+            # A B3 quote can be BRL while issuer statements are USD. Ratios
+            # remain admissible; currency is determined per field, never FX
+            # converted implicitly. Flattened info does not establish the
+            # currency of EPS/book/cash per-share when those currencies differ.
+            currency = financial_currency
+            if field == "marketCap":
+                currency = quote_currency
+            elif field == "enterpriseValue" or field in PER_SHARE:
+                if quote_currency != financial_currency:
+                    continue
+                currency = quote_currency
+            if field in MONEY | PER_SHARE and currency is None:
+                continue
+            flags = ("availability_is_ingestion_time", "current_snapshot_not_historical_pit", "fiscal_period_not_verified")
+            if quote_currency and financial_currency and quote_currency != financial_currency:
+                flags += ("mixed_quote_and_statement_currencies",)
+            if field in {"forwardPE", "forwardEps"}:
+                flags += ("consensus_estimate_not_realized_result", "estimate_horizon_not_verified")
             metric = aliases.get(field, field)
             records.append(StockFundamental(instrument_id=ticker.upper(), ticker=ticker.upper(),
                 observation_timestamp=now, available_timestamp=now, source=self.name, ingested_at=now,
                 source_record_id=f"{yahoo_symbol(ticker)}:info:{field}:{now.isoformat()}",
-                quality_status="WARNING", quality_flags=("availability_is_ingestion_time", "current_snapshot_not_historical_pit", "fiscal_period_not_verified"),
-                metric=metric, value=value, unit=fundamental_unit(field, "BRL"), period_type="CURRENT_SNAPSHOT"))
+                quality_status="WARNING", quality_flags=flags,
+                metric=metric, value=value, unit=fundamental_unit(field, currency), period_type="CURRENT_SNAPSHOT"))
         if not records:
             raise ValueError("Yahoo fundamentals empty")
         return records

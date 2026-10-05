@@ -429,6 +429,9 @@ def test_live_analysis_returns_pit_history_and_backend_indicators(monkeypatch) -
     })()
 
     class FakeLiveProviderService:
+        def __init__(self, *, history_days):
+            assert history_days == 395, "Market chart must request the approved one-year window plus buffer"
+
         def load(self, ticker, *, include_current_quote, include_options):
             assert ticker == "PETR4"
             assert include_current_quote is False

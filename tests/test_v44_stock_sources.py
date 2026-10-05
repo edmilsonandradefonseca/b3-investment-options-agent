@@ -216,3 +216,17 @@ def test_yahoo_rejects_other_symbol_and_non_brl():
     client.get_history_metadata = lambda: {"currency":"USD", "symbol":"PETR4.SA"}
     with pytest.raises(ValueError, match="currency"):
         YahooAdapter(lambda symbol: client).get_market_data("PETR4", date(2026,9,25), date(2026,9,25))
+
+
+
+def test_brl_quote_and_usd_statements_do_not_mislabel_currency_or_eps():
+    client = FakeTicker()
+    client.get_info = lambda: {"symbol": "PETR4.SA", "currency": "BRL", "financialCurrency": "USD",
+        "marketCap": 1000, "totalRevenue": 800, "returnOnEquity": .2,
+        "trailingEps": 3, "forwardEps": 4, "forwardPE": 10}
+    rows = {r.metric:r for r in YahooAdapter(lambda symbol: client).get_financial_data("PETR4")}
+    assert rows["marketCap"].unit == "BRL"
+    assert rows["totalRevenue"].unit == "USD"
+    assert rows["returnOnEquity"].unit == "fraction"
+    assert "earningsPerShare" not in rows and "forwardEps" not in rows
+    assert "consensus_estimate_not_realized_result" in rows["forwardPE"].quality_flags

@@ -93,3 +93,10 @@ Corrigido outro gap de consumo: Mercado exibia texto fixo BRAPI independentement
 A série projetada para gráficos e retornos mantém uma única base: se um trecho local não tem adjusted_close, não anexar fechamento ajustado Yahoo ao fechamento bruto do arquivo. O cache Yahoo preserva adjusted_close; a projeção de série usa close com flag explícita quando necessário. Não representa retorno total nem valida todos os eventos/splits históricos.
 
 Workflow legado37321575811: economia candidata PASS; checkout produção avançou d3624d1→485e521; sudo recusou restart. Depois falhou no teste congelado em02/10, embora a API retornasse candle05/10. Corrigidos gate dinâmico de freshness/proveniência e separação entre teste automático e ativação. Push valida; alteração de checkout/restart fica no workflow_dispatch de ambiente preparado, com preflight de dependência/privégio. Processo ativo não comprovado como485e521; não tratar checkout atualizado como deploy. Windows segue não verificado.
+
+## Correções adicionais de cobertura e semântica monetária
+
+- Market /analysis/live solicitava apenas120 dias mesmo quando o gráfico pedia1 ano. O endpoint passa a solicitar395 dias e informa requested_history_days; falta de cobertura real continua explícita. Não prometer histórico completo de IPOs ou períodos que as fontes não conseguem qualificar.
+- Histórico Yahoo exige symbol e BRL nos metadados; identidade ausente não é inferida como validada.
+- VALE3 e outros emissores podem ter cotação BRL e demonstrações USD. O adapter passa a admitir razões sem moeda e montantes financeiros na moeda declarada, distinguindo marketCap na moeda da cotação. Não converter FX implicitamente nem atribuir moeda aos dados por ação/enterpriseValue com origem ambígua entre moedas; esses campos ficam para fallback qualificado.
+- forwardPE/forwardEps recebem flags de estimativa agregada e horizonte não verificado; não representam lucro realizado nem relatório individual. O teste real é ampliado paraVALE3. CI e runner deste incremento precisam ser conferidos antes de ativação.

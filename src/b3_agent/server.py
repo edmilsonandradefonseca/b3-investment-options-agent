@@ -917,7 +917,7 @@ def current_option_quotes(
 def live_analysis(ticker: str) -> dict[str, Any]:
     """Return normalized live market/options analytics for one B3 underlying."""
     try:
-        snapshot = LiveProviderService().load(
+        snapshot = LiveProviderService(history_days=395).load(
             ticker, include_current_quote=False, include_options=False
         )
         # OPLAB history becomes available to this response when acquisition completes.
@@ -952,6 +952,7 @@ def live_analysis(ticker: str) -> dict[str, Any]:
             "source_refs": list(snapshot.source_refs),
             "market": {
                 "history_count": len(eligible_history),
+                "requested_history_days": 395,
                 "price_history": [asdict(item) for item in bounded_history],
                 "quant": asdict(quant),
                 "current_quote": asdict(current_quote) if current_quote is not None else None,
