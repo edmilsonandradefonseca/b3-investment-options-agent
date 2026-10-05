@@ -43,7 +43,7 @@ const comparisonResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate'
 await page.getByTestId('primary-comparison').getByRole('button',{name:'Comparar fatos',exact:true}).click();
 const comparison=await (await comparisonResponse).json();assert.ok(!comparison.error,'Canonical BUY failed');
 assert.equal(comparison.result.stock_purchase_comparison.rows.length,2);
-await page.getByTestId('primary-comparison-result').getByRole('heading',{name:'Compra entre ações · fundamentos e perspectivas',exact:true}).waitFor({timeout:10000});
+await page.getByTestId('primary-comparison-result').getByRole('heading',{name:'Compra entre ações · ITUB4 × BBDC4 · comparação lado a lado',exact:true}).waitFor({timeout:10000});
 assert.ok((await page.getByTestId('primary-comparison-result').innerText()).includes('ITUB4'));
 await screenshot('strategy-comparison-real');
 await page.getByText('Premissas e estratégias avançadas: cenários, custos, troca financiada e strikes',{exact:true}).click();
