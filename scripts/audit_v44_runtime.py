@@ -31,3 +31,23 @@ for path in ('/health', '/version', '/analysis/live/PETR4'):
         print(json.dumps(result), flush=True)
     except Exception as exc:
         print(json.dumps({'path': path, 'ok': False, 'error_type': type(exc).__name__}), flush=True)
+
+# LAB-01/02: exact free-text contract used by the central session, no form defaults.
+from urllib.request import Request
+started = time.monotonic()
+try:
+    request = Request('http://127.0.0.1:8000/orchestrate', data=json.dumps({
+        'task': 'Tenho R$ 10 mil. Comprar ITUB4 ou BBDC4? Compare fundamentos, riscos e evidências; não invente cenários.',
+        'ticker': None,
+        'context': {'workspace': 'Strategy Lab', 'research_mode': 'stored_first', 'lab_conversation': [], 'lab_request_kind': 'new_analysis'},
+    }).encode(), headers={'Content-Type': 'application/json'})
+    with urlopen(request, timeout=210) as response:
+        data = json.load(response)
+    result = data.get('result', {})
+    synthesis = result.get('synthesis') or {}
+    print(json.dumps({'case': 'LAB-01/02-live', 'http_ok': True, 'has_error': bool(data.get('error')),
+                      'status': data.get('status'), 'synthesis_status': result.get('derived_synthesis_status'),
+                      'result_fields': sorted(result), 'summary_chars': len(str(synthesis.get('summary') or result.get('summary') or '')),
+                      'elapsed_s': round(time.monotonic()-started, 2)}), flush=True)
+except Exception as exc:
+    print(json.dumps({'case': 'LAB-01/02-live', 'http_ok': False, 'error_type': type(exc).__name__, 'elapsed_s': round(time.monotonic()-started, 2)}), flush=True)
