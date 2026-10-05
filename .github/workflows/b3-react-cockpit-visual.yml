@@ -47,6 +47,7 @@ jobs:
             if curl -fsS --max-time 2 http://127.0.0.1:5173 >/dev/null; then break; fi
             sleep 1
           done
+          node scripts/check-strategy-session.mjs
           node scripts/validate-cockpit-real.mjs
       - name: Retain requested visual evidence without raw backend responses
         if: always()
