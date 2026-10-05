@@ -90,11 +90,13 @@ def main() -> int:
                       "history_count": data["market"]["history_count"],
                       "data_points": data["market"]["quant"]["data_points"],
                       "sources": data["source_refs"]}), flush=True)
-    # The 120-calendar-day window changes its session count over weekends.
-    # Verify actual persisted coverage and the 60-session indicator minimum.
+    # Market Intelligence requests a full-year buffer. Verify the declared
+    # window, persisted coverage, and the 60-session indicator minimum.
     from b3_agent.config import settings
     from b3_agent.repositories.market_data import MarketDataRepository
-    start = cutoff.date() - timedelta(days=120)
+    requested_days = data["market"]["requested_history_days"]
+    assert requested_days == 395, 'Market Intelligence one-year buffer regressed'
+    start = cutoff.date() - timedelta(days=requested_days)
     expected_dates = {
         record.observation_timestamp.date()
         for record in MarketDataRepository(settings.data_dir / 'archive' / 'cotahist_raw').read('PETR4')
