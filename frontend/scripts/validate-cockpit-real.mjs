@@ -89,7 +89,13 @@ assert.ok(assetTask?.task.includes('toda a carteira carregada'),'Asset analysis 
 
 await nav('Opportunities');
 const opportunityForm=page.locator('form').filter({has:page.getByRole('button',{name:'Buscar novas oportunidades',exact:true})});await opportunityForm.getByLabel('Ações candidatas acompanhadas',{exact:true}).fill('ITUB4, BBDC4');assert.ok((await opportunityForm.innerText()).includes('todas as ações do snapshot vigente'));await opportunityForm.locator('select').first().selectOption('LOWEST_REALIZED_VOLATILITY_60D');
-const opportunityRunStatus=page.locator('.opportunity-run-status');assert.ok((await opportunityRunStatus.innerText()).includes('Busca ainda não executada'));
+const opportunityRunStatus=page.locator('.opportunity-run-status');
+const automaticOpportunityRequests=requests.filter(r=>r.context?.workspace==='Opportunities'&&r.context?.include_portfolio_stocks===true);
+assert.equal(automaticOpportunityRequests.length,1,'A portfolio snapshot must trigger exactly one automatic Opportunities review');
+await opportunityRunStatus.getByText(/Busca concluída|Falha na nova busca/).waitFor({timeout:180000});
+const automaticReviewCount=automaticOpportunityRequests.length;
+await nav('Portfolio');await nav('Opportunities');
+assert.equal(requests.filter(r=>r.context?.workspace==='Opportunities'&&r.context?.include_portfolio_stocks===true).length,automaticReviewCount,'Changing workspaces must not duplicate the snapshot review');
 const opportunityResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().context?.opportunity_assets?.join(',')==='ITUB4,BBDC4',{timeout:120000});
 await page.getByRole('button',{name:'Buscar novas oportunidades',exact:true}).click();
 const opportunityHttp=await opportunityResponse;const opportunityRequest=opportunityHttp.request().postDataJSON();const opportunity=await opportunityHttp.json();assert.equal(opportunityRequest.context.include_portfolio_stocks,true);let opportunityCoverage='LIVE_API';
