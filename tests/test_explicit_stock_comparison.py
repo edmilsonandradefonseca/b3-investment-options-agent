@@ -34,3 +34,24 @@ def test_ambiguous_or_unsupported_intent_keeps_existing_path(task):
 def test_structured_form_always_wins_over_text():
     request = OrchestratorRequest('Compare comprar ações ITUB4 e comprar ações BBDC4.',context={'comparison_assets':['VALE3','RENT3']})
     assert explicit_stock_comparison(request) is request
+
+
+@pytest.mark.parametrize('amount,expected', [('10 mil',10000), ('10.000',10000), ('10000',10000), ('1.234,56',1234.56)])
+def test_lab_explicit_natural_budget_reaches_deterministic_builder(amount, expected):
+    request = OrchestratorRequest(f'Tenho R$ {amount}. Comprar ITUB4 ou BBDC4?', context={'workspace':'Strategy Lab'})
+    result = explicit_stock_comparison(request)
+    assert result.context['comparison_amount'] == expected
+    assert result.context['comparison_assets'] == ['ITUB4', 'BBDC4']
+    assert FastRouter().route(result.task, metadata=result.context).target == RouteTarget.STRATEGY_ENGINE
+
+
+@pytest.mark.parametrize('text', [
+    'Tenho R$ 10 mil. Comprar ITUB4 ou vender PUT BBDC4?',
+    'Tenho R$ 0. Comprar ITUB4 ou BBDC4?',
+    'Tenho R$ 10 mil. Comprar ITUB4 ou ITUB4?',
+    'Se eu tivesse R$ 10 mil. Comprar ITUB4 ou BBDC4?',
+    'Tenho R$ 10 mil. Comprar ITUB4 ou BBDC4? Ou VALE3?',
+])
+def test_lab_never_guesses_complex_budget_or_alternatives(text):
+    request = OrchestratorRequest(text, context={'workspace':'Strategy Lab'})
+    assert explicit_stock_comparison(request) is request
