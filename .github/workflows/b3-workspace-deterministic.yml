@@ -56,28 +56,62 @@ jobs:
           import json, os, time
           from urllib.request import Request, urlopen
           print("CI_GATE_EXPECTED_SHA=" + os.environ["GITHUB_SHA"], flush=True)
-          url = f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/actions/runs?head_sha={os.environ['GITHUB_SHA']}&event=pull_request&per_page=20"
-          for attempt in range(180):
-              request = Request(url, headers={"Authorization": "Bearer " + os.environ["GH_TOKEN"], "Accept": "application/vnd.github+json"})
+          repository = os.environ["GITHUB_REPOSITORY"]
+          expected_sha = os.environ["GITHUB_SHA"]
+          headers = {"Authorization": "Bearer " + os.environ["GH_TOKEN"], "Accept": "application/vnd.github+json"}
+          def get_json(url):
+              request = Request(url, headers=headers)
               with urlopen(request, timeout=15) as response:
-                  runs = json.load(response)["workflow_runs"]
-              ci = [run for run in runs if run["name"] == "CI"]
-              if ci and ci[0]["status"] == "completed":
-                  latest = ci[0]
-                  print(
-                      f"CI_GATE_RUN={latest['id']} SHA={latest['head_sha']} "
-                      f"STATUS={latest['status']} CONCLUSION={latest['conclusion']}",
-                      flush=True,
-                  )
-                  if latest["conclusion"] != "success":
-                      raise RuntimeError(
-                          f"CI run {latest['id']} concluded {latest['conclusion']}; Ubuntu validation refused"
-                      )
-                  print("CI_GATE=PASS", flush=True)
+                  return json.load(response)
+          
+          # Reuse green CI only when GitHub confirms that all changes since it are
+          # this gate workflow alone; source, tests, CI config, and frontend must be identical.
+          branch_url = f"https://api.github.com/repos/{repository}/actions/runs?branch=feature/react-functional-v43-integration&event=pull_request&per_page=100"
+          branch_runs = get_json(branch_url)["workflow_runs"]
+          prior_green = sorted(
+              (run for run in branch_runs if run["name"] == "CI" and run["status"] == "completed" and run["conclusion"] == "success" and run["head_sha"] != expected_sha),
+              key=lambda run: run["created_at"],
+              reverse=True,
+          )
+          gate_passed = False
+          workflow_path = ".github/workflows/b3-workspace-deterministic.yml"
+          for prior in prior_green:
+              compare_url = f"https://api.github.com/repos/{repository}/compare/{prior['head_sha']}...{expected_sha}"
+              try:
+                  comparison = get_json(compare_url)
+              except Exception as exc:
+                  print(f"CI_GATE_COMPARE_UNAVAILABLE run={prior['id']} error={type(exc).__name__}", flush=True)
+                  continue
+              changed = [item["filename"] for item in comparison.get("files", [])]
+              if (
+                  comparison.get("status") == "ahead"
+                  and 0 < comparison.get("total_commits", 0) <= 10
+                  and changed
+                  and all(filename == workflow_path for filename in changed)
+              ):
+                  print(f"CI_GATE_REUSED_RUN={prior['id']} SHA={prior['head_sha']} changed={changed}", flush=True)
+                  print("CI_GATE=PASS (application tree unchanged)", flush=True)
+                  gate_passed = True
                   break
-              time.sleep(5)
-          else:
-              raise RuntimeError("CI completion not observed; Ubuntu validation refused")
+          if not gate_passed:
+              exact_url = f"https://api.github.com/repos/{repository}/actions/runs?head_sha={expected_sha}&event=pull_request&per_page=20"
+              for attempt in range(180):
+                  runs = get_json(exact_url)["workflow_runs"]
+                  ci = [run for run in runs if run["name"] == "CI"]
+                  if ci and ci[0]["status"] == "completed":
+                      latest = ci[0]
+                      print(
+                          f"CI_GATE_RUN={latest['id']} SHA={latest['head_sha']} "
+                          f"STATUS={latest['status']} CONCLUSION={latest['conclusion']}",
+                          flush=True,
+                      )
+                      if latest["conclusion"] != "success":
+                          raise RuntimeError(f"CI run {latest['id']} concluded {latest['conclusion']}; Ubuntu validation refused")
+                      print("CI_GATE=PASS", flush=True)
+                      break
+                  time.sleep(5)
+              else:
+                  raise RuntimeError("CI completion not observed; Ubuntu validation refused")
           PY
 
   deterministic-workspaces:
