@@ -10,6 +10,10 @@ on:
       - scripts/validate_progressive_workspace_real.py
       - src/b3_agent/agents/**
       - src/b3_agent/opportunity_screen.py
+      - src/b3_agent/opportunity_materiality.py
+      - src/b3_agent/stock_opportunity_service.py
+      - tests/test_opportunity_screen.py
+      - tests/test_stock_opportunity_service.py
       - scripts/validate_stock_screen_real.py
       - scripts/validate_put_pair_real.py
       - docs/research/institution_targets_reviewed.json
