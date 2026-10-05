@@ -160,12 +160,12 @@ export const PAGE_DEFINITIONS: PageDefinition[] = [
 
 export function pageFromHash(hash = window.location.hash): PageId {
   const route = hash.replace(/^#\/?/, "").split("?")[0].trim();
-  return PAGE_DEFINITIONS.find((page) => page.route === route)?.id ?? "Overview";
+  return PAGE_DEFINITIONS.find((page) => page.route === route)?.id ?? "Portfolio";
 }
 
 export function hashForPage(pageId: PageId): string {
   const page = PAGE_DEFINITIONS.find((item) => item.id === pageId);
-  return `#/${page?.route ?? "overview"}`;
+  return `#/${page?.route ?? "portfolio"}`;
 }
 
 export function getPageDefinition(pageId: PageId): PageDefinition {
