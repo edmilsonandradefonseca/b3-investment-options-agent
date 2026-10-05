@@ -238,3 +238,24 @@ def test_materiality_distinguishes_unavailable_targets_from_valid_no_target_revi
     row=result['opportunity_screen']['rows'][0]
     assert row['materiality']['status']=='INCOMPLETE'
     assert 'falhou' in row['materiality']['reason']
+
+
+def test_opportunity_context_budget_never_truncates_deterministic_screen():
+    from b3_agent.opportunity_materiality import build_opportunity_research_scope
+    stocks=[f"ABCD{i}" for i in range(1,26)]
+    rows=[{'ticker':ticker,'discovery_eligible':True} for ticker in stocks]
+    rows.extend({'ticker':f"OPT{i}",'discovery_eligible':False} for i in range(5))
+    scope=build_opportunity_research_scope({
+        'rows':rows,
+        'requested_universe':[row['ticker'] for row in rows],
+        'candidate_universe':['ABCD1','ABCD2'],
+        'material_candidates':[{'ticker':'ABCD20'},{'ticker':'ABCD21'},{'ticker':'ABCD22'}],
+        'portfolio_stock_universe':stocks,
+    },stocks)
+    assert scope['policy_version']=='B3_OPPORTUNITY_RESEARCH_ENRICHMENT_V1'
+    assert scope['status']=='PARTIAL'
+    assert scope['screened_stock_count']==25
+    assert scope['contextual_research_count']==8
+    assert scope['deterministic_only_count']==17
+    assert scope['option_underlying_context_count']==5
+    assert scope['context_tickers'][:5]==['ABCD1','ABCD2','ABCD20','ABCD21','ABCD22']
