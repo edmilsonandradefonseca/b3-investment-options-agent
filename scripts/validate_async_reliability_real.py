@@ -6,7 +6,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from time import monotonic
+from time import monotonic, sleep
 
 
 def main():
@@ -35,15 +35,38 @@ def main():
         for raw in manifest['evidence']:
             enqueue_target(queue, reviewed_evidence(raw, datetime.now(timezone.utc)))
         started = monotonic()
-        result = LocalEvidenceAnalystJob(queue=queue).run_until_idle(limit=1, max_batches=5, max_seconds=360)
+        job = LocalEvidenceAnalystJob(queue=queue)
+        deadline = started + 360
+        rows = []
+        batches = 0
+        worker_busy = False
+        while queue.outstanding_count() and monotonic() < deadline:
+            # Respect the queue's persisted backoff and the shared inference lock.
+            # An idle batch with delayed requests does not mean the queue drained.
+            if not queue.pending(limit=1):
+                sleep(min(5, max(0, deadline - monotonic())))
+                continue
+            batch = job.run_until_idle(limit=1, max_batches=20, max_seconds=max(0.01, deadline - monotonic()))
+            rows.extend(batch['results'])
+            batches += batch['batches']
+            worker_busy = worker_busy or batch['worker_busy']
+            if batch['failed'] or batch['degraded']:
+                break
+            if batch['worker_busy']:
+                sleep(min(5, max(0, deadline - monotonic())))
+        result = {'batches': batches, 'worker_busy': worker_busy,
+                  'processed': len(rows), 'remaining_queue': queue.outstanding_count(), 'results': rows}
+        for key, status in (('ready', 'READY'), ('degraded', 'DEGRADED'), ('failed', 'FAILED'), ('deferred', 'DEFERRED')):
+            result[key] = sum(row['status'] == status for row in rows)
         write_private_report(Path.home() / '.local/share/b3-investment-options-agent/live-validation/async-reliability',
                              {'manifest': result, 'dossiers': [json.loads(path.read_text()) for path in queue.runs_dir.glob('*.json')]})
         print(json.dumps({'case': 'REAL_MULTI_BATCH_QWEN', **{key: result[key] for key in ('batches', 'processed', 'ready', 'degraded', 'failed', 'deferred', 'remaining_queue')},
                           'worker_busy': result.get('worker_busy', False),
                           'quality_flag_counts': dict(Counter(flag for row in result['results'] for flag in row.get('quality_flags', []))),
                           'elapsed_ms': round((monotonic() - started) * 1000, 1)}), flush=True)
-        assert result['processed'] == result['ready'] == len(manifest['evidence']) and result['batches'] == len(manifest['evidence'])
-        assert result['remaining_queue'] == result['degraded'] == result['failed'] == result['deferred'] == 0
+        assert result['ready'] == len(manifest['evidence']), 'Not all evidence became READY within the bounded retry window'
+        assert len({row['analysis_id'] for row in rows if row['status'] == 'READY'}) == len(manifest['evidence'])
+        assert result['remaining_queue'] == result['degraded'] == result['failed'] == 0
     print('ASYNC_RELIABILITY_REAL=PASS isolated-queue; source coverage states remain explicit', flush=True)
 
 
