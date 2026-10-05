@@ -45,7 +45,7 @@ function isOperationalStatusQuestion(task:string){
    || /^(status|status do sistema|esta conectado|esta funcionando)$/.test(normalized);
 }
 export default function App(){
- const inspectionSequence=useRef(0), expectedHash=useRef<string|null>(null), opportunitySearchInFlight=useRef(false);
+ const inspectionSequence=useRef(0), expectedHash=useRef<string|null>(null), opportunitySearchInFlight=useRef(false), opportunityAutoReviews=useRef(new Set<string>()), opportunityReviewSequence=useRef(0);
  const [copilotOpen,setCopilotOpen]=useState(true),[sidebarCollapsed,setSidebarCollapsed]=useState(false),[marketTab,setMarketTab]=useState('regime');
  const [researchMode,setResearchMode]=useState("stored_first");
  const [opportunityRun,setOpportunityRun]=useState<OpportunityRunState>({status:'idle',startedAt:null,finishedAt:null,sources:[],message:null});
@@ -178,10 +178,13 @@ export default function App(){
     return null;
   }finally{if(current())setBusy(false)}
  }
+ function opportunitySnapshotKey(snapshot:PortfolioSnapshot){return [snapshot.status,snapshot.as_of??'unknown',snapshot.updated_at??'unknown'].join('|')}
  async function runOpportunityScreen(){
   const assets=opportunityAssets.split(/[,;\s]+/).filter(Boolean).map(value=>value.toUpperCase());
   if(busy||opportunitySearchInFlight.current)return;
   opportunitySearchInFlight.current=true;
+  const reviewSequence=++opportunityReviewSequence.current;
+  const reviewedSnapshotKey=portfolio?opportunitySnapshotKey(portfolio):null;
   const startedAt=new Date().toISOString();
   setOpportunityRun(previous=>({...previous,status:'running',startedAt,finishedAt:null,message:null}));
   try{
@@ -195,8 +198,42 @@ export default function App(){
   }catch(e){
    const finishedAt=new Date().toISOString();
    setOpportunityRun(previous=>({...previous,status:'error',finishedAt,message:`A nova busca falhou: ${err(e)}. A análise anterior foi preservada.`}));
-  }finally{opportunitySearchInFlight.current=false}
+  }finally{
+   if(reviewedSnapshotKey)opportunityAutoReviews.current.add(reviewedSnapshotKey);
+   opportunitySearchInFlight.current=false;
+   if(reviewSequence!==opportunityReviewSequence.current)return;
+  }
  }
+ useEffect(()=>{
+  if(!online||!portfolio||busy||opportunitySearchInFlight.current)return;
+  const snapshotKey=opportunitySnapshotKey(portfolio);
+  if(opportunityAutoReviews.current.has(snapshotKey))return;
+  opportunityAutoReviews.current.add(snapshotKey);
+  opportunitySearchInFlight.current=true;
+  const reviewSequence=++opportunityReviewSequence.current;
+  const startedAt=new Date().toISOString();
+  setOpportunityRun(previous=>({...previous,status:'running',startedAt,finishedAt:null,message:null}));
+  const assets=opportunityAssets.split(/[,;\s]+/).filter(Boolean).map(value=>value.toUpperCase());
+  const task=`UC-03: revise ${assets.join(', ')} e todas as ações vigentes da carteira para identificar teses materiais que merecem atenção agora. Considere opções já possuídas somente como exposição e cobertura; não busque cadeia de opções. Explique por que cada tese importa, evidências favoráveis e contrárias, impacto conhecido na carteira e o que mudaria a leitura. Separar oportunidade de ação de item para acompanhar; não transforme risco ou liquidez observados em previsão de retorno nem em recomendação automática.`;
+  void b3Api.orchestrate({task,ticker:null,context:{workspace:'Opportunities',selected_ticker:null,opportunity_assets:assets,opportunity_objective:opportunityObjective,include_portfolio_stocks:true,research_mode:researchMode}})
+   .then(response=>{
+    if(reviewSequence!==opportunityReviewSequence.current)return;
+    const result=response?.result&&typeof response.result==='object'?response.result:{};
+    const failed=!response||Boolean(response.error)||Object.keys(result).length===0||result.derived_synthesis_status==='FAILED';
+    const finishedAt=new Date().toISOString();
+    if(!failed)setWorkspaceResults(previous=>({...previous,Opportunities:response}));
+    const sourceRefs=result.source_refs;
+    const sources=Array.from(new Set(response?[...(response.sources??[]),...(Array.isArray(sourceRefs)?sourceRefs:[])]:[])).filter(Boolean);
+    setOpportunityRun(previous=>({...previous,status:failed?'error':'complete',finishedAt,sources,message:failed?'A revisão automática não concluiu normalmente. A análise anterior foi preservada; confira as lacunas e tente novamente.':null}));
+   })
+   .catch(error=>{
+    if(reviewSequence!==opportunityReviewSequence.current)return;
+    setOpportunityRun(previous=>({...previous,status:'error',finishedAt:new Date().toISOString(),message:`A revisão automática falhou: ${err(error)}. A análise anterior foi preservada.`}));
+   })
+   .finally(()=>{
+    opportunitySearchInFlight.current=false;
+   });
+ },[online,portfolio,busy,opportunityRun.status,opportunityAssets,opportunityObjective,researchMode]);
  function openInStrategyLab(response:OrchestrateResponse|null=null){
   ++inspectionSequence.current;
   navigate('Strategy Lab');setBusy(false);setNotice('');
