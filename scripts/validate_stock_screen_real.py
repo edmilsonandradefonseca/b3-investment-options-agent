@@ -13,9 +13,15 @@ def _failure_category(status, data):
     if isinstance(detail, (dict, list)):
         detail = json.dumps(detail, ensure_ascii=False)
     text = str(detail).casefold()
-    if any(token in text for token in ('portfolio', 'snapshot', 'position')):
+    if 'invalid b3 equity ticker' in text:
+        return 'INVALID_EQUITY_SYMBOL'
+    if 'unsupported opportunity objective' in text:
+        return 'UNSUPPORTED_SCREEN_OBJECTIVE'
+    if 'select at least one candidate asset' in text:
+        return 'EMPTY_SCREEN_UNIVERSE'
+    if 'portfolio' in text or 'snapshot' in text or 'position' in text:
         return 'PORTFOLIO_OR_SNAPSHOT'
-    if any(token in text for token in ('yahoo', 'oplab', 'brapi', 'provider', 'quote', 'history')):
+    if any(token in text for token in ('yahoo', 'oplab', 'brapi', 'provider', 'quote', 'history', 'market data')):
         return 'MARKET_DATA_OR_PROVIDER'
     if any(token in text for token in ('ticker', 'symbol', 'objective', 'asset', 'request', 'unsupported')):
         return 'REQUEST_OR_DOMAIN_VALIDATION'
