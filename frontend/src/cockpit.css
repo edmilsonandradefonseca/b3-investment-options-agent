@@ -16,3 +16,5 @@
 @keyframes task-led-pulse{50%{opacity:.4;box-shadow:0 0 0 5px #55c7ff18,0 0 4px #55c7ff70}}
 @media(prefers-reduced-motion:reduce){.task-indicator__light{animation:none}}
 @media(max-width:620px){.task-indicator{margin-left:auto}.workspace-head{flex-wrap:wrap}.task-indicator[aria-busy="true"]{order:3;width:100%;justify-content:flex-start}}
+
+.materiality-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:12px}.materiality-item{display:grid;gap:8px;align-content:start;padding:16px;border:1px solid #27445b;border-radius:12px;background:#0c1e2c}.materiality-item>div{display:flex;align-items:center;gap:10px}.materiality-item>strong{font-size:1.05rem;color:#e9f4fb}.materiality-item p{margin:0;line-height:1.5}.materiality-item a{width:max-content;color:#7dd3fc}.materiality-monitor{margin-top:16px;padding-top:12px;border-top:1px solid #27445b}.materiality-monitor li{margin:.5rem 0;line-height:1.5}
