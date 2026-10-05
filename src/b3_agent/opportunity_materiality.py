@@ -206,7 +206,7 @@ def build_opportunity_research_scope(
         "deterministic_only_count": len(eligible) - len(selected),
         "option_underlying_context_count": max(
             0,
-            len(screen.get("requested_universe", [])) - len(eligible),
+            len(screen.get("requested_universe") or []) - len(eligible),
         ),
         "context_tickers": selected,
         "deterministic_only_reason": (
