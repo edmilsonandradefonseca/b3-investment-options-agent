@@ -1,3 +1,5 @@
+> Revisão normativa de 05/10/2026: [Especificação V1.2](FRONTEND_DECISION_WORKSPACES_SPEC_V1.2.md). Preserva os IDs existentes e explicita as alterações aprovadas de escopo e fluxo. [Gaps e entregas](FRONTEND_V44_GAPS_AND_DELIVERY_2026-10-05.md).
+
 # Plano de conclusão funcional — Opportunities, Market Intelligence, Strategy Lab e Copilot
 
 ## Objetivo e autoridade
