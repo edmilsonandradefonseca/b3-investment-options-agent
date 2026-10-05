@@ -111,7 +111,7 @@ Posições possuídas participam do contexto sem carregar cadeia inteira. Abrir 
 
 ## Contrato funcional mínimo backend → frontend
 
-Reusar /v1/orchestrate e serviços existentes. Evoluir contratos versionados quando necessário; não criar um segundo ledger. Resposta deve transportar: identificador da análise, revisão da carteira, as_of, fontes/observações, estado de processamento, narrativa, fatos/calculados, hipóteses, alternativas, razões, cobertura por ativo, erros localizados e status da síntese. Opportunities exige lista material filtrada e justificativa por item; Lab exige pergunta/contexto/revisão; Market exige escopo panorama/ativo. Ausência de um campo é gap, não licença para inferi-lo no React.
+Reusar /orchestrate, endpoint do runtime revisado, e serviços existentes. Evoluir contratos versionados quando necessário; não criar um segundo ledger. Resposta deve transportar: identificador da análise, revisão da carteira, as_of, fontes/observações, estado de processamento, narrativa, fatos/calculados, hipóteses, alternativas, razões, cobertura por ativo, erros localizados e status da síntese. Opportunities exige lista material filtrada e justificativa por item; Lab exige pergunta/contexto/revisão; Market exige escopo panorama/ativo. Ausência de um campo é gap, não licença para inferi-lo no React.
 
 ## Rastreabilidade e alterações dos critérios existentes
 
