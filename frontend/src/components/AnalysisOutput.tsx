@@ -235,7 +235,7 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
         <tbody>{['1W','1M','3M','6M','1Y'].map(period=>{
           const comparison=historicalComparisons.find(row=>asText(row.period)===period);
           const difference=numberValue(comparison?.right_minus_left_return_fraction);
-          return <tr key={period}><th scope="row">{({1W:'1 semana',1M:'1 mês',3M:'3 meses',6M:'6 meses',1Y:'1 ano'} as Record<string,string>)[period]}</th>
+          return <tr key={period}><th scope="row">{({'1W':'1 semana','1M':'1 mês','3M':'3 meses','6M':'6 meses','1Y':'1 ano'} as Record<string,string>)[period]}</th>
             {stockPurchaseTickers.map(ticker=>{
               const history=asObject(asObject(stockPurchaseByTicker.get(ticker)?.historical_returns)?.[period]);
               const observed=numberValue(history?.return_fraction);
