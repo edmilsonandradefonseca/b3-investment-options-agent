@@ -167,3 +167,22 @@ Este registro atualiza o diagnóstico antigo acima, que descrevia o checkbox e t
 - Testes adicionados para união de 23 ativos sem teto, snapshot ausente com continuidade e exposição de PUT/CALL incluindo ativo-objeto somente de opção. Validação backend/frontend ainda precisa rodar neste candidato; não declarar aceite do runner/produção.
 
 Próximos gates: validar build e suíte de domínio; resolver/diagnosticar o teste HTTP que pendura no Python local; rodar CI em Python suportado; executar cenário do runner com snapshot vigente sanitizado; então revisar custo/latência e fechar uma seleção material versionada antes de implementar análise automática OPP-01.
+
+
+## Resultado do candidato publicado — OPP-02/OPP-06 parcial, 05/10/2026
+
+- Branch `feature/react-functional-v43-integration`, checkpoint publicado antes deste registro: `840a0f769f40c8963d454fb305b825aaf4b17078`; PR #66 permanece aberto em draft.
+- CI `37361024443` para `840a0f7`: PASS — suíte Python completa em Python 3.14, build React, `check-decision-rendering` e testes de apresentação. O erro intermediário `37361015148` em `d4d7657` ocorreu antes da atualização correspondente do teste antigo de limite de 20; a revisão final substituiu a expectativa obsoleta, e CI integral subsequente passou.
+- Local: 13 testes direcionados de Opportunities e compilação Python PASS; `npm run build`, `check-decision-rendering` e sintaxe da validação do navegador PASS. O teste de rota com `TestClient` pendurou no Python 3.12 local; CI Python 3.14 executou a suíte inteira com sucesso.
+- Workflows Ubuntu: a comparação real `37361012415` está associada à revisão intermediária `d4d7657`; a caminhada visual mais recente observada (`37361007180`) ainda testa revisão intermediária `9a168d5`. Ainda não há PASS de browser ou API de produção para `840a0f7`.
+- Nenhum checkout, processo `b3-runtime.service`, carteira ou instalação Windows foi alterado por esta entrega. Ativação de produção não realizada. Os dados reais do snapshot BTG ainda precisam ser exercitados pelo runner para aceitar OPP-06.
+
+### Situação atual de requisitos
+
+- `OPP-02` PARTIAL — união completa estável e sem teto, detalhe de exposição exibido; composição material, agente primeiro e persistência de item selecionado permanecem.
+- `OPP-04` PARTIAL — processo não trunca carteira/candidatos, mas o screening de volatilidade/liquidez não é descoberta material e nenhuma varredura geral da B3 foi prometida.
+- `OPP-06` PARTIAL — contratos abertos e cobertura são contexto determinístico sem chain; validação real BTG e revisão do impacto agregado aguardam runner.
+- `OPP-01` MISSING — análise automática idempotente por snapshot/sessão não está implementada. Não ativar até orçamento/latência e idempotência backend estarem demonstrados.
+- Strategy Lab e Market Intelligence não foram modificados neste incremento. LAB-01/02/06 continuam com evidência prévia; demais LAB, MI-01 panorama completo e MI-04/05 cobertura de research continuam parciais/conforme matriz anterior.
+
+Próximo: concluir aceite Ubuntu do candidato com CI verde e snapshot sem conteúdo pessoal em artifact; depois implementar e testar OPP-01/OPP-04 versionados. Em paralelo seguir E4 (panorama MI) e E5 (multi-pernas Lab).
