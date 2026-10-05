@@ -142,3 +142,77 @@ def classify_stock_materiality(row: dict[str, Any], as_of: datetime) -> dict[str
             f"Estado da fonte: {target_status}. Isso não prova ausência de catalisadores fora desta evidência."
         )
     return base
+
+
+OPPORTUNITY_RESEARCH_BUDGET_POLICY = "B3_OPPORTUNITY_RESEARCH_ENRICHMENT_V1"
+MAX_SYNCHRONOUS_RESEARCH_TICKERS = 8
+
+
+def build_opportunity_research_scope(
+    screen: dict[str, Any],
+    requested_tickers: list[str] | tuple[str, ...],
+    *,
+    limit: int = MAX_SYNCHRONOUS_RESEARCH_TICKERS,
+) -> dict[str, Any]:
+    """Bound optional synchronous news enrichment without truncating screening.
+
+    All names remain in the deterministic screen. Explicitly watched stocks and
+    material review candidates receive first priority for the slower research
+    context; the returned counts make omitted enrichment visible.
+    """
+    if limit < 1:
+        raise ValueError("limit must be positive")
+    rows = screen.get("rows") if isinstance(screen.get("rows"), list) else []
+    eligible = [
+        str(row.get("ticker") or "").strip().upper()
+        for row in rows
+        if isinstance(row, dict)
+        and row.get("discovery_eligible") is True
+        and str(row.get("ticker") or "").strip()
+    ]
+    if not eligible:
+        eligible = [
+            str(ticker).strip().upper()
+            for ticker in requested_tickers
+            if isinstance(ticker, str) and ticker.strip()
+        ]
+    eligible = list(dict.fromkeys(eligible))
+    eligible_set = set(eligible)
+
+    def symbols(values: Any) -> list[str]:
+        return list(dict.fromkeys(
+            str(item).strip().upper()
+            for item in values if isinstance(item, str) and item.strip()
+        )) if isinstance(values, (list, tuple)) else []
+
+    material_rows = screen.get("material_candidates")
+    material = [
+        str(item.get("ticker") or "").strip().upper()
+        for item in material_rows if isinstance(item, dict) and item.get("ticker")
+    ] if isinstance(material_rows, list) else []
+    priorities = (
+        symbols(screen.get("candidate_universe"))
+        + material
+        + symbols(screen.get("portfolio_stock_universe"))
+        + eligible
+    )
+    ordered = list(dict.fromkeys(ticker for ticker in priorities if ticker in eligible_set))
+    selected = ordered[:limit]
+    return {
+        "policy_version": OPPORTUNITY_RESEARCH_BUDGET_POLICY,
+        "status": "COMPLETE" if len(eligible) <= len(selected) else "PARTIAL",
+        "screened_stock_count": len(eligible),
+        "contextual_research_count": len(selected),
+        "deterministic_only_count": len(eligible) - len(selected),
+        "option_underlying_context_count": max(
+            0,
+            len(screen.get("requested_universe", [])) - len(eligible),
+        ),
+        "context_tickers": selected,
+        "deterministic_only_reason": (
+            "Synchronous news enrichment budget reached; deterministic screening, "
+            "quotes, portfolio exposure and materiality remain available for every stock."
+            if len(eligible) > len(selected)
+            else None
+        ),
+    }
