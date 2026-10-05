@@ -30,3 +30,11 @@ Cada entrega mantém teste, commit, run e status separados: implementado, verifi
 ## Runtime e aceite
 
 Coleta atual pendente pelo workflow b3-v44-review. Resultados serão anexados por metadados, sem posições pessoais. Windows não é alcançado pelo runner Ubuntu; build preview não é a versão instalada Windows.
+
+## Evidência atual e primeiro bloco
+
+- Runner read-only 37310810098: PASS operacional. Checkout Ubuntu ac27ff3; serviço ativo PID2239, início 05/10 07:33 São Paulo. /version só informa 0.1.0, não SHA do processo: G01 continua parcial. /health LLM true; /analysis/live/PETR4 0,2s, 84 candles, último candle 02/10, zero contratos consultados. Não afirmar cotação intraday atual.
+- Falha visual 37248585709: seletor de título antigo, comprovado contra AnalysisOutput.tsx. Corrigido o título esperado; não afrouxado gate de conteúdo.
+- E1 iniciado: StrategySession central com pergunta livre, uma chamada sênior pela API existente, sem defaults dos formulários, histórico de perguntas/respostas e reset, LED e preservação de respostas em falha. Controles determinísticos existentes permanecem para compatibilidade; E1 ainda não fecha layout final/cálculos multi-pernas.
+- Build local e check-decision-rendering PASS. Browser local bloqueado por download de Chromium truncado; validação de navegador segue no runner Ubuntu, onde Chromium existe. Fixture de navegador explicitamente distinta de aceite real.
+- Publicação feita pelo conector GitHub porque git push HTTPS local não tem credencial. SHAs remotos são autoridade; commit local 1b3f17e não é SHA publicado.
