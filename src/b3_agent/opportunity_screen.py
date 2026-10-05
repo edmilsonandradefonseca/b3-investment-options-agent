@@ -75,9 +75,12 @@ class StockOpportunityScreenService:
         unresolved_option_underlying_count = 0
 
         def canonical_position_ticker(position):
-            raw = (position.underlying_ticker
-                if position.instrument_type.upper() == 'OPTION' and position.underlying_ticker
-                else position.ticker)
+            if position.instrument_type.upper() == 'OPTION':
+                raw = position.underlying_ticker
+                if not raw:
+                    return None
+            else:
+                raw = position.ticker
             try:
                 return _validated_equity_ticker(raw)
             except (TypeError, ValueError):
