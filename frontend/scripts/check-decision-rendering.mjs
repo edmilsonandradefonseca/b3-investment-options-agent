@@ -33,6 +33,22 @@ try {
   const buyData={...data,result:{stock_purchase_comparison:{rows:[{alternative_id:'BUY:A',ticker:'ITUB4',source_refs:['verified-buy-source'],fundamental_metrics:{priceEarnings:{value:9,unit:'ratio',report_date:'2026-09-30',period_type:'TTM',source:'qualified-fundamental',quality_status:'WARNING'}},institution_targets:{status:'QUALIFIED_OBSERVATIONS',rows:[{institution:'XP',price_brl:40,horizon_date:'2027-10-03',source_url:'https://conteudos.xpi.com.br/itub4',document_id:'target-report:1'}]},observed_risk:{},excluded_metrics:[],dividends:{collection_status:'READ_OK',events:[{payment_type:'JCP',gross_amount_per_share_brl:1,source:'issuer-source',source_record_id:'issuer:1',record_date:'2026-10-05',payment_date:'2026-10-30',new_purchase_entitlement:'CONDITIONAL_FUTURE_RECORD_DATE'}],limitations:['Dividend entitlement is conditional']} }],limitations:['No qualified forward dividend forecast']}}};
   const buyHTML=renderToStaticMarkup(createElement(AnalysisOutput,{data:buyData})).split('<details class="technical-output">')[0];
   for(const value of ['Compra entre ações','ITUB4','verified-buy-source','qualified-fundamental','TTM','No qualified forward dividend forecast','UNKNOWN','issuer-source','issuer:1','2026-10-30','Condicional','target-report:1','2027-10-03']) assert.ok(buyHTML.includes(value),`BUY comparison lost: ${value}`);
+  const pairHTML=renderToStaticMarkup(createElement(AnalysisOutput,{data:{status:'COMPLETED',error:null,sources:[],audit:[],result:{
+    strategy_comparison:{alternatives:[{subject_id:'ITUB4'},{subject_id:'BBDC4'}]},
+    stock_purchase_comparison:{
+      rows:[
+        {alternative_id:'BUY:ITUB4',ticker:'ITUB4',historical_returns:{'1M':{status:'AVAILABLE',return_fraction:0.08,start_at:'2026-09-01T00:00:00Z',end_at:'2026-10-01T00:00:00Z',price_basis:'close'}},fundamental_metrics:{priceEarnings:{value:8.4,unit:'ratio',report_date:'2026-09-30',period_type:'TTM',quality_status:'VALIDATED'}},excluded_metrics:[],observed_risk:{volatility_60d:0.22,max_drawdown:-0.12}},
+        {alternative_id:'BUY:BBDC4',ticker:'BBDC4',historical_returns:{'1M':{status:'AVAILABLE',return_fraction:0.03,start_at:'2026-09-01T00:00:00Z',end_at:'2026-10-01T00:00:00Z',price_basis:'close'}},fundamental_metrics:{priceEarnings:{value:7.2,unit:'ratio',report_date:'2026-09-30',period_type:'TTM',quality_status:'VALIDATED'}},excluded_metrics:[],observed_risk:{volatility_60d:0.18,max_drawdown:-0.09}},
+      ],
+      historical_comparisons:[{period:'1M',status:'COMPARABLE',right_minus_left_return_fraction:-0.05}],
+      fundamental_comparisons:[{metric:'priceEarnings',status:'COMPARABLE',right_minus_left: -1.2}],
+      limitations:[],
+    }
+  }}})).split('<details class="technical-output">')[0];
+  for(const value of ['ITUB4 × BBDC4','1 mês','8%','3%','−5%','Preço / lucro (P/L)','8,4×','7,2×']) assert.ok(pairHTML.includes(value),`Side-by-side stock comparison lost: ${value}`);
+  const noScenarioHTML=renderToStaticMarkup(createElement(AnalysisOutput,{data:{status:'COMPLETED',error:null,sources:[],audit:[],result:{economic_decision:{ranking:'NOT_REQUESTED',rows:[{alternative_id:'A',ticker:'ITUB4',scenarios:[]}],limitations:[]}}}})).split('<details class="technical-output">')[0];
+  assert.ok(!noScenarioHTML.includes('Ação / cenário'));
+  assert.ok(noScenarioHTML.includes('não informou preços futuros hipotéticos'));
   const economicHTML=renderToStaticMarkup(createElement(AnalysisOutput,{data:{...data,result:{economic_decision:{ranking:'UNKNOWN_INCOMPLETE_INPUTS',rows:[{alternative_id:'A',ticker:'ITUB4',scenarios:[{name:'Explicit scenario',net_scenario_pnl_brl:null,opportunity_cost_brl:null}]}],limitations:['Economic assumptions are not forecasts']}}}})).split('<details class="technical-output">')[0];
   for(const value of ['Decisão econômica','Dados incompletos','Explicit scenario','Economic assumptions are not forecasts','UNKNOWN']) assert.ok(economicHTML.includes(value),`Economic decision lost: ${value}`);
   console.log('Decision rendering: PASS (human-facing evidence and tradeoffs)');
