@@ -8,6 +8,7 @@ from datetime import date, datetime, timezone
 import fcntl
 import hashlib
 import json
+import math
 from pathlib import Path
 from threading import local
 
@@ -27,7 +28,9 @@ class RecordCache:
         self.root = root or settings.data_dir / "cache" / "stock_sources_v44"
 
     def peek(self, key, record_type, ttl):
-        digest = hashlib.sha256(json.dumps(key, sort_keys=True).encode()).hexdigest()
+        # One file per capability/source/ticker. Changing date windows replaces
+        # the envelope rather than accumulating a new file every day forever.
+        digest = hashlib.sha256(json.dumps(key[:3], sort_keys=True).encode()).hexdigest()
         try:
             payload = json.loads((self.root / f"{digest}.json").read_text())
             age = datetime.now(timezone.utc).timestamp()-payload["fetched_at"]
@@ -38,7 +41,7 @@ class RecordCache:
         return []
 
     def get_or_fetch(self, key, record_type, ttl, fetch):
-        digest = hashlib.sha256(json.dumps(key, sort_keys=True).encode()).hexdigest()
+        digest = hashlib.sha256(json.dumps(key[:3], sort_keys=True).encode()).hexdigest()
         path = self.root / f"{digest}.json"
         self.root.mkdir(parents=True, exist_ok=True)
         with path.with_suffix(".lock").open("a+b") as lock:
@@ -147,7 +150,8 @@ class StockFundamentalsProvider:
                     rows, reused = self.cache.get_or_fetch(["fundamentals-v1", provider.name, ticker.upper()], StockFundamental, 86400,
                         lambda: provider.get_financial_data(ticker))
                 for row in rows:
-                    if row.ticker != ticker.upper() or row.unit is None:
+                    if (row.ticker != ticker.upper() or row.unit is None or row.quality_status == "REJECTED"
+                            or isinstance(row.value, bool) or not isinstance(row.value, (int, float)) or not math.isfinite(row.value)):
                         continue
                     selected.setdefault(row.metric, row)
                 diagnostics.append({"source": provider.name, "status": "AVAILABLE" if rows else "EMPTY", "cache_reused": reused})

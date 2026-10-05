@@ -121,6 +121,24 @@ def test_fundamental_fallback_by_field_preserves_yahoo_and_cache(tmp_path):
     assert any(d["source"] == "oplab" and d["status"] == "UNSUPPORTED" for d in service.diagnostics)
 
 
+def test_cache_windows_do_not_accumulate_files_or_reuse_wrong_range(tmp_path):
+    cache = RecordCache(tmp_path)
+    first = ["dividends-v1", "yahoo", "PETR4", "2025-01-01", "2026-01-01"]
+    second = ["dividends-v1", "yahoo", "PETR4", "2025-01-02", "2026-01-02"]
+    cache.get_or_fetch(first, StockMarketData, 86400, lambda: [quote()])
+    assert cache.peek(second, StockMarketData, 86400) == []
+    cache.get_or_fetch(second, StockMarketData, 86400, lambda: [quote()])
+    assert len(list(tmp_path.glob("*.json"))) == 1
+    assert cache.peek(first, StockMarketData, 86400) == []
+
+
+def test_nonfinite_fundamental_is_not_admitted(tmp_path):
+    yahoo = Provider("yahoo", [metric("priceEarnings", 5, "yahoo"), metric("returnOnEquity", float("nan"), "yahoo", "fraction")])
+    brapi = Provider("brapi", error=True)
+    rows = StockFundamentalsProvider(yahoo=yahoo, brapi=brapi, cache=RecordCache(tmp_path)).get_financial_data("PETR4")
+    assert [row.metric for row in rows] == ["priceEarnings"]
+
+
 def test_history_local_authority_then_yahoo(tmp_path):
     day = datetime(2026, 9, 25, 21, tzinfo=timezone.utc)
     archived = quote("b3_cotahist", day)

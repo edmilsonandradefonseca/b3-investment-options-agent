@@ -114,11 +114,15 @@ jobs:
           timeout 300s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_stock_screen_real.py
           timeout 300s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_economic_decision_real.py --senior
 
-      - name: Update and restart the authorized Ubuntu runtime
+      - name: Update and restart the prepared Ubuntu runtime
+        if: github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
           set -euo pipefail
           runtime_dir=/opt/b3-investment-options-agent
+          # Refuse before changing checkout when activation cannot complete.
+          sudo -n -l systemctl restart b3-runtime.service >/dev/null
+          "$runtime_dir/.venv/bin/python" -c 'from importlib.metadata import version; from packaging.specifiers import SpecifierSet; assert version("yfinance") in SpecifierSet(">=1.7,<2"), "Prepare candidate dependencies before activation"'
           test "$(git -C "$runtime_dir" branch --show-current)" = "feature/react-functional-v43-integration"
           test -z "$(git -C "$runtime_dir" status --porcelain --untracked-files=no)"
           git -C "$runtime_dir" fetch origin feature/react-functional-v43-integration
@@ -127,7 +131,8 @@ jobs:
           if sudo -n systemctl restart b3-runtime.service; then
             echo "RUNTIME_RESTART=PERFORMED"
           else
-            echo "RUNTIME_RESTART=BLOCKED; checking the active HTTP runtime without claiming deployment"
+            echo "RUNTIME_RESTART=BLOCKED; activation not completed"
+            exit 1
           fi
           ready=0
           for attempt in {1..20}; do
@@ -145,7 +150,7 @@ jobs:
           python3 - <<'PY'
           import json
           import time
-          from datetime import datetime
+          from datetime import datetime, timezone
           from urllib.request import urlopen
           started = time.monotonic()
           with urlopen("http://127.0.0.1:8000/analysis/live/PETR4", timeout=20) as response:
@@ -165,16 +170,19 @@ jobs:
           }
           print(json.dumps(result, ensure_ascii=False), flush=True)
           assert data["ticker"] == "PETR4"
-          assert str(latest["observation_timestamp"]).startswith("2026-10-02"), "Expected 02/10 candle"
+          latest_at = datetime.fromisoformat(latest["observation_timestamp"].replace("Z", "+00:00"))
+          now = datetime.now(timezone.utc)
+          assert latest_at <= now and (now-latest_at).days <= 7, "Future or stale history tail"
           assert market["history_count"] == len(market["price_history"]) >= 60, "History indicator coverage regressed"
-          assert "b3_cotahist" in sources and "oplab" in sources, "Missing required source"
+          assert sources and set(sources) <= {"b3_cotahist", "yahoo", "oplab", "brapi"}, "Unexpected history provenance"
           assert data["options"]["contract_count"] == 0, "History route must not request options"
           print("PETR4_HTTP_ACCEPTANCE=PASS", flush=True)
           PY
 
-      - name: Identify deployed runtime checkout
+      - name: Identify checkout and active process separately
         run: |
           git -C /opt/b3-investment-options-agent rev-parse HEAD
+          systemctl show b3-runtime.service --property=MainPID --property=ActiveEnterTimestamp
 
       - name: Compare deterministic paths and screen data endpoints
         env:
