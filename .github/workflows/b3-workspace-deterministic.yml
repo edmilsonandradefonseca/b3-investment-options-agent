@@ -55,6 +55,7 @@ jobs:
           python3 - <<'PY'
           import json, os, time
           from urllib.request import Request, urlopen
+          print("CI_GATE_EXPECTED_SHA=" + os.environ["GITHUB_SHA"], flush=True)
           url = f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/actions/runs?head_sha={os.environ['GITHUB_SHA']}&event=pull_request&per_page=20"
           for attempt in range(180):
               request = Request(url, headers={"Authorization": "Bearer " + os.environ["GH_TOKEN"], "Accept": "application/vnd.github+json"})
