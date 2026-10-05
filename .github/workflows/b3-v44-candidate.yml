@@ -15,6 +15,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - name: Record candidate revision
+        run: echo "CANDIDATE_SHA=$GITHUB_SHA"
       - name: Validate candidate API and senior on real data without restarting service
         env:
           PYTHONPATH: ${{ github.workspace }}/src
