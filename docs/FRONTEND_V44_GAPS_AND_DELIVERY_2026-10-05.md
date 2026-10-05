@@ -38,3 +38,13 @@ Coleta atual pendente pelo workflow b3-v44-review. Resultados serão anexados po
 - E1 iniciado: StrategySession central com pergunta livre, uma chamada sênior pela API existente, sem defaults dos formulários, histórico de perguntas/respostas e reset, LED e preservação de respostas em falha. Controles determinísticos existentes permanecem para compatibilidade; E1 ainda não fecha layout final/cálculos multi-pernas.
 - Build local e check-decision-rendering PASS. Browser local bloqueado por download de Chromium truncado; validação de navegador segue no runner Ubuntu, onde Chromium existe. Fixture de navegador explicitamente distinta de aceite real.
 - Publicação feita pelo conector GitHub porque git push HTTPS local não tem credencial. SHAs remotos são autoridade; commit local 1b3f17e não é SHA publicado.
+
+## Validação após reinício manual — 05/10, 09:57 São Paulo
+
+- CI 37312209716 e 37312843810: PASS nas revisões candidatas.
+- Candidato ASGI 37312207143: pergunta natural com R$10 mil gerou duas alternativas canônicas em 2,4s; síntese sênior + tabela em 88,55s, tese291 caracteres/rationale1197. É evidência estrutural, não avaliação qualitativa completa.
+- Navegador 37312005092: LAB-01/02/06 PASS com fixtures (pergunta central, ausência de defaults ocultos, continuação/reset). Teste global revelou seletores antigos e exigência de texto específico no prompt Market; corrigidos, suíte global novamente em execução.
+- Entrega 37311815798: CI PASS e checkout avançado para d3624d1; sudo bloqueou restart. Usuário reiniciou manualmente. Auditoria 37312595988 confirma PID40014 e início09:51:37, checkout d3624d1 limpo, health ativo/LLMtrue. Não confundir a versão publicada posterior do React com a versão instalada Windows.
+- API ativa após restart: pergunta natural resultou em stock_purchase_comparison com2 alternativas + síntese COMPLETED/PASS, sem erro, em68,06s. Histórico PETR4 respondeu em0,16s,85 registros, candle de05/10,zero cadeia. Data diária não comprova preço intraday executável.
+- Primeiro bloco E1: campo central + LED + histórico; grafo conserva conversa como contexto histórico não autoritativo; interpretação exata de orçamento para exemplo aprovado. Layout com controles estruturados recolhidos e cinco itens principais publicado depois do checkout d3624d1; implantação Windows pendente.
+- E2 Opportunities automática e material ainda NÃO implementada. E3 fontes/quotas/unidades, E4 Market completo e E5 multi-pernas continuam abertos. Não publicar aceite integral destas telas.
