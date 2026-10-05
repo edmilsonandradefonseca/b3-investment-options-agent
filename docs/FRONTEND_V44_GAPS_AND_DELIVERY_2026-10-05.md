@@ -198,3 +198,23 @@ Próximo: concluir aceite Ubuntu do candidato com CI verde e snapshot sem conte�
 - Requisitos: `OPP-02/06` PARTIAL (união sem teto/exposição codificadas, API ativa não aceita a tela neste teste); `OPP-01` MISSING e `OPP-04` PARTIAL (revisão automática idempotente/materialidade ainda não implementadas). Strategy Lab e Market Intelligence seguem PARTIAL conforme a matriz acima; aceite de dados atuais no runner aguarda workflow.
 - Próximo: obter a prévia sanitizada do 400; corrigir o contrato no componente correto; executar candidato Ubuntu após CI; revalidar Opportunities com snapshot real; atualizar esta seção com os resultados, sem promover fixture a aceite. Estratégia `ITUB4 × BBDC4` e ativo `PETR4` precisam passar no mesmo candidato real. Sem reinício manual, não afirmar ativação do processo.
 
+## Checkpoint atualizado — 05/10/2026 (CI e aceite real do Strategy Lab)
+
+- Branch: `feature/react-functional-v43-integration`. SHA testado no runner Ubuntu: `9bcff39a0266e0d16910d92c2244fc32a73baaed`; o workflow registrou esse SHA no log como `CANDIDATE_SHA`.
+- CI `37366601794` terminou com os dois jobs aprovados: Python `test` e React `frontend-build`, incluindo a verificação de que a informação de decisão chega ao frontend. A primeira falha era indisponibilidade temporária de alocação do runner hospedado; não era falha do código nem os avisos de depreciação.
+- Corrida antiga `37365880060` para `0aefb50` continua sem gate completo: `frontend-build` passou e `test` foi cancelado. CI para `f8052ba` (`37370830005`) segue aguardando runners; em `9bcff39` (`37371120889`), frontend passou e Python ainda aguarda. O gate determinístico precisa de CI verde para o mesmo SHA.
+- Aceite real no Ubuntu `37371112897` PASSOU em cerca de 1m12s, com a síntese sênior em 60,22s. O runner importou o código candidato como ASGI contra os dados/serviços locais, sem reiniciar `b3-runtime.service`.
+- `LAB-01`: pergunta natural com orçamento de R$ 10.000 comparando compra de ITUB4 e BBDC4; resposta determinística retornou ambas as linhas de comparação, sem erro.
+- `LAB-02`: mesma tese em modo `stored_first`; a comparação canônica trouxe duas ações e a síntese sênior produziu tese (230 caracteres) e justificativa (927 caracteres), sem erro.
+- O Neo4j emitiu avisos de propriedade `valid_to` ausente em parte do grafo. Não impediram o aceite, mas devem ser avaliados como qualidade/esquema de dados; não declarar cobertura temporal validada por este teste.
+- Este aceite é do backend candidato, não do processo HTTP ativo. O serviço de produção não foi reiniciado, e a carteira nem o ambiente Windows foram alterados.
+- Opportunities continua PARTIAL: o endpoint ativo ainda devolveu HTTP 400 por exceder o limite legado de ativos. O candidato remove esse teto, mas falta validar a chamada com a carteira real no processo ativo. O fallback visual não é aceite financeiro.
+- Market Intelligence permanece PARTIAL: os fluxos HTTP e a tela foram exercitados em validação visual anterior, mas a cobertura integral atual de gráfico 1s/1m/1a, notícias/eventos, targets e síntese explicada ainda não foi confirmada end-to-end neste checkpoint.
+- PR #66 continua aberto como draft. Nenhuma ativação do serviço foi feita. A etapa de restart permanece condicionada ao workflow manual e à disponibilidade de `sudo -n systemctl restart b3-runtime.service`.
+
+### Próximos passos rastreáveis
+
+1. Aguardar CI Python verde no SHA candidato atual e deixar o workflow `b3-workspace-deterministic.yml` passar pelo gate; então conferir o log `CI_GATE_RUN` para comprovar SHA e conclusão exatos.
+2. Usar os resultados do Ubuntu para fechar a comparação ITUB4 × BBDC4; validar ainda PETR4 em Market Intelligence e corrigir o 400 de Opportunities no limite apropriado (fonte/união de símbolos → API ativa), sem tratar fixtures como dados reais.
+3. Executar aceite de carteira/posições/opções real no processo ativo; ativar por workflow apenas quando as verificações prévias passarem. Se `sudo -n` continuar bloqueado, registrar a ativação como BLOCKED e manter o serviço atual.
+4. Atualizar esta matriz e o PR #66 com os resultados de cada endpoint e tela. O aceite atual não conclui UC01–UC12, não certifica cobertura financeira total e não conclui as três áreas end-to-end.
