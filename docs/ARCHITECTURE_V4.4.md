@@ -7,6 +7,10 @@
 
 > Publicar esta arquitetura não significa que suas capacidades estejam implantadas. A V4.4 define o comportamento final esperado; estados de implementação, cobertura real e versão ativa devem ser comprovados separadamente.
 
+## Revisão funcional aprovada em 05/10/2026
+
+A [especificação V1.2](FRONTEND_DECISION_WORKSPACES_SPEC_V1.2.md) detalha os fluxos e é normativa para as três telas. Opportunities descobre teses sobre ações ao abrir a aplicação, permite nova busca e não varre cadeias de opções automaticamente; opções possuídas compõem o contexto. Não há encaminhamento obrigatório após a leitura. Strategy Lab recebe perguntas e teses no painel central; Market Intelligence interpreta panorama e ativos. Esta revisão prevalece sobre descrições mais amplas de descoberta automática nas seções 10 e 16, mantendo as estratégias detalhadas sob demanda no Lab. [Gaps e entregas](FRONTEND_V44_GAPS_AND_DELIVERY_2026-10-05.md) registram implementação e evidências separadamente.
+
 ## 1. Base documental e estado da revisão
 
 Código inspecionado: branch `feature/react-functional-v43-integration`, commit `5ccb458cf81fa3cb2f5f1c3d7f30bb7fd4bace9e`, checkout limpo na revisão. PR relacionado: [#66](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/pull/66), aberto/draft na consulta. Não houve alteração de código funcional nesta revisão.
