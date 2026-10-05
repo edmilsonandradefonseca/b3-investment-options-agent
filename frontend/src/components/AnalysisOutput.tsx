@@ -160,14 +160,16 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
   const limitations = [...asStrings(result.limitations), ...workspaceLimitations, ...opportunityLimitations];
   const positions = asArray(portfolioContext?.positions);
   const asOf = asText(proposal?.as_of) ?? asText(result.as_of) ?? asText(portfolioContext?.as_of);
-  const quality = asText(result.quality_status) ?? asText(portfolioContext?.quality_status);
+  const resultQuality = asText(result.quality_status);
+  const portfolioQuality = asText(portfolioContext?.quality_status);
   const assignmentCapital = numberValue(capitalRisk?.assignment_capital);
   const uncoveredCallShares = numberValue(capitalRisk?.uncovered_call_shares);
 
   return <div className="output human-output">
     <div className="analysis-status">
       <strong>{data.status}</strong>
-      {quality && <span>Qualidade: {quality}</span>}
+      {resultQuality && <span title="Status informado pelo motor; consulte conflitos e lacunas para avaliar a cobertura das evidências.">Validação do resultado: {resultQuality}</span>}
+      {portfolioQuality && <span>Qualidade da carteira: {portfolioQuality}</span>}
       {asOf && <span>Dados de {when(asOf)} · São Paulo</span>}
       {asText(fastRoute?.target) && <span>Rota: {asText(fastRoute?.target)}</span>}
     </div>
@@ -301,9 +303,9 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
       </details>}
     </details>}
 
-    {!summary && positions.length > 0 && <section className="analysis-section">
-      <h4>Carteira canônica</h4>
-      <p>{positions.length} posições no snapshot{asOf ? ` de ${asOf}` : ''}.</p>
+    {positions.length > 0 && <section className="analysis-section">
+      <h4>Carteira considerada</h4>
+      <p>{positions.length} posições no snapshot{asOf ? ` de ${asOf}` : ''}. A síntese deve considerar essa exposição; divergências entre fontes aparecem em Conflitos.</p>
       {(assignmentCapital != null || uncoveredCallShares != null) && <p>
         {assignmentCapital != null ? `Capital potencial de exercício/assign: ${brl(assignmentCapital)}.` : ''}
         {uncoveredCallShares != null ? ` Ações descobertas em calls: ${uncoveredCallShares}.` : ''}
