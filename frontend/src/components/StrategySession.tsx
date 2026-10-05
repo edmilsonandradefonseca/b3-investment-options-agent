@@ -3,11 +3,11 @@ import {b3Api} from '../api/client';
 import type {OrchestrateResponse} from '../api/contracts';
 import AnalysisOutput from './AnalysisOutput';
 
-type Turn = {question:string; response:OrchestrateResponse|null; error?:string; at:string};
+type Turn = {question:string; response:OrchestrateResponse|null; error?:string; at:string; portfolioRevision:string|null};
 const examples = ['Tenho R$ 10 mil. Comprar ITUB4 ou BBDC4?', 'Acredito que PETR4 pode cair. Quais evidências sustentam ou contradizem essa tese?', 'Vale manter, encerrar ou rolar uma opção da minha carteira?'];
 
 // LAB-01/02/06: independent central session; never inject structured-form defaults.
-export default function StrategySession(){
+export default function StrategySession({researchMode='stored_first',portfolioRevision=null}:{researchMode?:string;portfolioRevision?:string|null}){
  const [question,setQuestion]=useState('');
  const [turns,setTurns]=useState<Turn[]>([]);
  const [status,setStatus]=useState<'idle'|'running'|'done'|'error'>('idle');
@@ -19,11 +19,11 @@ export default function StrategySession(){
   inFlight.current=true;setStatus('running');setRetryQuestion(task);
   const index=turns.length;
   const previous=turns.filter(t=>t.response&&!t.error);
-  setTurns(v=>[...v,{question:task,response:null,at:new Date().toISOString()}]);
+  setTurns(v=>[...v,{question:task,response:null,at:new Date().toISOString(),portfolioRevision}]);
   setQuestion('');
   try{
    const response=await b3Api.orchestrate({task,ticker:null,context:{
-    workspace:'Strategy Lab',research_mode:'stored_first',
+    workspace:'Strategy Lab',research_mode:researchMode,
     lab_conversation:previous.map(t=>({question:t.question,response:{
      summary:t.response?.result.summary,
      proposal:t.response?.result.proposal??t.response?.result.decision_proposal,
@@ -51,6 +51,7 @@ export default function StrategySession(){
   {!turns.length&&<div className="workspace-tabs">{examples.map(text=><button key={text} type="button" disabled={status==='running'} onClick={()=>setQuestion(text)}>{text}</button>)}</div>}
   {turns.map((turn,i)=><article className="panel" key={i} aria-label={`Análise ${i+1}`}>
    <h3>{i+1}. {turn.question}</h3><small>Solicitada em {new Date(turn.at).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})} · horário das fontes no resultado</small>
+   {turn.portfolioRevision!==portfolioRevision&&<p role="status">A carteira mudou desde esta análise. Esta resposta mantém o contexto anterior; inicie uma nova análise para reavaliar a posição atual.</p>}
    <h3>Análise do agente B3</h3>
    {turn.error&&<p role="alert">{turn.error}</p>}
    {turn.response?<AnalysisOutput data={turn.response}/>:!turn.error&&<p role="status">Avaliando sua pergunta com os dados e evidências disponíveis…</p>}
