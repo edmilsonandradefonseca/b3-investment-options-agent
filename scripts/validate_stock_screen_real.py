@@ -8,6 +8,30 @@ import subprocess
 from time import monotonic
 
 
+def _failure_category(status, data):
+    detail = data.get('detail') or data.get('error') or ''
+    if isinstance(detail, (dict, list)):
+        detail = json.dumps(detail, ensure_ascii=False)
+    text = str(detail).casefold()
+    if any(token in text for token in ('portfolio', 'snapshot', 'position')):
+        return 'PORTFOLIO_OR_SNAPSHOT'
+    if any(token in text for token in ('yahoo', 'oplab', 'brapi', 'provider', 'quote', 'history')):
+        return 'MARKET_DATA_OR_PROVIDER'
+    if any(token in text for token in ('ticker', 'symbol', 'objective', 'asset', 'request', 'unsupported')):
+        return 'REQUEST_OR_DOMAIN_VALIDATION'
+    if status in (401, 403):
+        return 'AUTHORIZATION'
+    if status == 422:
+        return 'HTTP_CONTRACT_VALIDATION'
+    if status == 429:
+        return 'RATE_LIMIT'
+    if status == 503:
+        return 'DEPENDENCY_UNAVAILABLE'
+    if status >= 500:
+        return 'SERVER_FAILURE'
+    return 'API_REJECTION'
+
+
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--senior',action='store_true')
@@ -42,8 +66,23 @@ def main():
         started=monotonic()
         request={'task':'Compare watched assets and the full current stock portfolio by the observed objective; include owned options only as exposure context; never infer valuation or future return.', 'ticker':None,'context':{'workspace':'Opportunities','opportunity_assets':assets,'opportunity_objective':objective,'include_portfolio_stocks':include_portfolio,'analysis_mode':'deterministic','research_mode':'stored_only'}}
         response=client.post('/orchestrate',json=request)
-        data=response.json()
-        assert response.status_code==200 and not data.get('error')
+        try:
+            data=response.json()
+        except ValueError:
+            data={'_non_json_response':True}
+        if response.status_code != 200 or data.get('error'):
+            category=_failure_category(response.status_code,data)
+            write_private_report(Path.home()/'.local/share/b3-investment-options-agent/live-validation/stock-screen/diagnostics',{
+                'instance':'candidate ASGI with real production inputs',
+                'objective':objective,
+                'http_status':response.status_code,
+                'request':request,
+                'response':data,
+            })
+            print(json.dumps({'case':'stock_screen','status':'FAIL','objective':objective,
+                'http_status':response.status_code,'error_category':category,
+                'detail_present':bool(data.get('detail') or data.get('error'))}),flush=True)
+            raise AssertionError(f'Opportunities API rejected real screen: HTTP {response.status_code}; {category}')
         result=data['result']; screen=result['opportunity_screen']
         assert result['telemetry']['llm_calls']==0
         assert screen['candidate_universe']==assets
