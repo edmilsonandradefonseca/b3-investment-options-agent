@@ -167,6 +167,19 @@ def test_incompatible_yahoo_overlap_falls_back_without_overwriting_archive(tmp_p
     assert rows[0] == archived and brapi.calls == 0
 
 
+def test_adjusted_yahoo_tail_does_not_create_false_move_on_unadjusted_archive(tmp_path):
+    day = datetime(2026,9,25,21,tzinfo=timezone.utc)
+    archived = quote("b3_cotahist", day)
+    MarketDataRepository(tmp_path/"archive").write([archived])
+    tail = replace(quote("yahoo",day+timedelta(days=3)), adjusted_close=20)
+    yahoo = Provider("yahoo", [replace(quote("yahoo",day),adjusted_close=20),tail])
+    service = LocalFirstMarketDataAdapter(tmp_path/"archive",tmp_path/"brapi", yahoo_provider=yahoo)
+    rows = service.get_market_data("PETR4",date(2026,9,25),date(2026,9,28))
+    assert rows[-1].close == 31 and rows[-1].adjusted_close is None
+    assert "mixed_source_unadjusted_close_projection" in rows[-1].quality_flags
+    assert service.yahoo.repository.read("PETR4")[-1].adjusted_close == 20
+
+
 class FakeTicker:
     def __init__(self):
         self.args = None

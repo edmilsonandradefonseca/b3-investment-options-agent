@@ -1,6 +1,7 @@
 """Merge validated local history with Yahoo/OPLAB/BRAPI for uncovered dates."""
 
 from datetime import date, timedelta
+from dataclasses import replace
 from pathlib import Path
 from typing import Protocol
 
@@ -60,7 +61,7 @@ class LocalFirstMarketDataAdapter:
             if start <= _market_date(record) <= end
         }
         if not archived:
-            return self._remote_market_data(normalized, start, end)
+            return _coherent_price_projection(self._remote_market_data(normalized, start, end))
 
         local_dates = sorted(archived)
         first_local = local_dates[0]
@@ -88,7 +89,7 @@ class LocalFirstMarketDataAdapter:
                 end,
             )
 
-        return [combined[day] for day in sorted(combined)]
+        return _coherent_price_projection([combined[day] for day in sorted(combined)])
 
     def _remote_market_data(
         self,
@@ -146,6 +147,16 @@ class LocalFirstMarketDataAdapter:
             day = _market_date(record)
             if start <= day <= end:
                 combined.setdefault(day, record)
+
+
+def _coherent_price_projection(records):
+    # Raw provider caches retain adjusted close; the returned projection uses
+    # one basis across the entire chart, rather than switching at its boundary.
+    if any(row.adjusted_close is None for row in records):
+        return [replace(row, adjusted_close=None,
+            quality_flags=(*row.quality_flags, "mixed_source_unadjusted_close_projection"))
+            if row.adjusted_close is not None else row for row in records]
+    return records
 
 
 def _market_date(record: StockMarketData) -> date:

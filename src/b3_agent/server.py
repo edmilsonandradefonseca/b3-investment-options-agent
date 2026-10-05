@@ -1006,7 +1006,7 @@ def current_fundamentals(ticker: str) -> dict[str, Any]:
             "provider_diagnostics": getattr(adapter, "diagnostics", []),
             "limitations": [
                 "Current provider snapshots only; ingestion availability does not establish historical availability.",
-                "Verified broker price-target data is not configured; target price remains UNKNOWN.",
+                "This endpoint supplies fundamentals only; institutional reports and Yahoo consensus require their own sourced research data.",
             ],
         }
     except (OSError, RuntimeError, ValueError) as exc:

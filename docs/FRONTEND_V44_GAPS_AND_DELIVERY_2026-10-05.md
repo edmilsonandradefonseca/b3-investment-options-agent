@@ -73,3 +73,23 @@ Configuração de produção: B3_BRAPI_LOCAL_ALLOWANCE é obrigatório para perm
 Validação candidata no runner usa caches/quota temporários, arquivo histórico real em leitura e allowance zero. Não reinicia systemd, não escreve carteira e não gasta BRAPI. Conclusão real depende do resultado do workflow b3-v44-sources.
 
 Continuam abertos: demonstrações completas Yahoo, consenso/alvos/estimativas/revisões/notícias, calendário de pregão, reconciliação com saldo externo BRAPI, alertas visuais de quota, dossiês Qwen/refresh por evento e universos amplos. E3 não está integralmente fechado só pelo adapter de info/histórico/proventos. E2 automático aguarda esses dados e critérios materiais; E4/E5 permanecem pendentes.
+
+## Aceite real do primeiro bloco E3 — 05/10, 11h15 São Paulo
+
+Workflow37321575947 PASS no candidato485e521, ambiente Python isolado, sem restart nem gasto BRAPI:
+
+| Ativo | Histórico | Fontes da série | Fundamentos | Fonte dos fundamentos | Latência histórico / fundamentos |
+|---|---:|---|---:|---|---|
+| PETR4 | 85 | COTAHIST + Yahoo | 33 | Yahoo | 1,15s /0,80s |
+| ITUB4 | 85 | COTAHIST + Yahoo | 27 | Yahoo | 0,30s /0,82s |
+| BBDC4 | 85 | COTAHIST + Yahoo | 27 | Yahoo | 0,31s /0,82s |
+
+Cotação Yahoo: leitura0,51s; timestamp14:00:45UTC observado na coleta14:15UTC, flags potentially_delayed/not_executable_quote. Não é cotação imediata garantida. Para ITUB4/BBDC4, campos core ausentes levaram à etapa BRAPI, bloqueada por allowance zero; métricas Yahoo admissíveis permaneceram disponíveis e diagnósticos registraram a limitação. Zero tentativas HTTP BRAPI.
+
+CI remoto485e521,bd80a78,296efa9 PASS; testes locais ampliados para952, build/checagem de renderização PASS. Revisões posteriores precisam de seus próprios gates. Cache tem um envelope por capacidade/fonte/ticker para não acumular arquivos de janelas diárias indefinidamente.
+
+Corrigido outro gap de consumo: Mercado exibia texto fixo BRAPI independentemente da origem. Agora fonte aparece por métrica e datas fiscal/observada/disponível são separadas; análise B3 vem antes de cards e gráficos. É primeiro bloco de MI-02/03, não panorama Market completo.
+
+A série projetada para gráficos e retornos mantém uma única base: se um trecho local não tem adjusted_close, não anexar fechamento ajustado Yahoo ao fechamento bruto do arquivo. O cache Yahoo preserva adjusted_close; a projeção de série usa close com flag explícita quando necessário. Não representa retorno total nem valida todos os eventos/splits históricos.
+
+Workflow legado37321575811: economia candidata PASS; checkout produção avançou d3624d1→485e521; sudo recusou restart. Depois falhou no teste congelado em02/10, embora a API retornasse candle05/10. Corrigidos gate dinâmico de freshness/proveniência e separação entre teste automático e ativação. Push valida; alteração de checkout/restart fica no workflow_dispatch de ambiente preparado, com preflight de dependência/privégio. Processo ativo não comprovado como485e521; não tratar checkout atualizado como deploy. Windows segue não verificado.

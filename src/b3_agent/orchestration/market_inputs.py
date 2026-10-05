@@ -43,5 +43,5 @@ def build_stock_input_from_brapi(
         records=records,
         valuation=valuation,
         benchmark_records=benchmark_records,
-        source_refs=(provider.name,),
+        source_refs=tuple(dict.fromkeys(row.source for row in (*records, *benchmark_records))),
     )
