@@ -4,6 +4,7 @@ from datetime import date, datetime, time, timezone
 import json
 import os
 from typing import Any
+from zoneinfo import ZoneInfo
 from urllib.error import HTTPError
 import urllib.parse
 import urllib.request
@@ -71,7 +72,7 @@ class BrapiFundamentalsAdapter:
                     quality_flags=("availability_is_ingestion_time",),
                     metric=field,
                     value=float(value),
-                    report_date=updated_at.date(),
+                    report_date=updated_at.astimezone(ZoneInfo("America/Sao_Paulo")).date(),
                     period_type="TTM",
                     unit=_fundamental_unit(
                         field,
@@ -151,7 +152,7 @@ class BrapiFundamentalsAdapter:
                     ),
                     metric=field,
                     value=float(value),
-                    report_date=observed_at.date(),
+                    report_date=observed_at.astimezone(ZoneInfo("America/Sao_Paulo")).date(),
                     period_type=(
                         "CURRENT" if field == "marketCap" else "TTM"
                     ),
