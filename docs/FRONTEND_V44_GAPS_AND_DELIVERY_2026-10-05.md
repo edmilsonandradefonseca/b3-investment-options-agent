@@ -186,3 +186,15 @@ Próximos gates: validar build e suíte de domínio; resolver/diagnosticar o tes
 - Strategy Lab e Market Intelligence não foram modificados neste incremento. LAB-01/02/06 continuam com evidência prévia; demais LAB, MI-01 panorama completo e MI-04/05 cobertura de research continuam parciais/conforme matriz anterior.
 
 Próximo: concluir aceite Ubuntu do candidato com CI verde e snapshot sem conteúdo pessoal em artifact; depois implementar e testar OPP-01/OPP-04 versionados. Em paralelo seguir E4 (panorama MI) e E5 (multi-pernas Lab).
+
+## Retomada operacional — CI/Ubuntu, 05/10/2026 (UTC)
+
+- Branch: `feature/react-functional-v43-integration`; HEAD no início deste registro: `0aefb509357d651fd6fbd6d02c549a91871c86f3`. PR #66 segue aberto, draft, base `fix/react-portfolio-api`.
+- Commit `fdb82c7`: CI `37364697510` PASS (Python, build React, apresentação); visual `37364691637` PASS em 1920/1440/1366, sem erros de página. No mesmo percurso, Opportunities recebeu HTTP 400 da API ativa, JSON com apenas `detail` textual. A UI isolada foi verificada com fixture explicitamente sem preço/carteira/recomendação; não é aceite real do endpoint.
+- Commits `fdb82c7`, `9fcaa15` e `88beb13` tornam o diagnóstico do 400 limitado e sanitizado: campos estruturais permitidos, ticker/valores/e-mail/caminhos mascarados, prévia curta. O teste atualizado aguarda vaga do runner visual; ainda não há mensagem diagnóstica confirmada.
+- Runner `37363177645` (revisão `3f1bb52`) parou no gate porque aguardou o CI por 6 minutos; etapas de dados/deploy foram puladas. Não foi falha dos testes Python nem restart.
+- `5ab4c4d` aumentou o timeout de espera do gate para 15 minutos e o limite do job para 60; CI `37364883777` ainda estava enfileirado quando consultado. Para não ocupar o self-hosted durante essa fila, `0aefb50` separou `wait-for-ci` em job GitHub-hosted e deixa o Ubuntu self-hosted iniciar só depois do gate verde. Sintaxe YAML foi validada localmente. Execuções `37365880060` (CI) e `37365875125` (Ubuntu candidate) estavam enfileiradas, sem validação de dados ainda.
+- O step de atualização/restart do serviço continua condicionado a `workflow_dispatch`; os eventos `push` aqui não reiniciam produção. Nenhum restart, carteira ou instalação Windows foi alterado nesta retomada.
+- Requisitos: `OPP-02/06` PARTIAL (união sem teto/exposição codificadas, API ativa não aceita a tela neste teste); `OPP-01` MISSING e `OPP-04` PARTIAL (revisão automática idempotente/materialidade ainda não implementadas). Strategy Lab e Market Intelligence seguem PARTIAL conforme a matriz acima; aceite de dados atuais no runner aguarda workflow.
+- Próximo: obter a prévia sanitizada do 400; corrigir o contrato no componente correto; executar candidato Ubuntu após CI; revalidar Opportunities com snapshot real; atualizar esta seção com os resultados, sem promover fixture a aceite. Estratégia `ITUB4 × BBDC4` e ativo `PETR4` precisam passar no mesmo candidato real. Sem reinício manual, não afirmar ativação do processo.
+
