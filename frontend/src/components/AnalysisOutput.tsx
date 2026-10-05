@@ -1,3 +1,4 @@
+import {formatFundamental} from '../app/fundamentals';
 import {lazy,Suspense} from 'react';
 import {date,State} from './cockpit';
 const ScenarioChart=lazy(()=>import('./ScenarioChart'));
@@ -57,11 +58,7 @@ const fundamentalDisplay = (key: string, metric: Obj | null): string => {
   if (value == null) return 'Sem valor elegível';
   const unit = asText(metric?.unit);
   const proportional = /^(earningsGrowth|earningsGrowthAnnual|grossMargins|profitMargins|operatingMargins|returnOnEquity|returnOnAssets|dividendYield)$/i.test(key);
-  if (unit === 'fraction' || (proportional && unit === 'ratio')) return pct(value) ?? 'Indisponível';
-  if (unit === 'ratio') return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}×`;
-  if (unit === 'BRL' || unit === 'BRL/share') return brl(value) ?? 'Indisponível';
-  if (unit === 'percent') return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`;
-  return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 4 })}${unit ? ` ${unit}` : ' · unidade não informada'}`;
+  return formatFundamental(value, proportional && unit === 'ratio' ? 'fraction' : unit);
 };
 
 const numberValue = (value: unknown): number | null =>

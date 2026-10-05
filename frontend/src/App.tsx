@@ -1,3 +1,4 @@
+import {formatFundamental} from './app/fundamentals';
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react';
 import { b3Api, getApiBaseUrl, setApiBaseUrl } from './api/client';
 import {lazy,Suspense} from 'react';
@@ -27,9 +28,7 @@ const err = (e:unknown) => e instanceof Error ? e.message : String(e);
 const optionTypeForStrategy=(strategy:string):'PUT'|'CALL'|null=>
  strategy==='Vender PUT'?'PUT':strategy==='Vender CALL coberta'?'CALL':null;
 function fundamentalValue(metric: FundamentalsResponse["metrics"][number]): string {
- if(metric.unit==='BRL'||metric.unit?.endsWith('/share'))return brl(metric.value);
- const value=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:4}).format(metric.value);
- return metric.unit?value+' '+metric.unit:value;
+ return formatFundamental(metric.value, metric.unit);
 }
 function eventText(event:Record<string,unknown>,...keys:string[]):string{
  for(const key of keys){const value=event[key];if(typeof value==='string'&&value.trim())return value}
