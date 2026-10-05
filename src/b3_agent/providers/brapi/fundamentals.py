@@ -4,11 +4,12 @@ from datetime import date, datetime, time, timezone
 import json
 import os
 from typing import Any
-from zoneinfo import ZoneInfo
 from urllib.error import HTTPError
 import urllib.parse
 import urllib.request
 
+from b3_agent.providers.brapi.budget import budgeted_urlopen
+from b3_agent.providers.fundamental_units import fundamental_unit
 from b3_agent.schemas.dividend import DividendRecord
 from b3_agent.schemas.fundamental import StockFundamental
 
@@ -69,11 +70,11 @@ class BrapiFundamentalsAdapter:
                         f"{updated_at.isoformat()}"
                     ),
                     quality_status="WARNING",
-                    quality_flags=("availability_is_ingestion_time",),
+                    quality_flags=("availability_is_ingestion_time", "fiscal_period_not_verified"),
                     metric=field,
                     value=float(value),
-                    report_date=updated_at.astimezone(ZoneInfo("America/Sao_Paulo")).date(),
-                    period_type="TTM",
+                    report_date=None,
+                    period_type="CURRENT_SNAPSHOT",
                     unit=_fundamental_unit(
                         field,
                         data.get("financialCurrency"),
@@ -95,7 +96,7 @@ class BrapiFundamentalsAdapter:
             f"{self.QUOTE_URL}/{urllib.parse.quote(ticker)}",
             headers=self._headers(),
         )
-        with urllib.request.urlopen(request, timeout=20) as response:
+        with budgeted_urlopen(request, timeout=20, opener=urllib.request.urlopen) as response:
             payload = json.loads(response.read().decode("utf-8"))
 
         if not isinstance(payload, dict):
@@ -152,10 +153,8 @@ class BrapiFundamentalsAdapter:
                     ),
                     metric=field,
                     value=float(value),
-                    report_date=observed_at.astimezone(ZoneInfo("America/Sao_Paulo")).date(),
-                    period_type=(
-                        "CURRENT" if field == "marketCap" else "TTM"
-                    ),
+                    report_date=None,
+                    period_type="CURRENT_SNAPSHOT",
                     unit=_fundamental_unit(field, currency),
                 )
             )
@@ -194,7 +193,7 @@ class BrapiFundamentalsAdapter:
                 f"{self.QUOTE_URL}/{urllib.parse.quote(normalized)}?{query}",
                 headers=self._headers(),
             )
-            with urllib.request.urlopen(request, timeout=20) as response:
+            with budgeted_urlopen(request, timeout=20, opener=urllib.request.urlopen) as response:
                 legacy = json.loads(response.read().decode("utf-8"))
             exact = next((item for item in legacy.get("results", []) if str(item.get("symbol", "")).upper() == normalized), None)
             if exact is None or not isinstance(exact.get("dividendsData"), dict):
@@ -263,7 +262,7 @@ class BrapiFundamentalsAdapter:
                         f"{approved_on or ex_date or payment_date}"
                     ),
                     quality_status="WARNING",
-                    quality_flags=("availability_is_ingestion_time",),
+                    quality_flags=("availability_is_ingestion_time", "fiscal_period_not_verified"),
                     payment_type=str(
                         event.get("label") or "CASH_DISTRIBUTION"
                     ).upper(),
@@ -312,7 +311,7 @@ class BrapiFundamentalsAdapter:
             f"{self.BASE_URL}/{endpoint}?{query}",
             headers=self._headers(),
         )
-        with urllib.request.urlopen(request, timeout=20) as response:
+        with budgeted_urlopen(request, timeout=20, opener=urllib.request.urlopen) as response:
             return json.loads(response.read().decode("utf-8"))
 
     @staticmethod
@@ -361,32 +360,4 @@ def _fundamental_unit(
     field: str,
     currency: Any,
 ) -> str | None:
-    normalized = field.casefold()
-    if (
-        "margin" in normalized
-        or "ratio" in normalized
-        or normalized == "priceearnings"
-    ):
-        return "ratio"
-    if normalized.endswith("pershare"):
-        return str(currency or "BRL") + "/share"
-    if normalized == "marketcap":
-        return str(currency or "BRL")
-    if any(
-        token in normalized
-        for token in (
-            "revenue",
-            "ebitda",
-            "profit",
-            "cash",
-            "debt",
-            "income",
-            "flow",
-            "expense",
-            "assets",
-            "liabilities",
-            "equity",
-        )
-    ):
-        return str(currency or "BRL")
-    return None
+    return fundamental_unit(field, currency)

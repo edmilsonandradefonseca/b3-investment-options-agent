@@ -4,6 +4,7 @@ from datetime import date, datetime
 
 from b3_agent.opportunity_pipeline import StockOpportunityInput
 from b3_agent.providers.brapi.adapter import BrapiAdapter
+from b3_agent.orchestration.live_providers import LiveProviderService
 from b3_agent.schemas.valuation import ValuationRange
 
 AS_OF = date | datetime
@@ -21,13 +22,13 @@ def build_stock_input_from_brapi(
 ) -> StockOpportunityInput:
     """Build a deterministic stock input from the BRAPI adapter.
 
-    BRAPI remains the market-information provider. No valuation, ranking, LLM
+    The default uses the V4.4 source policy; an explicit adapter remains injectable. No valuation, ranking, LLM
     reasoning, or portfolio decision is performed here.
     """
     if valuation.ticker.upper() != ticker.upper():
         raise ValueError("valuation ticker must match requested ticker")
 
-    provider = adapter or BrapiAdapter()
+    provider = adapter or LiveProviderService().market_provider
     records = tuple(provider.get_market_data(ticker, start, end))
     if not records:
         raise ValueError(f"BRAPI returned no records for {ticker}")

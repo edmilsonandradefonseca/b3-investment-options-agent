@@ -56,3 +56,20 @@ Coleta atual pendente pelo workflow b3-v44-review. Resultados serão anexados po
 - A execução anterior 37313146582 recebeu no fluxo PETR4 uma resposta sem result. Não equiparar essa ocorrência a um problema visual nem considerá-la resolvida só porque a execução seguinte passou. Diagnóstico sanitizado de status HTTP e tipo de erro foi acrescentado em c5b7041; acompanhar recorrência.
 - A confirmação “feito” não comprova por si só uma instalação Windows. O processo Ubuntu comprovado permanece na revisão d3624d1 até nova evidência; preview do runner testa o React candidato contra essa API.
 - Dependência de E2: implementar a política de fontes, proveniência e limite BRAPI de E3 antes de ativar coleta automática do universo B3 em produção. Trabalho de UI/contratos de E2 pode ocorrer antes; não ligar um refresh amplo no pipeline atual e chamá-lo de Opportunities concluído.
+
+## E3 — primeiro bloco de fontes e unidades, 05/10
+
+Implementado no candidato, sem equiparar à versão ativa:
+
+- Histórico: arquivo local preservado; Yahoo → OPLAB → BRAPI para lacunas. Sobreposição OHLC Yahoo/local deve existir e divergir no máximo 0,5% antes de aceitar o complemento; incompatibilidade segue ao fallback. Isso verifica uma fronteira da série, não certifica todos os ajustes históricos.
+- Cotação de ações: cache admissível primeiro; Yahoo → OPLAB → BRAPI. Timestamp Yahoo obrigatório, atraso potencial explícito e candle diário separado de cotação. Opções continuam no OPLAB. A política de cotação não certifica preço executável.
+- Fundamentos: Yahoo/info primeiro; OPLAB declarado unsupported para essa capacidade no adapter atual; BRAPI complementa campos ausentes, sem sobrescrever o campo Yahoo já admitido. Cache por fonte/capacidade; fonte e datas acompanham cada métrica.
+- Proventos assíncronos: Yahoo primeiro; BRAPI como fallback; projeção existente aceita snapshots Yahoo qualificados. Yahoo ex-date não vira data de pagamento e não inventa identificação de JCP; valores com pagamento desconhecido não compõem soma de proventos pagos.
+- Quota BRAPI persistente SQLite, transação de reserva antes de cada tentativa/retry, compartilhada por API/jobs. /providers/budget/brapi expõe metadados locais, sem token nem posições.
+- Unidades explícitas para dívida/patrimônio, crescimento, ROE e P/VP. O frontend diferencia percent, fraction e ratio, sem exibir moeda nestes campos. updatedAt não passa por data fiscal comprovada; CURRENT_SNAPSHOT aparece como período não verificado. O Lab exibe o snapshot e não calcula diferença fiscal entre períodos desconhecidos.
+
+Configuração de produção: B3_BRAPI_LOCAL_ALLOWANCE é obrigatório para permitir chamadas BRAPI; default zero bloqueia HTTP. Configurar allowance conservador, B3_BRAPI_BILLING_TIMEZONE (default America/Sao_Paulo), B3_BRAPI_BILLING_DAY (1..28; default1), B3_BRAPI_OPERATIONAL_RESERVE (default100). B3_BRAPI_BASELINE_USED e B3_BRAPI_BASELINE_PERIOD registram consumo conhecido no período; contador local não prova saldo da conta. Teto absoluto local de15.000 menos baseline/reserva. B3_BRAPI_BUDGET_PATH permite apontar todos os clientes internos ao mesmo arquivo; default no data_dir compartilhado. Não presumir saldo inicial15.000 nem habilitar pedidos reais automaticamente.
+
+Validação candidata no runner usa caches/quota temporários, arquivo histórico real em leitura e allowance zero. Não reinicia systemd, não escreve carteira e não gasta BRAPI. Conclusão real depende do resultado do workflow b3-v44-sources.
+
+Continuam abertos: demonstrações completas Yahoo, consenso/alvos/estimativas/revisões/notícias, calendário de pregão, reconciliação com saldo externo BRAPI, alertas visuais de quota, dossiês Qwen/refresh por evento e universos amplos. E3 não está integralmente fechado só pelo adapter de info/histórico/proventos. E2 automático aguarda esses dados e critérios materiais; E4/E5 permanecem pendentes.

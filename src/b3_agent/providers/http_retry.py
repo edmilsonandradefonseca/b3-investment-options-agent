@@ -37,6 +37,9 @@ def request_json(
     last_error: BaseException | None = None
     for attempt in range(1, attempts + 1):
         try:
+            if provider == "brapi":
+                from b3_agent.providers.brapi.budget import BrapiBudget
+                BrapiBudget().reserve(request.full_url)
             with opener(request, timeout=timeout) as response:
                 return json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:

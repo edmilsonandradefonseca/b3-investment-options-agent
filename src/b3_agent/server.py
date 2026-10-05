@@ -39,7 +39,8 @@ from b3_agent.orchestration import OrchestratorRequest, OrchestratorResponse, b3
 from b3_agent.orchestration.fast_dispatch import FastRouteDispatcher
 from b3_agent.orchestration.live_providers import LiveProviderService
 from b3_agent.quant_engine import compute_quant_features
-from b3_agent.providers.brapi.fundamentals import BrapiFundamentalsAdapter
+from b3_agent.providers.stock_sources import StockFundamentalsProvider
+from b3_agent.providers.brapi.budget import BrapiBudget
 from b3_agent.providers.oplab.adapter import OplabAdapter
 from b3_agent.providers.oplab.options import OplabOptionsAdapter
 from b3_agent.providers.searxng_news import SearxngNewsAdapter
@@ -973,14 +974,15 @@ def live_analysis(ticker: str) -> dict[str, Any]:
 
 @app.get("/fundamentals/{ticker}")
 def current_fundamentals(ticker: str) -> dict[str, Any]:
-    """Return source-labeled current BRAPI fundamentals with explicit PIT limits."""
+    """Return source-labeled current fundamentals under the V4.4 source policy with explicit PIT limits."""
     normalized = ticker.upper().strip()
     if re.fullmatch(r"[A-Z]{4}\d{1,2}", normalized) is None:
         raise HTTPException(status_code=400, detail="invalid B3 ticker")
     as_of = datetime.now(timezone.utc)
     try:
-        adapter = BrapiFundamentalsAdapter()
+        adapter = StockFundamentalsProvider()
         records = adapter.get_financial_data(normalized)
+        as_of = datetime.now(timezone.utc)
         eligible = []
         excluded_future_count = 0
         for record in records:
@@ -1001,8 +1003,9 @@ def current_fundamentals(ticker: str) -> dict[str, Any]:
                 for record in eligible
             )),
             "excluded_future_count": excluded_future_count,
+            "provider_diagnostics": getattr(adapter, "diagnostics", []),
             "limitations": [
-                "Current BRAPI fundamentals only; ingestion availability does not establish historical availability.",
+                "Current provider snapshots only; ingestion availability does not establish historical availability.",
                 "Verified broker price-target data is not configured; target price remains UNKNOWN.",
             ],
         }
@@ -1165,3 +1168,9 @@ def orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
 
 
 __all__ = ["OrchestrateRequest", "OrchestrateResponse", "app"]
+
+
+@app.get("/providers/budget/brapi")
+def brapi_budget_status() -> dict[str, Any]:
+    """Local quota metadata only; never expose provider credentials."""
+    return BrapiBudget().snapshot()

@@ -46,6 +46,16 @@ try {
     }
   }}})).split('<details class="technical-output">')[0];
   for(const value of ['ITUB4 × BBDC4','1 mês','8%','3%','-5%','Preço / lucro (P/L)','8,4×','7,2×']) assert.ok(pairHTML.includes(value),`Side-by-side stock comparison lost: ${value}`);
+  const unitsHTML=renderToStaticMarkup(createElement(AnalysisOutput,{data:{...data,result:{stock_purchase_comparison:{rows:[{
+    alternative_id:'BUY:PETR4',ticker:'PETR4',fundamental_metrics:{
+      debtToEquity:{value:78.828,unit:'percent',source:'yahoo'},
+      revenueGrowth:{value:-.09,unit:'fraction',source:'yahoo'},
+      returnOnEquity:{value:.2,unit:'fraction',source:'brapi'},
+      priceToBook:{value:1.2,unit:'ratio',source:'brapi'},
+    },excluded_metrics:[],observed_risk:{},source_refs:[]
+  }],limitations:[]}}}})).split('<details class="technical-output">')[0];
+  for(const value of ['78,83%','-9%','20%','1,2×']) assert.ok(unitsHTML.includes(value),`Fundamental unit lost: ${value}`);
+  assert.ok(!unitsHTML.includes('R$'), 'Growth and leverage must not appear as currency');
   const noScenarioHTML=renderToStaticMarkup(createElement(AnalysisOutput,{data:{status:'COMPLETED',error:null,sources:[],audit:[],result:{economic_decision:{ranking:'NOT_REQUESTED',rows:[{alternative_id:'A',ticker:'ITUB4',scenarios:[]}],limitations:[]}}}})).split('<details class="technical-output">')[0];
   assert.ok(!noScenarioHTML.includes('Ação / cenário'));
   assert.ok(noScenarioHTML.includes('não informou preços futuros hipotéticos'));

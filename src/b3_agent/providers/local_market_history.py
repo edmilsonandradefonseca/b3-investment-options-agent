@@ -1,4 +1,4 @@
-"""Merge the local B3 archive with OPLAB/BRAPI for uncovered dates."""
+"""Merge validated local history with Yahoo/OPLAB/BRAPI for uncovered dates."""
 
 from datetime import date, timedelta
 from pathlib import Path
@@ -7,6 +7,7 @@ from typing import Protocol
 from b3_agent.providers.brapi.adapter import BrapiAdapter
 from b3_agent.providers.brapi.cache import CachedBrapiAdapter
 from b3_agent.providers.http_retry import ProviderRequestError
+from b3_agent.providers.brapi.budget import fallback_reason
 from b3_agent.repositories.market_data import MarketDataRepository
 from b3_agent.schemas.market import StockMarketData
 
@@ -22,9 +23,10 @@ class LocalFirstMarketDataAdapter:
 
     Source precedence is intentionally deterministic:
 
-    1. local B3 COTAHIST archive for dates already persisted;
-    2. OPLAB historical data for uncovered/live dates when configured;
-    3. cached BRAPI as the final remote fallback.
+    1. existing local validated archive for persisted dates;
+    2. Yahoo for uncovered dates when configured;
+    3. OPLAB historical data;
+    4. cached BRAPI as the final remote fallback.
 
     Local observations are never overwritten by remote providers.
     """
@@ -37,8 +39,11 @@ class LocalFirstMarketDataAdapter:
         brapi_cache_dir: Path,
         brapi_provider: BrapiAdapter | None = None,
         oplab_provider: MarketHistoryProvider | None = None,
+        yahoo_provider: MarketHistoryProvider | None = None,
     ) -> None:
         self.archive = MarketDataRepository(archive_dir)
+        self.yahoo = (CachedBrapiAdapter(brapi_cache_dir.parent / "yahoo_daily", provider=yahoo_provider)
+                      if yahoo_provider is not None else None)
         self.oplab = oplab_provider
         self.brapi = CachedBrapiAdapter(brapi_cache_dir, provider=brapi_provider)
 
@@ -90,26 +95,34 @@ class LocalFirstMarketDataAdapter:
         ticker: str,
         start: date,
         end: date,
+        anchor: StockMarketData | None = None,
     ) -> list[StockMarketData]:
-        oplab_error: Exception | None = None
-        if self.oplab is not None:
+        failures = []
+        for label, provider in (("yahoo", self.yahoo), ("oplab", self.oplab), ("brapi", self.brapi)):
+            if provider is None:
+                continue
             try:
-                rows = self.oplab.get_market_data(ticker, start, end)
-            except (OSError, RuntimeError, ValueError, ProviderRequestError) as exc:
-                oplab_error = exc
-            else:
+                with fallback_reason("daily_history; " + "; ".join(failures)):
+                    if label == "yahoo" and anchor is not None:
+                        anchor_day = _market_date(anchor)
+                        candidate = provider.get_market_data(ticker, min(start, anchor_day), max(end, anchor_day))
+                        overlap = next((row for row in candidate if _market_date(row) == anchor_day), None)
+                        if overlap is None or any(abs(getattr(overlap, field)/getattr(anchor, field)-1) > .005
+                            for field in ("open", "high", "low", "close") if getattr(anchor, field) > 0):
+                            raise ValueError("Yahoo overlap incompatible with retained local price basis")
+                        rows = [row for row in candidate if start <= _market_date(row) <= end]
+                    else:
+                        rows = provider.get_market_data(ticker, start, end)
                 if rows:
+                    if any(r.ticker != ticker or r.currency != "BRL" for r in rows):
+                        raise ValueError("history identity or currency mismatch")
+                    if max(_market_date(r) for r in rows) < end - timedelta(days=4):
+                        raise ValueError("history does not cover requested tail")
                     return rows
-
-        try:
-            return self.brapi.get_market_data(ticker, start, end)
-        except (OSError, RuntimeError, ValueError, ProviderRequestError) as exc:
-            if oplab_error is not None:
-                raise RuntimeError(
-                    f"market history unavailable for {ticker}: "
-                    f"OPLAB={oplab_error}; BRAPI={exc}"
-                ) from exc
-            raise
+                failures.append(f"{label}:EMPTY")
+            except (OSError, RuntimeError, ValueError, ProviderRequestError) as exc:
+                failures.append(f"{label}:{type(exc).__name__}")
+        raise RuntimeError("market history unavailable for " + ticker + ": " + "; ".join(failures))
 
     def _merge_remote(
         self,
@@ -121,7 +134,10 @@ class LocalFirstMarketDataAdapter:
         if start > end:
             return
         try:
-            remote = self._remote_market_data(ticker, start, end)
+            prior = [record for day, record in combined.items() if day < start]
+            later = [record for day, record in combined.items() if day > end]
+            anchor = (max(prior, key=_market_date) if prior else min(later, key=_market_date) if later else None)
+            remote = self._remote_market_data(ticker, start, end, anchor=anchor)
         except (OSError, RuntimeError, ValueError, ProviderRequestError):
             # Preserve usable offline/local history during provider outages or
             # before the first quote of a new session is published.

@@ -31,7 +31,9 @@ class StoredDividendService:
             extra=meta.get('extra') or {}
             if not isinstance(extra,dict): continue
             primary = (meta.get('source_quality')=='primary' and meta.get('source')=='https://www.bradescori.com.br/informacoes-ao-mercado/remuneracao-aos-acionistas/' and ticker in {'BBDC3','BBDC4'} and extra.get('parser_version')=='bradesco-monthly-jcp-v1')
-            provider = meta.get('source_quality')=='provider' and meta.get('source')=='https://brapi.dev/api/v2/dividends'
+            provider = meta.get('source_quality')=='provider' and (meta.get('source')=='https://brapi.dev/api/v2/dividends' or
+                (meta.get('source')==f'https://finance.yahoo.com/quote/{ticker}.SA/history/' and
+                 isinstance(extra.get('records'),list) and all(r.get('source')=='yahoo' and r.get('ticker')==ticker for r in extra['records'] if isinstance(r,dict)) and all(isinstance(r,dict) for r in extra.get('records',[]))))
             if (meta.get('topic')!='issuer_dividend_snapshot' or ticker not in meta.get('ticker_refs',[]) or not (primary or provider)
                     or not available or available>cutoff
                     or not meta.get('document_id') or not isinstance(extra,dict) or extra.get('ticker')!=ticker or extra.get('policy_version')!='async-dividends-v1'

@@ -33,6 +33,7 @@ const fundamentalLabels: Record<string, string> = {
   currentRatio: 'Liquidez corrente',
   quickRatio: 'Liquidez imediata',
   debtToEquity: 'Dívida sobre patrimônio líquido',
+  revenueGrowth: 'Crescimento da receita',
   earningsGrowth: 'Crescimento do lucro · TTM',
   earningsGrowthAnnual: 'Crescimento anual do lucro',
   freeCashflow: 'Fluxo de caixa livre',
@@ -56,7 +57,7 @@ const fundamentalDisplay = (key: string, metric: Obj | null): string => {
   if (value == null) return 'Sem valor elegível';
   const unit = asText(metric?.unit);
   const proportional = /^(earningsGrowth|earningsGrowthAnnual|grossMargins|profitMargins|operatingMargins|returnOnEquity|returnOnAssets|dividendYield)$/i.test(key);
-  if (proportional) return pct(value) ?? 'Indisponível';
+  if (unit === 'fraction' || (proportional && unit === 'ratio')) return pct(value) ?? 'Indisponível';
   if (unit === 'ratio') return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}×`;
   if (unit === 'BRL' || unit === 'BRL/share') return brl(value) ?? 'Indisponível';
   if (unit === 'percent') return `${value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`;
@@ -260,7 +261,7 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
           const leftExcluded=asArray(stockPurchaseByTicker.get(stockPurchaseTickers[0]??'')?.excluded_metrics).map(asObject).find(item=>asText(item?.metric)===name);
           const rightExcluded=asArray(stockPurchaseByTicker.get(stockPurchaseTickers[1]??'')?.excluded_metrics).map(asObject).find(item=>asText(item?.metric)===name);
           const status=asText(comparison?.status);
-          const periodText=(metric:Obj|null)=>metric?[asText(metric.report_date),asText(metric.period_type),asText(metric.source)].filter(Boolean).join(' · '):'';
+          const periodText=(metric:Obj|null)=>metric?[asText(metric.report_date),metric.period_type==='CURRENT_SNAPSHOT'?'Snapshot atual · período fiscal não verificado':asText(metric.period_type),asText(metric.source)].filter(Boolean).join(' · '):'';
           const cell=(metric:Obj|null,excluded:Obj|null)=>metric?<>{fundamentalDisplay(name,metric)}<small>{periodText(metric)}{asText(metric.quality_status)==='WARNING'?' · qualidade WARNING: disponibilidade histórica da fonte não comprovada':''}</small></>:excluded?<>{asText(excluded.reason)==='UNQUALIFIED_OR_FUTURE_FUNDAMENTAL'?'Excluída do corte':'Não qualificada'}<small>Data do registro: {asText(excluded.report_date)??'indisponível'} · não usada na comparação</small></>:'Sem dado elegível';
           return <tr key={name}><th scope="row">{fundamentalLabel(name)}</th><td>{cell(leftMetric,leftExcluded??null)}</td>{stockPurchaseTickers.length>1&&<td>{cell(rightMetric,rightExcluded??null)}</td>}<td>{status==='COMPARABLE'?'Comparável':status==='NONCOMPARABLE_OR_MISSING'?'Não comparável: falta dado equivalente ou período ou unidade não coincide':'Sem par comparável'}</td></tr>;
         })}</tbody>

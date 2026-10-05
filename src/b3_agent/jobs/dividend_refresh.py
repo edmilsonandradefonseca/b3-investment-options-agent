@@ -13,8 +13,8 @@ from b3_agent.jobs.primary_targets import project_targets
 class DividendRefreshJob:
     def __init__(self,provider=None,*,project=project_targets,queue=None,fallback=None):
         if provider is None:
-            from b3_agent.providers.brapi.fundamentals import BrapiFundamentalsAdapter
-            provider=BrapiFundamentalsAdapter()
+            from b3_agent.providers.stock_sources import StockFundamentalsProvider
+            provider=StockFundamentalsProvider()
             if fallback is None:
                 from b3_agent.providers.bradesco_dividends import acquire_monthly_dividends
                 fallback=acquire_monthly_dividends
@@ -35,7 +35,9 @@ class DividendRefreshJob:
                 try:
                     records=[asdict(r) for r in getter(ticker,start=start)]
                     if len(records)>200: raise ValueError('Dividend collection exceeds supported bound')
-                    raw={'status':'READ_OK','records':records}
+                    raw={'status':'READ_OK','records':records,
+                        'snapshot_source':f'https://finance.yahoo.com/quote/{ticker}.SA/history/' if records and all(r['source']=='yahoo' for r in records) else 'https://brapi.dev/api/v2/dividends',
+                        'source_quality':'provider'}
                 except (OSError,RuntimeError,ValueError) as exc:
                     raw={'status':'PROVIDER_UNAVAILABLE','records':[],'error_type':type(exc).__name__,'http_status':getattr(exc,'code',None)}
             if raw['status']=='PROVIDER_UNAVAILABLE' and ticker in {'BBDC3','BBDC4'} and self.fallback:
@@ -67,7 +69,7 @@ class DividendRefreshJob:
                     summary=json.dumps(stable,sort_keys=True,default=lambda o:o.isoformat())
                     if len(summary)>12000: summary=json.dumps({'event_count':len(stable),'events_sha256':sha256(summary.encode()).hexdigest()})
                     event={'evidence_type':'issuer_dividends','evidence_id':sha256(summary.encode()).hexdigest(),'headline':f'Observed issuer dividends {ticker}',
-                        'summary':summary,'source_name':'BRADESCO_RI' if raw.get('source_quality')=='primary' else 'BRAPI','source_ref':raw.get('snapshot_source','https://brapi.dev/api/v2/dividends'),'published_at':None}
+                        'summary':summary,'source_name':'BRADESCO_RI' if raw.get('source_quality')=='primary' else '/'.join(sorted({r['source'] for r in records})),'source_ref':raw.get('snapshot_source','https://brapi.dev/api/v2/dividends'),'published_at':None}
                     queue_status=self.queue.enqueue(ticker,[event]).queue_status
                 results.append({'ticker':ticker,'status':'PROJECTED','collection_status':raw['status'],'event_count':len(records),'queue_status':queue_status})
             except Exception as exc:

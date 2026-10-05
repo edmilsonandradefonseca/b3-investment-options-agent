@@ -48,9 +48,9 @@ def test_financial_data_maps_numeric_metrics(monkeypatch):
     by_metric = {item.metric: item for item in records}
     assert by_metric["ebitda"].value == 1000.0
     assert by_metric["ebitda"].unit == "BRL"
-    assert by_metric["profitMargins"].unit == "ratio"
-    assert by_metric["ebitda"].quality_flags == ("availability_is_ingestion_time",)
-    assert by_metric["ebitda"].report_date == date(2026, 9, 26)
+    assert by_metric["profitMargins"].unit == "fraction"
+    assert by_metric["ebitda"].quality_flags == ("availability_is_ingestion_time", "fiscal_period_not_verified")
+    assert by_metric["ebitda"].report_date is None
 
 
 def test_dividends_preserve_distinct_event_dates(monkeypatch):
@@ -164,7 +164,7 @@ def test_financial_data_403_falls_back_to_authenticated_quote_basics(monkeypatch
     assert by_metric["marketCap"].unit == "BRL"
     assert by_metric["priceEarnings"].unit == "ratio"
     assert by_metric["earningsPerShare"].unit == "BRL/share"
-    assert by_metric["earningsPerShare"].period_type == "TTM"
+    assert by_metric["earningsPerShare"].period_type == "CURRENT_SNAPSHOT"
     assert "brapi_quote_fallback" in by_metric["marketCap"].quality_flags
     assert calls[0].startswith(
         "https://brapi.dev/api/v2/stocks/financial-data?"
@@ -199,7 +199,7 @@ def test_dividend_fallback_rejects_sibling_ticker_and_missing_module(monkeypatch
             BrapiFundamentalsAdapter().get_dividends("BBDC4")
 
 
-def test_financial_report_date_uses_sao_paulo_date_for_utc_timestamp(monkeypatch):
+def test_provider_updated_at_is_not_fabricated_as_fiscal_report_date(monkeypatch):
     payload = {
         "results": [{
             "symbol": "ITUB4",
@@ -218,4 +218,6 @@ def test_financial_report_date_uses_sao_paulo_date_for_utc_timestamp(monkeypatch
 
     records = BrapiFundamentalsAdapter().get_financial_data("ITUB4")
 
-    assert records[0].report_date == date(2026, 10, 4)
+    assert records[0].report_date is None
+    assert records[0].observation_timestamp.isoformat() == "2026-10-05T00:23:00+00:00"
+    assert records[0].period_type == "CURRENT_SNAPSHOT"

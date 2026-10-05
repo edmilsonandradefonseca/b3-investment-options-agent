@@ -11,6 +11,8 @@ from b3_agent.providers.local_market_history import LocalFirstMarketDataAdapter
 from b3_agent.providers.oplab.adapter import OplabAdapter
 from b3_agent.providers.oplab.historical import OplabHistoricalAdapter
 from b3_agent.providers.oplab.options import OplabOptionsAdapter
+from b3_agent.providers.yahoo import YahooAdapter
+from b3_agent.providers.stock_sources import StockQuoteProvider
 from b3_agent.schemas.market import StockMarketData
 from b3_agent.schemas.option import OptionContract, OptionQuote
 
@@ -31,7 +33,7 @@ class LiveProviderSnapshot:
 class LiveProviderService:
     """Acquire current provider data and normalize it for deterministic engines.
 
-    Daily-market precedence is COTAHIST -> OPLAB -> cached BRAPI. OPLAB also
+    Daily-market precedence is local validated history -> Yahoo -> OPLAB -> BRAPI. OPLAB also
     supplies the current option chain. The service performs no investment
     recommendation or LLM reasoning.
     """
@@ -56,9 +58,10 @@ class LiveProviderService:
             settings.data_dir / "archive" / "cotahist_raw",
             settings.data_dir / "cache" / "brapi_daily",
             oplab_provider=OplabHistoricalAdapter(),
+            yahoo_provider=YahooAdapter(),
         )
         self.options_provider = options_provider or OplabOptionsAdapter()
-        self.current_market_provider = current_market_provider or OplabAdapter()
+        self.current_market_provider = current_market_provider or StockQuoteProvider()
         self.history_days = history_days
 
     def load(
@@ -136,7 +139,7 @@ class LiveProviderService:
             "live_provider_snapshot": True,
             "market_history_start": start.isoformat(),
             "market_history_end": end.isoformat(),
-            "market_provider_precedence": "COTAHIST>OPLAB>BRAPI",
+            "market_provider_precedence": "LOCAL>YAHOO>OPLAB>BRAPI",
             "current_stock_price_source": (
                 current_stock_quote.source
                 if current_stock_quote is not None

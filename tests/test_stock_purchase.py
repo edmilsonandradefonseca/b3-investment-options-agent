@@ -49,3 +49,11 @@ def test_fundamental_report_date_uses_sao_paulo_calendar_cutoff():
     excluded = result["rows"][0]["excluded_metrics"][0]
     assert excluded["report_date"] == "2026-10-05"
     assert excluded["reason"] == "UNQUALIFIED_OR_FUTURE_FUNDAMENTAL"
+
+
+def test_current_snapshots_are_visible_but_not_comparable_fiscal_periods():
+    pack, alt = build(report_date=None, period_type="CURRENT_SNAPSHOT")
+    result = stock_purchase_payload([alt, alt], [pack, pack], NOW)
+    assert result["rows"][0]["fundamental_metrics"]["priceEarnings"]["value"] == 10
+    assert result["fundamental_comparisons"][0]["status"] == "NONCOMPARABLE_OR_MISSING"
+    assert result["fundamental_comparisons"][0]["right_minus_left"] is None

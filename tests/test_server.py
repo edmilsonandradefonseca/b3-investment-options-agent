@@ -477,7 +477,7 @@ def test_current_fundamentals_exposes_source_and_excludes_future_records(monkeyp
                 record("futureMetric", 1.0, now + timedelta(days=1)),
             ]
 
-    monkeypatch.setattr(server, "BrapiFundamentalsAdapter", FakeFundamentals)
+    monkeypatch.setattr(server, "StockFundamentalsProvider", FakeFundamentals)
     response = client.get("/fundamentals/vale3")
 
     assert response.status_code == 200

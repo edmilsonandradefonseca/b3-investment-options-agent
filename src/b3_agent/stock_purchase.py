@@ -36,7 +36,8 @@ def stock_purchase_payload(alternatives, packs, cutoff, dividend_evidence=None, 
             metric = dict(raw)
             at = _timestamp(metric.get("available_timestamp"))
             report = str(metric.get("report_date") or "")[:10]
-            if (not at or at > cutoff or not report or report > cutoff_local_date
+            current_snapshot = metric.get("period_type") == "CURRENT_SNAPSHOT"
+            if (not at or at > cutoff or (not report and not current_snapshot) or report > cutoff_local_date
                     or metric.get("quality_status") == "REJECTED"
                     or not metric.get("source") or _number(metric.get("value")) is None):
                 excluded.append({"metric": name, "report_date": report or None, "available_timestamp": metric.get("available_timestamp"), "reason": "UNQUALIFIED_OR_FUTURE_FUNDAMENTAL"})
@@ -73,8 +74,10 @@ def stock_purchase_payload(alternatives, packs, cutoff, dividend_evidence=None, 
         right = rows[1]["fundamental_metrics"].get(name)
         comparable = bool(left and right and left.get("unit") is not None
             and left.get("unit") == right.get("unit")
+            and left.get("report_date") is not None
             and left["report_date"] == right["report_date"]
             and left.get("period_type") is not None
+            and left.get("period_type") != "CURRENT_SNAPSHOT"
             and left.get("period_type") == right.get("period_type"))
         comparisons.append({"metric": name, "status": "COMPARABLE" if comparable else "NONCOMPARABLE_OR_MISSING",
             "right_minus_left": right["value"] - left["value"] if comparable else None})

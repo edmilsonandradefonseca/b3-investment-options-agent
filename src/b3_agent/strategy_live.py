@@ -11,7 +11,7 @@ from b3_agent.options.call import CallAnalysisEngine
 from b3_agent.options.put import PutAnalysisEngine
 from b3_agent.orchestration.live_providers import LiveProviderService
 from b3_agent.portfolio.snapshot import load_active_snapshots
-from b3_agent.providers.brapi.fundamentals import BrapiFundamentalsAdapter
+from b3_agent.providers.stock_sources import StockFundamentalsProvider, StockQuoteProvider
 from b3_agent.providers.oplab.adapter import OplabAdapter
 from b3_agent.providers.oplab.options import OplabOptionsAdapter
 from b3_agent.quant_engine import compute_quant_features
@@ -126,9 +126,9 @@ class StrategyEvidenceService:
             raise ValueError("history_days must be positive")
         self.market_provider = market_provider or LiveProviderService().market_provider
         self.fundamentals_provider = (
-            fundamentals_provider or BrapiFundamentalsAdapter()
+            fundamentals_provider or StockFundamentalsProvider()
         )
-        self.current_quote_provider = current_quote_provider or OplabAdapter()
+        self.current_quote_provider = current_quote_provider or StockQuoteProvider()
         self.history_days = history_days
 
     def build(
@@ -197,6 +197,8 @@ class StrategyEvidenceService:
                 "period_type": row.period_type,
                 "report_date": row.report_date,
                 "available_timestamp": row.available_timestamp,
+                "observation_timestamp": row.observation_timestamp,
+                "source_record_id": row.source_record_id,
                 "quality_status": row.quality_status,
                 "quality_flags": row.quality_flags,
                 "source": row.source,
