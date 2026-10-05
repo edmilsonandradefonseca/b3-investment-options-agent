@@ -77,9 +77,26 @@ def main():
         raise AssertionError('Current portfolio snapshot unavailable for Opportunities acceptance')
     stock_positions=[p for p in portfolio.positions if p.instrument_type.upper()=='STOCK']
     option_positions=[p for p in portfolio.positions if p.instrument_type.upper()=='OPTION']
-    expected_stock_tickers={p.ticker.upper() for p in stock_positions}
-    expected_option_underlyings={p.underlying_ticker.upper() for p in option_positions if p.underlying_ticker}
-    joined_option_count=sum(bool(p.underlying_ticker) for p in option_positions)
+    from b3_agent.strategy_live import _validated_equity_ticker
+    expected_stock_tickers=set()
+    unresolved_stock_count=0
+    for position in stock_positions:
+        try:
+            expected_stock_tickers.add(_validated_equity_ticker(position.ticker))
+        except (TypeError, ValueError):
+            unresolved_stock_count += 1
+    expected_option_underlyings=set()
+    joined_option_count=0
+    unresolved_option_count=0
+    for position in option_positions:
+        try:
+            if not position.underlying_ticker:
+                raise ValueError('missing option underlying')
+            expected_option_underlyings.add(_validated_equity_ticker(position.underlying_ticker))
+            joined_option_count += 1
+        except (TypeError, ValueError):
+            unresolved_option_count += 1
+    unresolved_position_count=unresolved_stock_count+unresolved_option_count
     expected_union=set(assets)|expected_stock_tickers|expected_option_underlyings
     for index,objective in enumerate(('LOWEST_REALIZED_VOLATILITY_60D','HIGHEST_OBSERVED_LIQUIDITY_20D')):
         include_portfolio=index==0
@@ -112,7 +129,11 @@ def main():
         assert len(screen['requested_universe'])==len(set(screen['requested_universe']))
         if include_portfolio:
             assert set(screen['requested_universe'])==expected_union, 'Candidate/portfolio/option-underlying union was truncated or incomplete'
-            assert screen['portfolio_scope']['status']=='INCLUDED'
+            expected_scope_status='PARTIAL' if unresolved_position_count else 'INCLUDED'
+            assert screen['portfolio_scope']['status']==expected_scope_status
+            assert screen['portfolio_scope']['unresolved_identity_position_count']==unresolved_position_count
+            assert screen['portfolio_scope']['unresolved_stock_position_count']==unresolved_stock_count
+            assert screen['portfolio_scope']['unresolved_option_underlying_count']==unresolved_option_count
             assert set(screen['portfolio_stock_universe'])==expected_stock_tickers
             assert set(screen['portfolio_option_underlying_universe'])==expected_option_underlyings
             observed_option_count=sum(row['portfolio']['open_option_count'] or 0 for row in screen['rows'])
