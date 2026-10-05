@@ -88,12 +88,16 @@ const assetTask=[...requests].reverse().find(r=>r.context?.workspace==='Market I
 assert.ok(assetTask?.task.includes('toda a carteira carregada'),'Asset analysis must ask the orchestrator to consider portfolio context');
 
 await nav('Opportunities');
-const opportunityForm=page.locator('form').filter({has:page.getByRole('button',{name:'Comparar / ordenar',exact:true})});await opportunityForm.getByLabel('Universo de ações (até 20)',{exact:true}).fill('ITUB4, BBDC4');await opportunityForm.locator('select').first().selectOption('LOWEST_REALIZED_VOLATILITY_60D');
+const opportunityForm=page.locator('form').filter({has:page.getByRole('button',{name:'Buscar novas oportunidades',exact:true})});await opportunityForm.getByLabel('Universo de ações (até 20)',{exact:true}).fill('ITUB4, BBDC4');await opportunityForm.locator('select').first().selectOption('LOWEST_REALIZED_VOLATILITY_60D');
+const opportunityRunStatus=page.locator('.opportunity-run-status');assert.ok((await opportunityRunStatus.innerText()).includes('Busca ainda não executada'));
 const opportunityResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().context?.opportunity_assets?.join(',')==='ITUB4,BBDC4',{timeout:120000});
-await page.getByRole('button',{name:'Comparar / ordenar',exact:true}).click();
-const opportunity=await (await opportunityResponse).json();assert.ok(!opportunity.error);assert.equal(opportunity.result.opportunity_screen.rows.length,2);
+await page.getByRole('button',{name:'Buscar novas oportunidades',exact:true}).click();
+const opportunity=await (await opportunityResponse).json();assert.ok(!opportunity.error);assert.equal(opportunity.result.opportunity_screen.rows.length,2);await opportunityRunStatus.getByText('Busca concluída',{exact:true}).waitFor({timeout:180000});assert.equal(await opportunityRunStatus.getAttribute('aria-busy'),'false');assert.ok((await opportunityRunStatus.innerText()).includes('Início'));assert.ok((await opportunityRunStatus.innerText()).includes('Término'));
 await page.getByRole('button',{name:'Abrir análise',exact:true}).first().waitFor();await page.getByRole('button',{name:'Abrir análise',exact:true}).first().click();await page.getByRole('heading',{name:/análise da oportunidade/}).waitFor();
 await screenshot('opportunity-detail-real');await page.getByRole('button',{name:'Voltar ao ranking',exact:true}).click();
+await page.route('**/orchestrate',async route=>{const body=route.request().postDataJSON();if(body.context?.workspace==='Opportunities')await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({detail:'fixture: source unavailable'})});else await route.continue()});
+await page.getByRole('button',{name:'Buscar novas oportunidades',exact:true}).click();await opportunityRunStatus.getByText('Falha na nova busca',{exact:true}).waitFor({timeout:15000});assert.equal(await opportunityRunStatus.getAttribute('aria-busy'),'false');await page.getByRole('button',{name:'Abrir análise',exact:true}).first().waitFor();
+await page.unroute('**/orchestrate');
 await nav('Risk & Stress');await page.getByLabel('Ativo do stress',{exact:true}).fill('PETR4');
 const stressResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().context?.ticker_price_shocks,{timeout:60000});
 await page.getByRole('button',{name:'Simular impacto',exact:true}).click();const stress=await (await stressResponse).json();assert.ok(!stress.error);assert.ok(stress.result.scenario_result);await page.getByRole('heading',{name:'Impacto por posição',exact:true}).waitFor();
