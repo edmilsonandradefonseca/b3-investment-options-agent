@@ -240,7 +240,14 @@ def build_workflow(
             request=state["user_question"],
             deterministic_context=facts,
             retrieved_evidence=tuple(state.get("evidence", [])),
-            derived_intelligence=dict(state.get("derived_intelligence", {})),
+            derived_intelligence={
+                **dict(state.get("derived_intelligence", {})),
+                **({"lab_conversation": {
+                    "status": "HISTORICAL_CONVERSATION_NOT_CURRENT_FACTS",
+                    "turns": state["lab_conversation"],
+                }} if state.get("lab_conversation") else {}),
+                **({"response_guidance": state["response_guidance"]} if state.get("response_guidance") else {}),
+            },
         )
 
     def market_analysis(state: B3State) -> dict[str, Any]:
