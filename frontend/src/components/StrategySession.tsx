@@ -24,7 +24,15 @@ export default function StrategySession(){
   try{
    const response=await b3Api.orchestrate({task,ticker:null,context:{
     workspace:'Strategy Lab',research_mode:'stored_first',
-    lab_conversation:previous.map(t=>({question:t.question,response:t.response?.result})),
+    lab_conversation:previous.map(t=>({question:t.question,response:{
+     summary:t.response?.result.summary,
+     proposal:t.response?.result.proposal??t.response?.result.decision_proposal,
+     synthesis:t.response?.result.synthesis,
+     stock_purchase_comparison:t.response?.result.stock_purchase_comparison,
+     scenario_analysis:t.response?.result.scenario_analysis,
+     as_of:t.response?.result.as_of,
+     sources:t.response?.sources,
+    }})),
     lab_request_kind:previous.length?'follow_up':'new_analysis',
     response_guidance:'Responda primeiro em linguagem natural: avaliação, evidências favoráveis e contrárias, riscos e condições de mudança. Trate teses como hipóteses. Use cálculos determinísticos para números; peça somente esclarecimentos indispensáveis. Considere a carteira completa. A conversa anterior é contexto histórico, não cotação atual.',
    }});
