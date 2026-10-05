@@ -29,6 +29,8 @@ class OrchestratorRequest:
 
 class B3State(TypedDict, total=False):
     """Typed LangGraph state boundary defined by Architecture V3.1."""
+    lab_conversation: list[dict[str, Any]]
+    response_guidance: str
     workspace_intelligence: bool
     personal_history: dict[str, Any]
     decision_history: dict[str, Any]
