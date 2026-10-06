@@ -39,6 +39,8 @@ portfolio = BtgRendaVariavelLoader().load(portfolio_path)
 as_of = datetime.now(timezone.utc)
 stocks = [p for p in portfolio.positions
           if p.instrument_type.upper() == "STOCK" and p.quantity > 0]
+preferred = {"PETR4": 0, "ITUB4": 1, "BBDC4": 2, "VALE3": 3, "WEGE3": 4}
+stocks.sort(key=lambda p: (preferred.get(p.ticker.upper(), 99), p.ticker.upper()))
 adapter = OplabOptionsAdapter()
 candidate = None
 expected_rejection = False
