@@ -86,7 +86,7 @@ try{
  assert.ok(rollTurn,`Selected roll candidate was not carried into follow-up (${priorTurns.length} prior turns)`);
  assert.equal(rollTurn.response.lab_position_selection?.status,'POSITION_AND_QUANTITY_IDENTIFIED');
  await comparison.getByText('Fluxos incrementais brutos; não representam lucro ou retorno esperado',{exact:true}).waitFor();
- await comparison.getByText('UNKNOWN · histórico de abertura/custos',{exact:false}).waitFor();
+ assert.equal(await comparison.getByText('UNKNOWN · histórico de abertura/custos',{exact:false}).count(),3);
  await page.screenshot({path:resolve(out,'lab-management-comparison-fixture.png'),animations:'disabled'});
  assert.deepEqual(errors,[]);
  console.log('PASS LAB-01/02/03/04/05/06/07: clarification, current position, exact roll choice, three alternatives and provenance (fixtures).');
