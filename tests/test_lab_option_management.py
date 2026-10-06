@@ -104,16 +104,17 @@ def test_identity_quote_age_and_market_integrity_are_enforced():
         build(old_quote=quote(OLD, bid=2.3, ask=2.2))
 
 
-def test_continuation_can_select_a_displayed_destination_without_repeating_command():
+@pytest.mark.parametrize('destination', ['PETRK400', 'PETRY400'])
+def test_continuation_can_select_a_displayed_destination_without_repeating_command(destination):
     selected = {'status': 'POSITION_AND_QUANTITY_IDENTIFIED', 'option_id': 'PETRK376',
                 'selected_quantity_units': 5}
     response = {'lab_position_selection': selected,
-                'lab_roll_candidates': [{'option_id': 'PETRK400'}]}
+                'lab_roll_candidates': [{'option_id': destination}]}
     context = {'workspace': 'Strategy Lab', 'lab_request_kind': 'follow_up',
                'lab_conversation': [{'question': 'Compare manter, encerrar e rolar.', 'response': response}]}
-    intent = management_intent(OrchestratorRequest('PETRK400', context=context))
+    intent = management_intent(OrchestratorRequest(destination, context=context))
     assert intent == {'option_id': 'PETRK376', 'quantity_units': 5,
-                      'destination_option_id': 'PETRK400', 'action': 'COMPARE_KEEP_CLOSE_ROLL'}
+                      'destination_option_id': destination, 'action': 'COMPARE_KEEP_CLOSE_ROLL'}
 
 
 def test_never_promotes_position_management_without_previously_identified_position():
