@@ -82,6 +82,28 @@ jobs:
               except (KeyError, TypeError, ValueError):
                   unreadable += 1
           print(json.dumps({"case": "QWEN_CURRENT_QUEUE", "status_counts": dict(queue), "due_count": due, "retry_count": retries, "unreadable_count": unreadable, "oldest_created_at": oldest.isoformat() if oldest else None}))
+          import shlex
+          env_result = subprocess.run(["systemctl", "show", "b3-local-evidence-analyst.service", "--property=Environment", "--value"], text=True, capture_output=True, timeout=10)
+          service_env = dict(value.split("=", 1) for value in shlex.split(env_result.stdout) if "=" in value)
+          print(json.dumps({"case": "QWEN_DATA_CONFIGURATION", "collector_data_dir": str(settings.data_dir), "service_data_dir_override": service_env.get("B3_AGENT_DATA_DIR"), "service_project_root": service_env.get("B3_AGENT_PROJECT_ROOT")}))
+          for data_root in (Path("/opt/b3-runtime/data"), Path("/opt/b3-investment-options-agent/data")):
+              other = data_root / "derived" / "local_evidence_analyst"
+              manifest = read(other / "manifests" / "latest.json")
+              statuses, models = Counter(), Counter()
+              newest_date = None
+              for path in other.joinpath("runs").glob("*.json"):
+                  row = read(path)
+                  try:
+                      created = datetime.fromisoformat(row["created_at"].replace("Z", "+00:00"))
+                      if created.tzinfo is None:
+                          created = created.replace(tzinfo=timezone.utc)
+                  except (KeyError, ValueError, TypeError):
+                      continue
+                  if created >= now - timedelta(hours=24):
+                      statuses[row.get("status", "UNKNOWN")] += 1
+                      models[row.get("model", "UNKNOWN")] += 1
+                      newest_date = max(newest_date, created) if newest_date else created
+              print(json.dumps({"case": "QWEN_STORE_CENSUS", "data_dir": str(data_root), "latest_manifest": {k: manifest[k] for k in allowed if k in manifest}, "last_24h_status_counts": dict(statuses), "last_24h_model_counts": dict(models), "newest_created_at": newest_date.isoformat() if newest_date else None, "queue_file_count": len(list(other.joinpath("queue").glob("*.json")))}))
           for unit in ("b3-local-evidence-analyst.timer", "b3-local-evidence-analyst.service"):
               result = subprocess.run(["systemctl", "show", unit, "--property=ActiveState,SubState,Result,ExecMainStatus,ExecMainStartTimestamp,ExecMainExitTimestamp,NextElapseUSecRealtime"], text=True, capture_output=True, timeout=10)
               print(json.dumps({"case": "QWEN_SYSTEMD", "unit": unit, "query_exit": result.returncode, "properties": dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)}))
