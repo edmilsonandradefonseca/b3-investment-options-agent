@@ -118,6 +118,8 @@ integrated_stock=set(integrated_screen.get("portfolio_stock_universe") or [])
 integrated_options=set(integrated_screen.get("portfolio_option_underlying_universe") or [])
 integrated_union=set(integrated_screen.get("requested_universe") or [])
 expected_union={"ITUB4","BBDC4"}|expected_stock|expected_option_underlyings
+missing_union = expected_union - integrated_union
+print(json.dumps({"case":"ACTIVE_OPPORTUNITY_COVERAGE_DIAGNOSTIC","expected_count":len(expected_union),"actual_count":len(integrated_union),"candidate_missing":len({"ITUB4","BBDC4"}-integrated_union),"stock_missing":len(expected_stock-integrated_stock),"option_underlying_missing":len(expected_option_underlyings-integrated_options),"union_missing":len(missing_union),"unexpected_count":len(integrated_union-expected_union)},ensure_ascii=False),flush=True)
 assert expected_union==integrated_union, "Active Opportunities lost candidate/stock/option snapshot coverage"
 assert len(integrated_screen.get("rows") or [])==len(expected_union)
 assert integrated_scope.get("policy_version")=="B3_OPPORTUNITY_RESEARCH_ENRICHMENT_V1"
