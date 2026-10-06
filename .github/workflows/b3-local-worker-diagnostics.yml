@@ -7,10 +7,93 @@ on:
 permissions:
   contents: read
 jobs:
-  diagnose:
-    runs-on: [self-hosted, Linux, X64]
-    timeout-minutes: 3
+  wait-for-ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
+      - name: Require green CI for this revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os, time
+          from urllib.request import Request, urlopen
+          url = f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/actions/runs?head_sha={os.environ['GITHUB_SHA']}&event=pull_request&per_page=20"
+          for attempt in range(72):
+              request = Request(url, headers={"Authorization":"Bearer " + os.environ["GH_TOKEN"],"Accept":"application/vnd.github+json"})
+              with urlopen(request,timeout=15) as response:
+                  runs=json.load(response)["workflow_runs"]
+              ci=[run for run in runs if run["name"]=="CI"]
+              if ci and ci[0]["status"]=="completed":
+                  assert ci[0]["conclusion"]=="success", "CI failed; runner update refused"
+                  print("CI_GATE=PASS",flush=True)
+                  break
+              time.sleep(5)
+          else:
+              raise RuntimeError("CI completion not observed; runner update refused")
+          PY
+  diagnose:
+    needs: wait-for-ci
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 100
+    steps:
+      - name: Install approved revision without restarting the API service
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_dir=/opt/b3-investment-options-agent
+          test "$(git -C "$runtime_dir" branch --show-current)" = "feature/react-functional-v43-integration"
+          test -z "$(git -C "$runtime_dir" status --porcelain --untracked-files=no)"
+          git -C "$runtime_dir" fetch origin feature/react-functional-v43-integration
+          git -C "$runtime_dir" merge --ff-only "$GITHUB_SHA"
+          test "$(git -C "$runtime_dir" rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "TESTED_REVISION_INSTALLED=$GITHUB_SHA"
+      - name: Run focused nightly identity regressions on Ubuntu
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /opt/b3-investment-options-agent
+          .venv/bin/python -m pytest tests/test_nightly_intelligence.py
+      - name: Execute the configured nightly service and require a fresh safe summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          service=b3-nightly-intelligence.service
+          before="$(systemctl show "$service" --property=ExecMainStartTimestampMonotonic --value)"
+          current="$(systemctl show "$service" --property=ActiveState --value)"
+          test "$current" != "active"
+          systemctl start --no-block "$service"
+          completed=0
+          for attempt in $(seq 1 5400); do
+            state="$(systemctl show "$service" --property=ActiveState --value)"
+            started="$(systemctl show "$service" --property=ExecMainStartTimestampMonotonic --value)"
+            if test "$started" != "$before" && { test "$state" = "inactive" || test "$state" = "failed"; }; then
+              completed=1
+              break
+            fi
+            sleep 1
+          done
+          test "$completed" -eq 1
+          result="$(systemctl show "$service" --property=Result --value)"
+          exit_status="$(systemctl show "$service" --property=ExecMainStatus --value)"
+          test "$result" = "success"
+          test "$exit_status" = "0"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path("/opt/b3-runtime/data/derived/nightly_intelligence/runner_latest.json")
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          assert payload.get("status") in {"PASS", "PASS_WITH_REJECTED_IDENTITIES"}
+          identity = payload.get("identity_filter") or {}
+          print(json.dumps({
+              "case": "NIGHTLY_LIVE_ACCEPTANCE",
+              "status": payload.get("status"),
+              "accepted_ticker_count": identity.get("accepted_ticker_count"),
+              "rejected_identity_count": identity.get("rejected_identity_count"),
+              "nightly_failed_count": payload.get("failed"),
+              "dividend_status_counts": payload.get("issuer_dividend_refresh", {}).get("result_status_counts", {}),
+          }, sort_keys=True))
+          PY
       - name: Read scheduler, persistence and worker metadata without private content
         run: |
           python3 - <<'PY'
