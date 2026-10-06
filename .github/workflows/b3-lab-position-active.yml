@@ -2,7 +2,7 @@ name: B3 active Lab position selection (Ubuntu)
 on:
   push:
     branches: [feature/react-functional-v43-integration]
-    paths: [.github/workflows/b3-lab-position-active.yml, scripts/validate_lab_position_active.py, src/b3_agent/strategy_live.py]
+    paths: [.github/workflows/b3-lab-position-active.yml, scripts/validate_lab_position_active.py, scripts/validate_lab_put_scenario_active.py, src/b3_agent/strategy_live.py]
   workflow_dispatch:
 permissions:
   contents: read
@@ -12,10 +12,14 @@ concurrency:
 jobs:
   active-position:
     runs-on: [self-hosted, Linux, X64]
-    timeout-minutes: 3
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Verify restarted process and current snapshot selection
         env:
           PYTHONPATH: /opt/b3-investment-options-agent/src
         run: /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_lab_position_active.py
+      - name: Accept active stock versus PUT and explicit expiry scenarios
+        env:
+          PYTHONPATH: /opt/b3-investment-options-agent/src
+        run: /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_lab_put_scenario_active.py
