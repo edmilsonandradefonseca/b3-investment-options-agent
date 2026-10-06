@@ -1,5 +1,17 @@
 # Retomada — Inteligência do frontend B3 (2026-10-05)
 
+## Atualização operacional — 06/10/2026 UTC
+
+- A correção da coleta noturna está em `scripts/run_nightly_intelligence.py`: identidades monitoradas são validadas e deduplicadas antes das etapas agendadas; ativos inválidos ficam fora dos provedores de ações/dividendos, sem alterar a carteira. O resumo `runner_latest.json` registra contagem e hashes curtos; não grava os símbolos rejeitados.
+- Commits: `1aaf344` (correção), `4065792` (regressões) e `7717698` (aceite Ubuntu sem reinício da API). CI passou para as revisões, incluindo Python e build React: [run 37401462367 — SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37401462367).
+- O checkout Ubuntu em `/opt/b3-investment-options-agent` foi atualizado até `38feb134`; os 11 testes de `test_nightly_intelligence.py` passaram no virtualenv desse host.
+- O aceite real da coleta ainda está pendente. Duas tentativas via `systemctl start b3-nightly-intelligence.service` do runner terminaram em timeout de conexão ao systemd. O workflow seguinte executa o mesmo script e arquivos de ambiente como o usuário do serviço, mas está aguardando o runner self-hosted: [run 37401457993](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37401457993). Não declarar a coleta live aceita antes de obter um resumo novo com status PASS.
+- O timer foi observado ativo em 05/10. A discrepância entre instaladores do timer do analista continua por corrigir/consolidar. PR #66 permanece aberta em draft.
+
+## Próximas áreas
+
+Strategy Lab (UC-04) e Market Intelligence (UC-05/06/10) continuam na ordem aprovada. Fechar primeiro a validação live da coleta e unificar o calendário do timer do analista. Não reabrir Opportunities sem regressão ou critério aprovado comprovadamente pendente.
+
 ## Checkpoint de encerramento — 05/10/2026 (America/Sao_Paulo)
 
 ### Estado confirmado
@@ -67,7 +79,7 @@ A próxima sessão começa corrigindo e revalidando o job noturno, que falhou no
 
 ## Prompt para a próxima sessão
 
-> Continue no repositório `edmilsonandradefonseca/b3-investment-options-agent`, branch `feature/react-functional-v43-integration`. Leia este checkpoint atualizado e os documentos autoritativos da arquitetura V4.3, dos casos de uso/rastreabilidade e do plano de cobertura React UC-01…UC-12. Confirme branch, HEAD, PR #66 e CI antes de alterar código. **Antes das telas, corrija o schedule noturno:** o run de 22h falhou em `DividendRefreshJob.run → _validated_equity_ticker` ao validar a lista monitorada. Reproduza sem expor carteira, identifique a identidade inválida, preserve a posição original, trate o caso explicitamente e faça o refresh de dividendos/alvos continuar para os tickers válidos. Adicione regressão, rode no host ativo e confirme manifesto/resultado SUCCESS. Unifique os instaladores que sobrescrevem `b3-local-evidence-analyst.timer`. O diagnóstico completo está neste checkpoint. **Opportunities já passou a aceitação funcional integrada no Ubuntu e no navegador real; não a reabra sem regressão ou critério existente comprovadamente pendente.**
+> Continue no repositório `edmilsonandradefonseca/b3-investment-options-agent`, branch `feature/react-functional-v43-integration`. Leia este checkpoint atualizado e os documentos autoritativos da arquitetura V4.3, dos casos de uso/rastreabilidade e do plano de cobertura React UC-01…UC-12. Confirme branch, HEAD, PR #66 e CI antes de alterar código. A correção para a falha `DividendRefreshJob.run → _validated_equity_ticker` já está no código: a lista é filtrada de forma explícita antes dos provedores, a carteira não muda, identidades rejeitadas são resumidas por hash e 11 regressões passaram no Ubuntu. Primeiro verifique o workflow [37401457993](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37401457993) e obtenha o manifesto live novo; ele está aguardando o runner depois de dois timeouts do systemd. Não declare a coleta live validada sem esse resultado. Depois consolide o calendário duplicado de `b3-local-evidence-analyst.timer` nos instaladores. O diagnóstico e limites estão neste checkpoint. **Opportunities já passou a aceitação funcional integrada no Ubuntu e no navegador real; não a reabra sem regressão ou critério existente comprovadamente pendente.**
 >
 > Prioridade 1: concluir **Strategy Lab (UC-04)**. Reproduza ITUB4 × BBDC4 com orçamento de R$ 10.000 e sem premissa de futuro inventada. Confira o payload real e corrija causas comprovadas para: janelas comuns de retorno/histórico, métricas bancárias comparáveis e unidades, corte temporal de São Paulo/PIT, cálculo explicado de quantidade/capital, apresentação de cenários hipotéticos editáveis e síntese que explique o que favorece cada alternativa e o que impede preferência. Preserve fatos, hipóteses e UNKNOWN separados; não duplique cálculos financeiros no React.
 >
@@ -77,7 +89,7 @@ A próxima sessão começa corrigindo e revalidando o job noturno, que falhou no
 
 ## Sequência recomendada
 
-0. **Schedule, correção operacional:** corrigir a falha do refresh noturno por ticker inválido e unificar a definição do timer do analista; confirmar as execuções e manifests no Ubuntu.
+0. **Schedule, aceite operacional:** confirmar a execução live da coleta pelo workflow pendente e o resumo `runner_latest.json`; depois unificar a definição duplicada do timer do analista e comprovar o calendário instalado.
 1. **Strategy Lab (UC-04):** reproduzir ITUB4 × BBDC4; confrontar payload e UI com os defeitos registrados; corrigir dados/unidades/corte antes da síntese; validar cenários e resultado real.
 2. **Market Intelligence (UC-05/06/10):** reproduzir PETR4 com carteira/opção; validar fontes e timestamps; integrar interpretação técnica, regime/eventos e exposição existente.
 3. Rodar CI e aceitação no Ubuntu com o serviço atualizado; completar walkthrough visual e guardar evidência sem payload financeiro bruto.
