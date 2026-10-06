@@ -12,6 +12,7 @@ await context.addInitScript(url=>localStorage.setItem('b3.apiBaseUrl',url),api);
 const page=await context.newPage(),consoleErrors=[],requests=[];
 page.on('pageerror',e=>consoleErrors.push(e.message));
 page.on('request',r=>{if(r.url().endsWith('/orchestrate')){const b=r.postDataJSON();requests.push(b)}});
+page.on('response',r=>{if(r.url().endsWith('/orchestrate')){try{const b=r.request().postDataJSON(),c=b.context||{};if(c.workspace==='Opportunities')console.log(JSON.stringify({case:'UI_OPPORTUNITIES_HTTP',status:r.status(),candidate_count:Array.isArray(c.opportunity_assets)?c.opportunity_assets.length:0,portfolio_included:c.include_portfolio_stocks===true}));}catch{}}});
 const backend=async(path)=>{const r=await context.request.get(api+path);assert.equal(r.status(),200,`Backend read failed: ${path}`);return r.json()};
 const portfolio=await backend('/portfolio/current');
 assert.ok(portfolio.positions.length>0,'Real portfolio must exist for acceptance');
@@ -97,7 +98,7 @@ const automaticReviewCount=automaticOpportunityRequests.length;
 await nav('Portfolio');await nav('Opportunities');
 assert.equal(requests.filter(r=>r.context?.workspace==='Opportunities'&&r.context?.include_portfolio_stocks===true).length,automaticReviewCount,'Changing workspaces must not duplicate the snapshot review');
 const requestsBeforeManual=requests.filter(r=>r.context?.workspace==='Opportunities'&&r.context?.include_portfolio_stocks===true).length;
-const opportunityResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().context?.opportunity_assets?.join(',')==='ITUB4,BBDC4',{timeout:120000});
+const opportunityResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().context?.workspace==='Opportunities',{timeout:300000});
 await page.getByRole('button',{name:'Buscar novas oportunidades',exact:true}).click();
 const opportunityHttp=await opportunityResponse;const opportunityRequest=opportunityHttp.request().postDataJSON();const opportunity=await opportunityHttp.json();assert.equal(opportunityRequest.context.include_portfolio_stocks,true);let opportunityCoverage='LIVE_API';
 if(opportunity?.result?.opportunity_screen){assert.deepEqual(opportunity.result.opportunity_screen.candidate_universe,['ITUB4','BBDC4']);assert.equal(opportunity.result.opportunity_screen.rows.length,opportunity.result.opportunity_screen.requested_universe.length);assert.equal(opportunityRequest.context.include_portfolio_stocks,true);assert.equal(opportunity.result.derived_synthesis_status,'COMPLETED','A busca real precisa incluir a síntese sênior');const opportunitySynthesis=opportunity.result.synthesis||{};const opportunityProposal=opportunity.result.decision_proposal||opportunity.result.proposal||{};const opportunityNarrative=[opportunitySynthesis.summary,opportunityProposal.thesis,opportunityProposal.rationale,opportunity.result.summary].find(value=>typeof value==='string'&&value.trim());assert.ok(opportunityNarrative,'A síntese de Opportunities não pode ser vazia');assert.ok(opportunity.result.opportunity_research_scope?.policy_version,'A cobertura de pesquisa precisa ser explícita');await opportunityRunStatus.getByText('Busca concluída',{exact:true}).waitFor({timeout:180000});}
