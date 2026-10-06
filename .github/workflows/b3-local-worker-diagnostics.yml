@@ -87,6 +87,23 @@ jobs:
                   "newest_file_mtime_utc": datetime.fromtimestamp(newest, timezone.utc).isoformat() if newest else None,
               }, sort_keys=True))
 
+          for service in ["b3-nightly-intelligence.service"]:
+              state = show(service, ["Result", "ExecMainStatus"])
+              if state.get("Result") == "failed" or state.get("ExecMainStatus") not in {"0", ""}:
+                  journal = subprocess.run(
+                      ["journalctl", "-u", service, "-n", "120", "--no-pager", "-o", "cat"],
+                      text=True, capture_output=True, timeout=15,
+                  ).stdout
+                  import re
+                  frames = re.findall(r'File "([^"]+)", line (\d+), in ([^\n]+)', journal)
+                  errors = re.findall(r'^([A-Za-z_][A-Za-z_0-9]*(?:Error|Exception))(?::|$)', journal, flags=re.MULTILINE)
+                  print(json.dumps({
+                      "case": "FAILED_NIGHTLY_TRACE_METADATA",
+                      "service": service,
+                      "failure_class": errors[-1] if errors else "NO_EXCEPTION_CLASS_IN_JOURNAL",
+                      "frames": [{"file": Path(file).name, "line": int(line), "function": function} for file, line, function in frames[-8:]],
+                  }, sort_keys=True))
+
           root = data / "local_evidence_analyst"
           for path in root.joinpath("runs").glob("*.json") if root.joinpath("runs").is_dir() else []:
               dossier = json.loads(path.read_text())
