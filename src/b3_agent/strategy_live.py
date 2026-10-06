@@ -750,11 +750,24 @@ class LiveStrategyComparisonService:
             dividend_service=StoredDividendService()
             dividend_evidence={ticker:dividend_service.build(ticker,datetime.now(timezone.utc)) for ticker in dict.fromkeys(assets)}
 
-        # Current BUY evidence is acquired before freezing the decision cutoff.
-        # Explicit historical cutoffs remain authoritative and are never advanced.
-        if normalized_strategies == ("BUY_STOCK", "BUY_STOCK") and as_of is None:
+        # Freeze one common live cutoff only after acquiring every piece of
+        # market evidence used by this comparison. This includes stock quotes
+        # and any selected option chain; explicit historical cutoffs never move.
+        if as_of is None:
+            for ticker, strategy in zip(assets, normalized_strategies, strict=True):
+                if strategy in {"SELL_PUT", "SELL_CALL"} and ticker not in prefetched_options:
+                    prefetched_options[ticker] = self.options_provider.get_snapshot(
+                        ticker, effective_as_of
+                    )
             effective_as_of = datetime.now(timezone.utc)
-            packs = tuple(AssetEvidencePack(**{**asdict(pack), "as_of": effective_as_of}) for pack in packs)
+            frozen_packs = []
+            for pack in packs:
+                payload = asdict(pack)
+                payload["as_of"] = effective_as_of
+                if isinstance(payload.get("quant"), dict):
+                    payload["quant"]["as_of"] = effective_as_of
+                frozen_packs.append(AssetEvidencePack(**payload))
+            packs = tuple(frozen_packs)
 
         alternatives: list[StrategyAlternative] = []
         option_evidence: dict[str, dict[str, Any]] = {}
@@ -774,6 +787,28 @@ class LiveStrategyComparisonService:
             start=1,
         ):
             assert normalized_strategy is not None
+            underlying_quote = pack.market.get("current_quote")
+            if not isinstance(underlying_quote, dict):
+                raise ValueError(f"{pack.ticker} requires an admissible current underlying quote")
+            quote_ticker = str(underlying_quote.get("ticker") or "").upper()
+            quote_price = underlying_quote.get("close")
+            quote_currency = str(underlying_quote.get("currency") or "").upper()
+            quote_source = underlying_quote.get("source")
+            quote_observed = underlying_quote.get("observation_timestamp")
+            quote_available = underlying_quote.get("available_timestamp")
+            if isinstance(quote_observed, str):
+                quote_observed = datetime.fromisoformat(quote_observed.replace("Z", "+00:00"))
+            if isinstance(quote_available, str):
+                quote_available = datetime.fromisoformat(quote_available.replace("Z", "+00:00"))
+            if (quote_ticker != pack.ticker or quote_currency != "BRL"
+                    or not isinstance(quote_price, (int, float))
+                    or not math.isfinite(float(quote_price)) or quote_price <= 0
+                    or underlying_quote.get("quality_status") in {"REJECTED", "INVALID"}
+                    or not quote_source
+                    or not isinstance(quote_observed, datetime)
+                    or not isinstance(quote_available, datetime)
+                    or quote_observed > effective_as_of or quote_available > effective_as_of):
+                raise ValueError(f"{pack.ticker} current underlying quote is invalid or outside the common as_of cutoff")
             assumptions: dict[str, Any] = {
                 "amount": amount,
                 "expected_return": "not_inferred",
@@ -877,6 +912,15 @@ class LiveStrategyComparisonService:
                 if quote is None:
                     raise ValueError(
                         f"OPLAB current quote {normalized_option} was not found"
+                    )
+                if (quote.ticker.upper() != pack.ticker or not quote.source
+                        or quote.quality_status in {"REJECTED", "INVALID"}):
+                    raise ValueError(
+                        f"OPLAB quote {normalized_option} has invalid identity or quality"
+                    )
+                if quote.observation_timestamp > effective_as_of or quote.available_timestamp > effective_as_of:
+                    raise ValueError(
+                        f"OPLAB quote {normalized_option} is after the common as_of cutoff"
                     )
                 if quote.bid is None or quote.bid <= 0:
                     raise ValueError(

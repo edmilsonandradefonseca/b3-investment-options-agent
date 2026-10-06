@@ -2,7 +2,7 @@ name: B3 V4.4 candidate Lab acceptance (Ubuntu)
 on:
   push:
     branches: [feature/react-functional-v43-integration]
-    paths: [.github/workflows/b3-v44-candidate.yml, scripts/validate_v44_lab_candidate.py]
+    paths: [.github/workflows/b3-v44-candidate.yml, scripts/validate_v44_lab_candidate.py, src/b3_agent/strategy_live.py, tests/test_strategy_live.py]
   workflow_dispatch:
 permissions:
   contents: read

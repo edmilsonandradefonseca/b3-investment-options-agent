@@ -43,7 +43,7 @@ class FakeCurrentQuoteProvider:
     name = "oplab"
 
     def get_current_quote(self, ticker):
-        ts = datetime(2026, 10, 1, 15, 59, tzinfo=timezone.utc)
+        ts = datetime(2026, 10, 1, 14, 59, tzinfo=timezone.utc)
         price = 69.74 if ticker == "VALE3" else 49.74
         return StockMarketData(
             instrument_id=ticker,
@@ -571,6 +571,97 @@ def test_sell_call_uses_current_bid_and_requires_covered_shares():
     assert evidence_row["current_quote"]["bid"] == 0.80
     assert evidence_row["call_analysis"]["premium"] == 0.80
 
+
+
+def test_live_covered_call_freezes_cutoff_after_stock_and_option_quote_acquisition():
+    from dataclasses import replace
+
+    class FreshCurrentQuote(FakeCurrentQuoteProvider):
+        def get_current_quote(self, ticker):
+            quote = super().get_current_quote(ticker)
+            observed = datetime.now(timezone.utc) - timedelta(milliseconds=1)
+            return replace(quote, observation_timestamp=observed,
+                           available_timestamp=observed, ingested_at=observed)
+
+    class QuoteArrivesAfterRequest(FakeOptionsProvider):
+        def get_snapshot(self, ticker, as_of):
+            contracts, quotes = super().get_snapshot(ticker, as_of)
+            arrived = as_of + timedelta(milliseconds=1)
+            return contracts, [
+                replace(quote, observation_timestamp=arrived,
+                        available_timestamp=arrived, ingested_at=arrived)
+                for quote in quotes
+            ]
+
+    evidence = StrategyEvidenceService(
+        market_provider=FakeMarketProvider(),
+        fundamentals_provider=FakeFundamentalsProvider(),
+        current_quote_provider=FreshCurrentQuote(),
+    )
+    result = LiveStrategyComparisonService(
+        evidence_service=evidence, options_provider=QuoteArrivesAfterRequest()
+    ).compare(
+        assets=("VALE3", "WEGE3"),
+        strategies=("Comprar ação", "Vender CALL coberta"),
+        option_ids=(None, "WEGEJ550"), amount=50_000.0,
+        portfolio=_covered_portfolio(),
+    )
+
+    cutoff = result["as_of"]
+    spot = result["asset_evidence"]["WEGE3"]["market"]["current_quote"]
+    option_quote = result["option_evidence"]["WEGEJ550"]["current_quote"]
+    assert result["asset_evidence"]["WEGE3"]["as_of"] == cutoff
+    assert spot["observation_timestamp"] <= cutoff
+    assert spot["available_timestamp"] <= cutoff
+    assert result["asset_evidence"]["WEGE3"]["market"]["price_history"]
+    assert result["asset_evidence"]["WEGE3"]["market"]["historical_returns"]["1W"]["status"] == "AVAILABLE"
+    assert option_quote["observation_timestamp"] <= cutoff
+    assert option_quote["available_timestamp"] <= cutoff
+
+
+def test_explicit_historical_strategy_cutoff_rejects_future_underlying_quote():
+    evidence = StrategyEvidenceService(
+        market_provider=FakeMarketProvider(),
+        fundamentals_provider=FakeFundamentalsProvider(),
+        current_quote_provider=FakeCurrentQuoteProvider(),
+    )
+    try:
+        LiveStrategyComparisonService(
+            evidence_service=evidence, options_provider=FakeOptionsProvider()
+        ).compare(
+            assets=("VALE3", "WEGE3"),
+            strategies=("Comprar ação", "Vender CALL coberta"),
+            option_ids=(None, "WEGEJ550"), amount=50_000.0,
+            portfolio=_covered_portfolio(),
+            as_of=datetime(2026, 10, 1, 14, 0, tzinfo=timezone.utc),
+        )
+    except ValueError as exc:
+        assert "outside the common as_of cutoff" in str(exc)
+    else:
+        raise AssertionError("future spot quotes must not enter a historical comparison")
+
+
+def test_strategy_comparison_does_not_substitute_history_when_current_quote_is_missing():
+    class MissingCurrentQuote:
+        def get_current_quote(self, ticker):
+            raise RuntimeError("provider unavailable")
+
+    evidence = StrategyEvidenceService(
+        market_provider=FakeMarketProvider(),
+        fundamentals_provider=FakeFundamentalsProvider(),
+        current_quote_provider=MissingCurrentQuote(),
+    )
+    try:
+        LiveStrategyComparisonService(
+            evidence_service=evidence, options_provider=FakeOptionsProvider()
+        ).compare(
+            assets=("VALE3", "WEGE3"), strategies=("Comprar ação", "Manter"),
+            amount=10_000.0, as_of=datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc),
+        )
+    except ValueError as exc:
+        assert "requires an admissible current underlying quote" in str(exc)
+    else:
+        raise AssertionError("history alone must not be treated as a current stock price")
 
 def test_sell_call_rejects_uncovered_position():
     evidence = StrategyEvidenceService(
