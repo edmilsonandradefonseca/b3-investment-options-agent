@@ -18,6 +18,22 @@ assert result["telemetry"]["llm_calls"] == 0
 rows = pair["rows"]
 assert len(rows) == 2 and {row["ticker"] for row in rows} == {"ITUB4","BBDC4"}
 assert all(row["current_price_brl"] is not None and row["capital_required_brl"] == 10000 for row in rows)
+from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
+history=pair.get("common_normalized_history") or {}
+assert history.get("status")=="AVAILABLE" and len(history.get("rows") or [])>=60
+sp_today=datetime.now(ZoneInfo("America/Sao_Paulo")).date()
+history_end=date.fromisoformat(history["end_date"])
+assert 0 <= (sp_today-history_end).days <= 7, "Common history is stale at the active cutoff"
+now_utc=datetime.now(timezone.utc)
+quote_ages_days=[]
+for row in rows:
+    observed=datetime.fromisoformat(str(row["quote_observed_at"]).replace("Z","+00:00"))
+    age=(now_utc-observed).total_seconds()/86400
+    assert observed.tzinfo is not None and 0 <= age <= 7, "Current stock quote is future-dated or older than seven days"
+    assert row.get("source_refs"), "Stock comparison must retain market-data lineage"
+    quote_ages_days.append(round(age,2))
+print(json.dumps({"case":"ACTIVE_LAB_HISTORY_AND_CURRENT_QUOTES","history_sessions":len(history["rows"]),"history_end":history["end_date"],"quote_age_days":quote_ages_days,"status":"PASS"},ensure_ascii=False),flush=True)
 brapi_budget = call_json(base + "/providers/budget/brapi", None, 15)
 budget_state=brapi_budget.get("response") or {}
 print(json.dumps({"case":"ACTIVE_BRAPI_BUDGET","http":brapi_budget["http_status"],"budget":budget_state},ensure_ascii=False),flush=True)
