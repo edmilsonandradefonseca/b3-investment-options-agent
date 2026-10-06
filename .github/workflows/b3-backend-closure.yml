@@ -68,7 +68,37 @@ jobs:
           test "$(git -C "$runtime_dir" branch --show-current)" = "feature/react-functional-v43-integration"
           test -z "$(git -C "$runtime_dir" status --porcelain --untracked-files=no)"
           git -C "$runtime_dir" fetch origin feature/react-functional-v43-integration
+          preserved_root="$(mktemp -d /var/tmp/b3-runtime-untracked.XXXXXX)"
+          merge_completed=0
+          restore_on_failure() {
+            if [ "$merge_completed" -ne 1 ]; then
+              for path in scripts/install_market_history_refresh_timer.sh scripts/refresh_market_history.py; do
+                if [ -e "$preserved_root/$path" ] && [ ! -e "$runtime_dir/$path" ]; then
+                  mkdir -p "$runtime_dir/$(dirname "$path")"
+                  mv "$preserved_root/$path" "$runtime_dir/$path"
+                fi
+              done
+            fi
+          }
+          trap restore_on_failure EXIT
+          for path in scripts/install_market_history_refresh_timer.sh scripts/refresh_market_history.py; do
+            if [ -e "$runtime_dir/$path" ] && ! git -C "$runtime_dir" ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
+              mkdir -p "$preserved_root/$(dirname "$path")"
+              mv "$runtime_dir/$path" "$preserved_root/$path"
+            fi
+          done
           git -C "$runtime_dir" merge --ff-only "$GITHUB_SHA"
+          merge_completed=1
+          for path in scripts/install_market_history_refresh_timer.sh scripts/refresh_market_history.py; do
+            if [ -e "$preserved_root/$path" ]; then
+              if cmp -s "$preserved_root/$path" "$runtime_dir/$path"; then
+                rm "$preserved_root/$path"
+              else
+                echo "PRESERVED_LOCAL_FILE=$preserved_root/$path"
+              fi
+            fi
+          done
+          rmdir -p "$preserved_root/scripts" 2>/dev/null || true
           test "$(git -C "$runtime_dir" rev-parse HEAD)" = "$GITHUB_SHA"
           echo "TESTED_REVISION_INSTALLED=$GITHUB_SHA"
           if python3 - "$runtime_dir" <<'PY'
