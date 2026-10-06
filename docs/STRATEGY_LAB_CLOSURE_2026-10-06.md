@@ -64,3 +64,21 @@ Causas corrigidas:
 2. A API definia `derived_synthesis_status` depois de construir `OrchestratorResponse`, que copia o resultado. O campo não chegava à resposta HTTP determinística. A atribuição agora ocorre antes da cópia, validada pelo gate ativo.
 
 Este aceite fecha o incremento de comparação de posição real. **Ainda não fecha o Strategy Lab inteiro.** Permanecem as entregas 4–5: reconciliação integral de caixa/obrigações/cobertura e aceites reais dos outros casos da matriz (PUT vs ação, CALL coberta, cenários explícitos e regressões de carteira/ordem/falha/nova análise). Não declarar o Lab completo até a evidência desses casos ser aprovada.
+
+
+## Aceite HTTP ativo de Strategy Lab e Market Intelligence — 06/10/2026
+
+O workflow `37507480152`, job `112419706584`, confirmou `ACTIVE_REVISION_AND_RESTART=PASS` e aceitou:
+- **Strategy Lab — LAB-01/03/05:** pergunta natural com R$ 10 mil, ITUB4 × BBDC4, duas alternativas e 275 sessões comuns; conservação de orçamento e dimensionamento bruto passaram.
+- **Strategy Lab — LAB-02:** síntese sênior sobre a comparação canônica passou (tese e justificativa presentes; 63,34 s).
+- **Market Intelligence — MI-02/04/05:** síntese sênior ativa para PETR4 passou (38,96 s); o payload incluiu alvos institucionais e dividendos do emissor.
+
+A aceitação de Market Intelligence é **parcial quanto à evidência**: `institution_targets.status=UNKNOWN_NO_ADMISSIBLE_TARGETS` e `issuer_dividends.collection_status=PROVIDER_UNAVAILABLE`. O sistema expõe essas lacunas sem falhar a resposta, mas ainda falta demonstrar cobertura válida de preço-alvo/dividendos e o conjunto completo de indicadores, eventos e walkthrough visual no runtime.
+
+## Próxima sequência de fechamento
+
+1. Fechar os casos Strategy Lab ação × PUT, CALL coberta, cenário com horizonte/choque explícitos e regressões de carteira/ordem/falha/nova análise; depois completar a reconciliação de caixa, obrigações e cobertura.
+2. Em Market Intelligence, investigar a indisponibilidade do provedor de dividendos e a ausência de alvos admissíveis; conferir indicadores, notícias/eventos com fonte/data/impacto e a tela no runtime.
+3. Executar a matriz final dos dois espaços com fontes/limitações registradas. Manter status parcial até todos os critérios normativos serem aceitos.
+
+Os aceites desta seção são somente leitura. Nenhuma ordem foi enviada.
