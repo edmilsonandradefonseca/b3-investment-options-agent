@@ -306,7 +306,10 @@ class StrategyEvidenceService:
                     row.observation_timestamp for row in market_records
                 ),
                 "historical_returns": _historical_performance(eligible_history, as_of),
-                "price_history": [asdict(row) for row in eligible_history],
+                "price_history": [{"observation_timestamp": row.observation_timestamp,
+                    "available_timestamp": row.available_timestamp, "close": row.close,
+                    "adjusted_close": row.adjusted_close, "source": row.source}
+                    for row in eligible_history],
             },
             quant=asdict(quant),
             fundamentals={

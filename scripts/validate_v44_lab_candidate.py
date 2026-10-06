@@ -19,10 +19,20 @@ os.environ['B3_AGENT_PROJECT_ROOT']=str(Path(__file__).resolve().parents[1])
 from fastapi.testclient import TestClient
 from b3_agent.server import app
 client=TestClient(app)
+def require_http_ok(response, stage):
+    if response.status_code != 200:
+        try:
+            detail = str(response.json().get('detail', ''))
+        except ValueError:
+            detail = ''
+        hints = [word for word in ('timed out', 'Gateway', 'connection', 'JSON', 'schema', 'assessment', 'context', 'token', 'rate limit', 'payload') if word.lower() in detail.lower()]
+        print(json.dumps({'case':stage,'http_status':response.status_code,'error_chars':len(detail),'failure_hints':hints}),flush=True)
+    assert response.status_code == 200
+
 request={'task':'Tenho R$ 10 mil. Comprar ITUB4 ou BBDC4?','ticker':None,'context':{'workspace':'Strategy Lab','research_mode':'stored_only','analysis_mode':'deterministic'}}
 started=monotonic()
 response=client.post('/orchestrate',json=request)
-assert response.status_code==200
+require_http_ok(response, 'candidate-http')
 result=response.json()
 assert not result.get('error')
 rows=result['result']['stock_purchase_comparison']['rows']
@@ -44,7 +54,7 @@ request['context'].pop('analysis_mode')
 request['context']['research_mode']='stored_first'
 started=monotonic()
 response=client.post('/orchestrate',json=request)
-assert response.status_code==200
+require_http_ok(response, 'candidate-http')
 payload=response.json(); result=payload['result']
 assert not payload.get('error')
 proposal=result.get('proposal') or result.get('decision_proposal') or {}
@@ -54,7 +64,7 @@ print(json.dumps({'instance':'candidate ASGI; not active systemd','case':'LAB-02
 
 started=monotonic()
 response=client.post('/orchestrate',json={'task':'Explique os sinais técnicos, os eventos elegíveis, os fundamentos e a exposição existente em PETR4. Diferencie fatos, interpretação e lacunas; não consulte cadeias de opções nem invente valuation.', 'ticker':'PETR4','context':{'workspace':'Market Intelligence','selected_ticker':'PETR4','asset_view':True,'research_mode':'stored_first'}})
-assert response.status_code == 200
+require_http_ok(response, 'MI-candidate-http')
 payload=response.json(); result=payload['result']
 assert not payload.get('error')
 assert result.get('derived_synthesis_status') == 'COMPLETED'
