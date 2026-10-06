@@ -85,7 +85,10 @@ with httpx.Client(base_url='http://127.0.0.1:8000', timeout=15) as client:
                         'lab_conversation': selected_turns}})
         assert response.status_code == 200
         result_response = response.json()
-        assert result_response['status'] == 'COMPLETED'
+        assert result_response['status'] == 'COMPLETED', (
+            f"Chosen roll destination did not complete: status={result_response.get('status')}; "
+            f"missing_fields={(result_response.get('result', {}).get('lab_clarification') or {}).get('missing_fields')}"
+        )
         result = result_response['result']
         assert result['policy_version'] == 'lab-option-management-v1'
         assert [item['alternative_id'] for item in result['alternatives']] == ['KEEP', 'CLOSE', 'ROLL']
