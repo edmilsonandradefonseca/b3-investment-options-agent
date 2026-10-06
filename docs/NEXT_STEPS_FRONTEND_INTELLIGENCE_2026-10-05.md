@@ -1,5 +1,15 @@
 # Retomada — Inteligência do frontend B3 (2026-10-05)
 
+## Aceite do bloco no processo ativo — 06/10/2026, 09h22 BRT
+
+- Usuário reiniciou o serviço. Gate [37462396255 — SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37462396255) confirmou PID 446803, início em 06/10 às 09h17m31 BRT, processo posterior à instalação e hashes de seis módulos do backend iguais à revisão testada. Não houve novo reinício pelo workflow.
+- **Aceito neste bloco:** entrada natural “Tenho R$ 10 mil. Comprar ITUB4 ou BBDC4?”, duas alternativas, 274 sessões comuns, histórico recente, conservação de orçamento bruto e síntese sênior na API HTTP ativa. Etapa determinística 1,3 s; sênior 97,59 s.
+- **Aceito neste bloco:** síntese sênior Market Intelligence PETR4 com tese/racional e contratos de alvos/proventos armazenados na API HTTP ativa, 67,55 s. Cobertura observada: `UNKNOWN_NO_ADMISSIBLE_TARGETS` e `PROVIDER_UNAVAILABLE`. O sucesso de integração NÃO certifica cobertura completa nem recupera o provedor; estes estados continuam explícitos.
+- Visual real [37446374999 — SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37446374999); candidato final [37446102693 — SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37446102693), 52 regressões focadas e as duas sínteses. [CI 37462406473 — SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37462406473).
+- O bloqueio de ativação descrito abaixo está superado para este bloco. As tentativas antigas com sudo continuam como histórico, não como bloqueio atual.
+- **Strategy Lab e Market Intelligence permanecem parciais no escopo integral V1.2:** não marcar UC-04/05/06/10 completos só por este par de ações e PETR4. Próximos aceites: variantes PUT/CALL/rolagem e hipóteses do Lab; regime/fatores tipados e cobertura de fontes em MI. Opportunities permanece aceita.
+
+
 ## Implementação Strategy Lab e Market Intelligence — 06/10/2026 UTC
 
 Revisões publicadas no PR #66: `2e50a735c5ca49d82c26e020d15248ecaab450a4`, `569a3d0e7e1214c34d477ec29fc70e9b2aeb203d`, `8ff9ccdec5c6cac32d539e897ac022dc088d7b1f` e `ead13f5f41f67b9e6271982799a931d752328377`. O escopo implementado abaixo **não constitui aceite completo** de UC-04/05/06/10.
