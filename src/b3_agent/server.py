@@ -1116,6 +1116,23 @@ def orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
             ticker=request.ticker,
             context=request.context,
         )
+        from b3_agent.routing.lab_position import position_intent, resolve_position
+        position_inputs = position_intent(normalized)
+        if position_inputs is not None:
+            if normalized.context.get('as_of') is not None:
+                raise ValueError('Position management requires the current portfolio; historical requests are not supported')
+            import hashlib
+            from datetime import datetime
+            from zoneinfo import ZoneInfo
+            from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
+            portfolio_path = settings.data_dir / 'imports' / 'portfolio.xlsx'
+            revision = hashlib.sha256(portfolio_path.read_bytes()).hexdigest() if portfolio_path.is_file() else None
+            portfolio = BtgRendaVariavelLoader().load(portfolio_path) if portfolio_path.is_file() else None
+            if revision is not None and hashlib.sha256(portfolio_path.read_bytes()).hexdigest() != revision:
+                raise ValueError('Portfolio changed during selection; retry against the current snapshot')
+            position_result = resolve_position(position_inputs, portfolio, revision=revision, today=datetime.now(ZoneInfo('America/Sao_Paulo')).date())
+            status = 'NEEDS_CLARIFICATION' if position_result.get('lab_clarification') else 'INPUTS_IDENTIFIED'
+            return _response_to_model(OrchestratorResponse(status=status, result=position_result))
         from b3_agent.routing.lab_clarification import lab_operation_clarification
         clarification = lab_operation_clarification(normalized)
         if clarification is not None:

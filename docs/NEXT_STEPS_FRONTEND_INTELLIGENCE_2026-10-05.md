@@ -1,5 +1,14 @@
 # Retomada — Inteligência do frontend B3 (2026-10-05)
 
+## Ativação confirmada e seleção de posição — 06/10/2026
+
+O usuário ativou a correção. [Gate HTTP ativo 37470743000 — SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37470743000) confirmou hashes dos módulos instalados, processo iniciado após a instalação e `ACTIVE_LAB_CLARIFICATION_AND_RESTART=PASS`. O pedido genérico recebe `NEEDS_CLARIFICATION`, com zero chamadas de cadeia e LLM. O bloqueio de reinício anterior está superado para essa revisão.
+
+Novo incremento: selecionar contrato exato no extrato BTG vigente e pedir quantidade em unidades ou “toda a posição”. Leitura com hash antes/depois; continuação reutiliza apenas intenção e identificador, relendo posições atuais. Rejeita identidade duplicada, expirada, origem ausente e quantidade fracionária/superior à posição. Não assume lote de 100, não altera carteira e não calcula operação. React distingue esclarecimento de `INPUTS_IDENTIFIED` (“Posição identificada · cálculos pendentes”). Testes de seleção e HTTP, build e fixture visual cobrem a continuação em três etapas.
+
+A seleção é implementação candidata até CI, instalação e aceite no processo ativo. Próximo bloco: alternativas/pernas e motor de manter/encerrar/rolar; depois carteira antes/depois e aceites reais do plano. Multiplicador do snapshot não é confirmação do provedor; cotação executável, custos e contrato novo da rolagem continuam pendentes. Lab integral permanece aberto.
+
+
 ## Plano de fechamento do Lab e primeiro incremento — 06/10/2026 BRT
 
 Plano de execução: [STRATEGY_LAB_CLOSURE_2026-10-06.md](STRATEGY_LAB_CLOSURE_2026-10-06.md), subordinado à V1.2, LAB-01–07 e AC existentes. Cinco entregas: (1) intenção/posição e esclarecimento; (2) alternativas/pernas/quantidades; (3) manter/encerrar/rolar com fluxos e cenários; (4) carteira completa antes/depois e tela central; (5) aceite real integrado.

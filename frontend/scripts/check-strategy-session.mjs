@@ -16,6 +16,11 @@ try{
   if(req.url().endsWith('/orchestrate')&&body?.context?.workspace==='Strategy Lab'){
    requests.push(body);
    if(body.task==='Vale manter, encerrar ou rolar uma opção da minha carteira?')return route.fulfill({json:{status:'NEEDS_CLARIFICATION',result:{lab_clarification:{status:'NEEDS_CLARIFICATION',question:'Qual é o código exato da opção que deseja analisar?',reason:'Informe o contrato.'},derived_synthesis_status:'NOT_REQUESTED'},sources:[],audit:[],error:null},headers:{'Access-Control-Allow-Origin':'*'}});
+   if(body.task==='A opção é PETRK376.'||body.task==='100 unidades.'){
+    const selected=body.task==='100 unidades.';
+    const result={lab_position_selection:{option_id:'PETRK376',side:'SHORT',snapshot_as_of:'2026-10-06',available_quantity_units:2500,...(selected?{selected_quantity_units:100}:{}),position:{underlying_ticker:'PETR4',option_type:'CALL',strike:37.6,expiration_date:'2026-11-20',source_ref:'fixture:current-snapshot'}},...(selected?{summary:'Posição e quantidade identificadas; cálculos pendentes.'}:{lab_clarification:{status:'NEEDS_CLARIFICATION',question:'Deseja analisar toda a posição ou quantas unidades?',reason:'Quantidade explícita necessária.'}}),derived_synthesis_status:'NOT_REQUESTED'};
+    return route.fulfill({json:{status:selected?'INPUTS_IDENTIFIED':'NEEDS_CLARIFICATION',result,sources:[],audit:[],error:null},headers:{'Access-Control-Allow-Origin':'*'}});
+   }
    return route.fulfill({json:{status:'COMPLETED',result:{summary:'Resposta de fixture: tese exige verificar premissas.',derived_synthesis_status:'COMPLETED'},sources:[],audit:[],error:null},headers:{'Access-Control-Allow-Origin':'*'}});
   }
   const json=req.url().endsWith('/health')?{status:'ok'}:req.url().includes('/transactions')?[]:req.url().endsWith('/orchestrate')?{status:'COMPLETED',result:{},sources:[],audit:[],error:null}:{positions:[],operations:[]};
@@ -46,11 +51,19 @@ try{
  await panel.getByLabel('Sua pergunta ou tese').fill('Vale manter, encerrar ou rolar uma opção da minha carteira?');
  await panel.getByRole('button',{name:'Analisar pergunta ou tese',exact:true}).click();
  await panel.getByRole('region',{name:'Esclarecimento necessário para a estratégia'}).getByText('Qual é o código exato da opção que deseja analisar?',{exact:true}).waitFor();
- await panel.getByText('Aguardando identificação do contrato',{exact:false}).waitFor();
+ await panel.getByText('Aguardando esclarecimento',{exact:false}).waitFor();
  await panel.getByLabel('Ajustar ou aprofundar esta análise').fill('A opção é PETRK376.');
  await panel.getByRole('button',{name:'Enviar continuação',exact:true}).click();
- await panel.getByRole('article',{name:'Análise 2'}).getByText('Resposta de fixture: tese exige verificar premissas.',{exact:true}).waitFor();
+ await panel.getByRole('article',{name:'Análise 2'}).getByText('Deseja analisar toda a posição ou quantas unidades?',{exact:true}).waitFor();
  assert.equal(requests.at(-1).context.lab_conversation[0].response.lab_clarification.status,'NEEDS_CLARIFICATION');
+ await panel.getByLabel('Ajustar ou aprofundar esta análise').fill('100 unidades.');
+ await panel.getByRole('button',{name:'Enviar continuação',exact:true}).click();
+ const identified=panel.getByRole('article',{name:'Análise 3'});
+ await panel.getByText('Posição identificada · cálculos pendentes',{exact:false}).waitFor();
+ await identified.getByText('100 unidades',{exact:true}).waitFor();
+ assert.equal(requests.at(-1).context.lab_conversation[1].response.lab_position_selection.option_id,'PETRK376');
+ assert.equal(await identified.getByText('Síntese concluída',{exact:false}).count(),0);
+ await page.screenshot({path:resolve(out,'lab-position-selection-fixture.png'),animations:'disabled'});
  assert.deepEqual(errors,[]);
  console.log('PASS LAB-01/02/06: central response, no hidden defaults, continuation and reset (fixtures).');
 }finally{await browser.close();}

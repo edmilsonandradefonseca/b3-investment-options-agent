@@ -91,6 +91,10 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
 
   const result = data.result || {};
   const clarification = asObject(result.lab_clarification);
+  const selection = asObject(result.lab_position_selection);
+  const position = asObject(selection?.position);
+  if (selection) return <section className="analysis-summary" aria-label="Posição selecionada no Strategy Lab"><h3>Posição no extrato vigente</h3><p><strong>{asText(selection.option_id)}</strong> · {selection.side==='SHORT'?'Vendida':selection.side==='LONG'?'Comprada':'Identidade pendente'} · snapshot de {asText(selection.snapshot_as_of)??'data indisponível'}</p>{position&&<dl><dt>Subjacente / tipo</dt><dd>{asText(position.underlying_ticker)} / {asText(position.option_type)}</dd><dt>Strike / vencimento</dt><dd>{brl(numberValue(position.strike))} / {asText(position.expiration_date)}</dd><dt>Quantidade no extrato</dt><dd>{numberValue(selection.available_quantity_units)?.toLocaleString('pt-BR')} unidades</dd><dt>Quantidade selecionada</dt><dd>{numberValue(selection.selected_quantity_units)?.toLocaleString('pt-BR')??'A informar'} unidades</dd><dt>Fonte</dt><dd>{asText(position.source_ref)}</dd></dl>}{clarification?<><p>{asText(clarification.question)}</p><p className="muted">{asText(clarification.reason)}</p></>:<p>{asText(result.summary)}</p>}<p className="muted">Identificação a partir do extrato. Cotação executável e identidade do provedor ainda não verificadas; encerramento e rolagem ainda não calculados.</p></section>;
+
   if (clarification?.status === 'NEEDS_CLARIFICATION') return <section className="analysis-summary" aria-label="Esclarecimento necessário para a estratégia"><h3>Identificar a opção</h3><p>{asText(clarification.question)}</p><p className="muted">{asText(clarification.reason)}</p><p>Responda no campo de continuação abaixo. Nenhuma cadeia foi consultada para escolher um contrato em seu lugar.</p></section>;
   const synthesis = asObject(result.synthesis);
   const proposal =

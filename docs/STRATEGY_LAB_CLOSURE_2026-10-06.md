@@ -31,3 +31,5 @@ Compra ITUB4 × BBDC4, R$ 10 mil: entrada natural, corte interativo corrigido, 2
 Primeira correção da entrega 1: pedidos genéricos de encerrar/rolar/vender uma opção sem código recebem `NEEDS_CLARIFICATION` no painel central, sem aquisição de cadeia nem chamada sênior. O código fornecido posteriormente ainda precisa ser validado e vinculado à posição pela implementação seguinte; este incremento não afirma fechar LAB-01 inteiro.
 
 O próximo incremento deve ligar a seleção de posição ao snapshot atual e ao modelo de pernas da entrega 2. Não declarar fechamento integral apenas porque a pergunta de esclarecimento funciona.
+
+Seleção implementada no segundo incremento: contrato único no BTG atual, lado e fonte preservados, quantidade explícita em unidades ou posição integral, rejeição de excesso e continuação relendo snapshot. Resposta `INPUTS_IDENTIFIED` conserva cálculo pendente. Identidade/multiplicador do provedor, pernas/alternativas e motor de operações ainda precisam das entregas 2 e 3; não há fechamento integral nem recomendação de ordem.

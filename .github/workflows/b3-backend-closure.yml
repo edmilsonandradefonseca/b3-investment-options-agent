@@ -53,7 +53,7 @@ jobs:
       - name: Verify issuer timezone regression on Ubuntu
         env:
           PYTHONPATH: ${{ github.workspace }}/src
-        run: /opt/b3-investment-options-agent/.venv/bin/python -m pytest tests/test_bradesco_dividends.py tests/test_stored_dividends.py tests/test_dividend_evidence.py
+        run: /opt/b3-investment-options-agent/.venv/bin/python -m pytest tests/test_bradesco_dividends.py tests/test_stored_dividends.py tests/test_dividend_evidence.py tests/test_lab_position.py tests/test_lab_clarification.py
       - name: Install tested revision and request service restart
         shell: bash
         run: |
@@ -87,3 +87,7 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/src
         run: /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_backend_active_http.py
+      - name: Accept current Lab position selection in active process
+        env:
+          PYTHONPATH: /opt/b3-investment-options-agent/src
+        run: /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_lab_position_active.py
