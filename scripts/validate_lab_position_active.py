@@ -11,7 +11,6 @@ import httpx
 from b3_agent.config import load_settings
 from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
 
-settings = load_settings()
 runtime = Path('/opt/b3-investment-options-agent')
 pid = int(subprocess.check_output(['systemctl', 'show', 'b3-runtime.service', '--property=MainPID', '--value'], text=True, timeout=10))
 assert pid > 0
@@ -22,6 +21,18 @@ for name in ('src/b3_agent/server.py', 'src/b3_agent/routing/lab_position.py'):
     installed = runtime/name
     assert hashlib.sha256(installed.read_bytes()).digest() == hashlib.sha256(Path(name).read_bytes()).digest()
     assert started >= installed.stat().st_mtime, 'Restart required after installation'
+print('ACTIVE_REVISION_AND_RESTART=PASS', flush=True)
+# The runner environment differs from systemd. Read only the two public path
+# settings; never load or print provider credentials from the process environment.
+process_environment = Path(f'/proc/{pid}/environ').read_bytes().split(b'\0')
+for name in ('B3_AGENT_PROJECT_ROOT', 'B3_AGENT_DATA_DIR'):
+    prefix = name.encode() + b'='
+    value = next((field[len(prefix):].decode() for field in process_environment if field.startswith(prefix)), None)
+    if value is not None:
+        os.environ[name] = value
+    else:
+        os.environ.pop(name, None)
+settings = load_settings()
 path = settings.data_dir/'imports'/'portfolio.xlsx'
 revision = hashlib.sha256(path.read_bytes()).hexdigest()
 portfolio = BtgRendaVariavelLoader().load(path)
