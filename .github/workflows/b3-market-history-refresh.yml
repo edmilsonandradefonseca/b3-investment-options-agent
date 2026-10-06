@@ -62,5 +62,8 @@ jobs:
           install -D -m 0644 \
             "$GITHUB_WORKSPACE/scripts/refresh_market_history.py" \
             /opt/b3-investment-options-agent/scripts/refresh_market_history.py
+          install -D -m 0644 \
+            "$GITHUB_WORKSPACE/scripts/install_market_history_refresh_timer.sh" \
+            /opt/b3-investment-options-agent/scripts/install_market_history_refresh_timer.sh
           B3_REPO=/opt/b3-investment-options-agent \
             bash "$GITHUB_WORKSPACE/scripts/install_market_history_refresh_timer.sh"
