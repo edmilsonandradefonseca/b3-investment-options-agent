@@ -102,7 +102,7 @@ expected_stock={str(p.get("ticker","")).upper() for p in positions
 import re
 def canonical_equity_identity(value):
     normalized=str(value or "").upper().strip()
-    return normalized if re.fullmatch(r"[A-Z]{4}\\d{1,2}",normalized) else None
+    return normalized if re.fullmatch(r"[A-Z]{4}\d{1,2}",normalized) else None
 option_underlying_values=[p.get("underlying_ticker") for p in positions
     if str(p.get("instrument_type","")).upper()=="OPTION" and p.get("underlying_ticker")]
 expected_option_underlyings={ticker for value in option_underlying_values
