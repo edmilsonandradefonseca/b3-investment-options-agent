@@ -117,6 +117,48 @@ def _historical_performance(records, as_of: datetime) -> dict[str, Any]:
     return output
 
 
+
+
+def _covered_call_capacity(ticker: str, portfolio: PortfolioContext | None) -> dict[str, Any]:
+    """Return uncommitted shares for one new covered CALL contract.
+
+    Existing short CALLs reserve their deliverable shares first. If any open
+    short CALL cannot be tied to an underlying, fail closed instead of treating
+    those shares as available.
+    """
+    if portfolio is None or portfolio.quality_status == "REJECTED":
+        raise ValueError("A current admissible portfolio is required to verify CALL coverage")
+    symbol = ticker.upper()
+    long_shares = 0.0
+    committed_shares = 0.0
+    committed_positions: list[str] = []
+    for position in portfolio.positions:
+        instrument_type = position.instrument_type.upper()
+        if instrument_type == "STOCK" and position.ticker.upper() == symbol and position.quantity > 0:
+            long_shares += float(position.quantity)
+        if instrument_type != "OPTION" or position.quantity >= 0 or (position.option_type or "").upper() != "CALL":
+            continue
+        underlying = (position.underlying_ticker or "").strip().upper()
+        if not underlying:
+            raise ValueError(
+                "An existing short CALL has no reconciled underlying; available coverage is unknown"
+            )
+        if underlying != symbol:
+            continue
+        quantity = abs(float(position.quantity))
+        multiplier = float(position.contract_multiplier)
+        if not math.isfinite(quantity) or not math.isfinite(multiplier) or multiplier <= 0:
+            raise ValueError("Existing short CALL deliverable is invalid; available coverage is unknown")
+        committed_shares += quantity * multiplier
+        committed_positions.append(position.position_id)
+    return {
+        "long_shares": long_shares,
+        "committed_shares": committed_shares,
+        "available_shares": max(0.0, long_shares - committed_shares),
+        "committed_call_position_ids": committed_positions,
+    }
+
+
 class StrategyEvidenceService:
     """Build a compact multi-source evidence pack without invoking an LLM."""
 
@@ -937,11 +979,13 @@ class LiveStrategyComparisonService:
                         )
                     stock_quantity = float(pack.portfolio.get("stock_quantity") or 0.0)
                     covered_shares = float(contract.contract_multiplier)
-                    if stock_quantity < covered_shares:
+                    coverage = _covered_call_capacity(pack.ticker, portfolio)
+                    if coverage["available_shares"] + 1e-9 < covered_shares:
                         raise ValueError(
                             f"{normalized_option} is not covered: requires "
-                            f"{covered_shares:g} shares of {pack.ticker}, "
-                            f"portfolio has {stock_quantity:g}"
+                            f"{covered_shares:g} uncommitted shares of {pack.ticker}, "
+                            f"portfolio has {coverage['long_shares']:g} long shares and "
+                            f"{coverage['committed_shares']:g} already committed to short CALLs"
                         )
                     call = CallAnalysisEngine().analyze(
                         option_id=contract.option_id,
@@ -963,7 +1007,10 @@ class LiveStrategyComparisonService:
                         "current_option_quote": asdict(quote),
                         "call_analysis": asdict(call),
                         "covered_shares_required": covered_shares,
-                        "stock_shares_available": stock_quantity,
+                        "stock_shares_available": coverage["long_shares"],
+                        "covered_shares_already_committed": coverage["committed_shares"],
+                        "covered_shares_free_before_trade": coverage["available_shares"],
+                        "existing_short_call_position_ids": coverage["committed_call_position_ids"],
                     })
                     option_evidence[contract.option_id] = {
                         "underlying_ticker": pack.ticker,
@@ -973,7 +1020,10 @@ class LiveStrategyComparisonService:
                         "premium_basis": "current_bid",
                         "contract_count": 1,
                         "covered_shares_required": covered_shares,
-                        "stock_shares_available": stock_quantity,
+                        "stock_shares_available": coverage["long_shares"],
+                        "covered_shares_already_committed": coverage["committed_shares"],
+                        "covered_shares_free_before_trade": coverage["available_shares"],
+                        "existing_short_call_position_ids": coverage["committed_call_position_ids"],
                         "marketability": marketability,
                     }
 
