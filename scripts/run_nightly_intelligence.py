@@ -68,11 +68,14 @@ def _batch_summary(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _safe_target_refresh_summary(payload: dict[str, Any]) -> dict[str, Any]:
-    return {
-        key: payload[key]
-        for key in ("status", "projected", "records", "accepted", "skipped", "failed")
-        if isinstance(payload.get(key), (str, int, float, bool, type(None)))
-    }
+    if not isinstance(payload, dict):
+        return {"status": "UNEXPECTED_RESULT"}
+    allowed = {"status", "projected", "records", "accepted", "skipped", "failed"}
+    summary: dict[str, Any] = {}
+    for key, value in payload.items():
+        if key in allowed and isinstance(value, (str, int, float, bool, type(None))):
+            summary[key] = value
+    return summary
 
 
 def _persist_runner_summary(summary: dict[str, Any]) -> None:
