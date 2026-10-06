@@ -47,3 +47,20 @@ A execução manual posterior em /opt passou build e renderização, mas falhou 
 Aceite ativo: a primeira tentativa 37487319451 parou na comparação de hashes. A repetição (job 112402592905) confirmou que os módulos instalados correspondem à revisão, mas falhou porque o processo b3-runtime.service iniciou antes dos arquivos instalados. O gate terminou nessa verificação e não leu o extrato BTG, não consultou OPLAB e não calculou alternativas nessa repetição. É necessário reiniciar o runtime depois da instalação e então repetir o gate. O reinício continua sendo uma ação manual do usuário conforme sua preferência; não foi executado pelo workflow.
 
 Este incremento não fecha o Lab: reconciliação de caixa, obrigações e cobertura completas; cenários com horizonte/choque explícitos; e aceites reais dos outros casos da matriz permanecem abertos. Caixa líquido após operação exige custos conhecidos; lucro acumulado requer histórico; vencimentos distintos não recebem ranking ou payoff comum. Nenhuma ordem é enviada.
+
+
+## Aceite ativo da rolagem — 06/10/2026, 14h54 BRT
+
+Correções aprovadas pela CI do commit `c882b3648f16506c49c7cf4a85d3fc520f36d7f3`; CI posterior do checkpoint `ea92863b2feef7d16e20df1dd3efaadc2a7318d9` também passou. A suíte Python e o build React estão verdes.
+
+O aceite ativo do runner Ubuntu passou no run `37506783669`, job `112417351823`, revisão `ea92863b2feef7d16e20df1dd3efaadc2a7318d9`:
+- `ACTIVE_REVISION_AND_RESTART=PASS`
+- `ACTIVE_LAB_CURRENT_POSITION_QUANTITY_ROLL_AND_COMPARISON=PASS`
+
+O gate percorreu o snapshot BTG vigente, encontrou contrato de destino real com cotação OPLAB admissível e concluiu a comparação determinística manter/encerrar/rolar com identidade, quantidade, lado de execução, multiplicador, cotação e fontes. A validação é somente leitura; nenhuma ordem foi enviada.
+
+Causas corrigidas:
+1. O Strategy Lab não aceitava um identificador OPLAB exibido como destino se ele não correspondesse ao padrão do parser de códigos digitados. Agora reconhece a identidade exata entre os candidatos apresentados; regressão coberta com identificador fora do padrão tipado.
+2. A API definia `derived_synthesis_status` depois de construir `OrchestratorResponse`, que copia o resultado. O campo não chegava à resposta HTTP determinística. A atribuição agora ocorre antes da cópia, validada pelo gate ativo.
+
+Este aceite fecha o incremento de comparação de posição real. **Ainda não fecha o Strategy Lab inteiro.** Permanecem as entregas 4–5: reconciliação integral de caixa/obrigações/cobertura e aceites reais dos outros casos da matriz (PUT vs ação, CALL coberta, cenários explícitos e regressões de carteira/ordem/falha/nova análise). Não declarar o Lab completo até a evidência desses casos ser aprovada.
