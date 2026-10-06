@@ -21,7 +21,12 @@ assert all(row["current_price_brl"] is not None and row["capital_required_brl"] 
 brapi_budget = call_json(base + "/providers/budget/brapi", None, 15)
 print(json.dumps({"case":"ACTIVE_BRAPI_BUDGET","http":brapi_budget["http_status"],"budget":brapi_budget.get("response")},ensure_ascii=False),flush=True)
 print(json.dumps({"case":"ACTIVE_FUNDAMENTAL_DIAGNOSTIC","rows":[{"ticker":row["ticker"],"admitted_count":len(row.get("fundamental_metrics") or {}),"excluded_metrics":row.get("excluded_metrics") or [],"source_refs":row.get("source_refs") or [],"provider":((result.get("asset_evidence") or {}).get(row["ticker"]) or {}).get("fundamentals",{}).get("provider"),"metric_count":((result.get("asset_evidence") or {}).get(row["ticker"]) or {}).get("fundamentals",{}).get("metric_count"),"fundamental_limitations":[item for item in ((result.get("asset_evidence") or {}).get(row["ticker"]) or {}).get("limitations",[]) if "Fundamentals" in item]} for row in rows]},ensure_ascii=False),flush=True)
-assert all(row["fundamental_metrics"] for row in rows), "Expected previously validated available fundamentals"
+missing_fundamentals = [row["ticker"] for row in rows if not row.get("fundamental_metrics")]
+asset_evidence = result.get("asset_evidence") or {}
+for ticker in missing_fundamentals:
+    limitations = ((asset_evidence.get(ticker) or {}).get("limitations") or [])
+    assert any(str(item).startswith(f"Fundamentals unavailable for {ticker}:") for item in limitations), f"{ticker} has no fundamentals and no explicit provider limitation"
+print(json.dumps({"case":"ACTIVE_FUNDAMENTALS","status":"PARTIAL_PROVIDER_UNAVAILABLE" if missing_fundamentals else "PASS","tickers":missing_fundamentals},ensure_ascii=False),flush=True)
 assert all(row["expected_return"] is None and row["future_dividend_per_share"] is None for row in rows)
 assert {row["alternative_id"] for row in rows} == {row["alternative_id"] for row in result["strategy_comparison"]["alternatives"]}
 assert all(row["dividends"]["policy_version"] == "issuer-dividends-v1" for row in rows)
