@@ -18,6 +18,8 @@ assert result["telemetry"]["llm_calls"] == 0
 rows = pair["rows"]
 assert len(rows) == 2 and {row["ticker"] for row in rows} == {"ITUB4","BBDC4"}
 assert all(row["current_price_brl"] is not None and row["capital_required_brl"] == 10000 for row in rows)
+brapi_budget = call_json(base + "/providers/budget/brapi", None, 15)
+print(json.dumps({"case":"ACTIVE_BRAPI_BUDGET","http":brapi_budget["http_status"],"budget":brapi_budget.get("response")},ensure_ascii=False),flush=True)
 print(json.dumps({"case":"ACTIVE_FUNDAMENTAL_DIAGNOSTIC","rows":[{"ticker":row["ticker"],"admitted_count":len(row.get("fundamental_metrics") or {}),"excluded_metrics":row.get("excluded_metrics") or [],"source_refs":row.get("source_refs") or [],"provider":((result.get("asset_evidence") or {}).get(row["ticker"]) or {}).get("fundamentals",{}).get("provider"),"metric_count":((result.get("asset_evidence") or {}).get(row["ticker"]) or {}).get("fundamentals",{}).get("metric_count"),"fundamental_limitations":[item for item in ((result.get("asset_evidence") or {}).get(row["ticker"]) or {}).get("limitations",[]) if "Fundamentals" in item]} for row in rows]},ensure_ascii=False),flush=True)
 assert all(row["fundamental_metrics"] for row in rows), "Expected previously validated available fundamentals"
 assert all(row["expected_return"] is None and row["future_dividend_per_share"] is None for row in rows)
