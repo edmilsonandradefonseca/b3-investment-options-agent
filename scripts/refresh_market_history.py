@@ -139,18 +139,40 @@ def _download_year(year: int, download_dir: Path) -> tuple[Path, str, bool]:
     return archive, digest, True
 
 
-def _import_if_needed(year: int, archive: Path, archive_sha: str, tickers: set[str], data_root: Path) -> tuple[int, bool]:
-    """Import changed annual data or a newly added universe into shared Parquet."""
-    universe_sha = hashlib.sha256(",".join(sorted(tickers)).encode("utf-8")).hexdigest()
+def _import_if_needed(
+    year: int, archive: Path, archive_sha: str, tickers: set[str], data_root: Path,
+    *, retry_missing: bool,
+) -> tuple[int, bool]:
+    """Import unprocessed ticker/archive pairs; retry unresolved current-year symbols."""
     marker_dir = data_root / "derived" / "market_history_refresh" / "imports"
-    marker = marker_dir / f"{year}-{archive_sha}-{universe_sha}.json"
-    if marker.exists():
+    marker_dir.mkdir(parents=True, exist_ok=True)
+    pending = {
+        ticker for ticker in tickers
+        if retry_missing or not (marker_dir / f"{year}-{archive_sha}-{ticker}.json").exists()
+    }
+    if not pending:
         return 0, False
     destination = data_root / "archive" / "cotahist_raw"
-    import_cotahist_zip(archive, tickers, destination, dry_run=True)
-    counts = import_cotahist_zip(archive, tickers, destination, dry_run=False)
-    _atomic_json(marker, {"year": year, "archive_sha256": archive_sha, "records_imported": sum(counts.values())})
-    return sum(counts.values()), True
+    counts = import_cotahist_zip(archive, pending, destination, dry_run=True)
+    matched = {ticker for ticker, count in counts.items() if count > 0}
+    imported = 0
+    if matched:
+        applied = import_cotahist_zip(archive, matched, destination, dry_run=False)
+        imported = sum(applied.values())
+    for ticker in matched:
+        _atomic_json(
+            marker_dir / f"{year}-{archive_sha}-{ticker}.json",
+            {"year": year, "archive_sha256": archive_sha, "records_imported": counts[ticker]},
+        )
+    # A prior-year annual archive is complete and immutable. Cache no-match there;
+    # keep retrying current-year no-matches as B3 publishes new daily data.
+    if not retry_missing:
+        for ticker in pending - matched:
+            _atomic_json(
+                marker_dir / f"{year}-{archive_sha}-{ticker}.json",
+                {"year": year, "archive_sha256": archive_sha, "records_imported": 0},
+            )
+    return imported, bool(matched)
 
 
 def _prune_retention(data_root: Path, ticker_set: set[str], cutoff) -> int:
@@ -202,7 +224,8 @@ def main() -> int:
         for year in years:
             archive, archive_sha, _downloaded = _download_year(year, download_dir)
             imported, changed = _import_if_needed(
-                year, archive, archive_sha, tickers_set, data_root
+                year, archive, archive_sha, tickers_set, data_root,
+                retry_missing=(year == current_year),
             )
             imported_records += imported
             if changed:
