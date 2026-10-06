@@ -297,3 +297,29 @@ def test_nightly_runner_rejects_only_invalid_identities():
 
     assert valid == []
     assert len(rejected_hashes) == 2
+
+
+def test_nightly_runner_target_refresh_summary_reads_only_present_scalar_values():
+    import importlib.util
+    from pathlib import Path
+
+    runner_path = Path(__file__).resolve().parents[1] / "scripts" / "run_nightly_intelligence.py"
+    spec = importlib.util.spec_from_file_location("b3_nightly_runner_summary", runner_path)
+    runner = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(runner)
+
+    class SparseRefreshResult(dict):
+        def get(self, key, default=None):
+            return "PROJECTED" if key == "status" else default
+
+        def __getitem__(self, key):
+            if key == "status":
+                raise KeyError(key)
+            return super().__getitem__(key)
+
+    result = runner._safe_target_refresh_summary(
+        SparseRefreshResult(status="PROJECTED", records=3, private_payload={"ticker": "ITUB4"})
+    )
+
+    assert result == {"status": "PROJECTED", "records": 3}
