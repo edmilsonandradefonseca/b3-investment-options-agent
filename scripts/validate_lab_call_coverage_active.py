@@ -122,7 +122,7 @@ for ticker, contract, capacity, expected_rejection in candidates:
         if "market history unavailable for " in message:
             data_blockers.add("MARKET_HISTORY")
             detail = message.partition("market history unavailable for ")[2].partition(": ")[2]
-            provider_failures.update(re.findall(r"\\b(?:yahoo|oplab|brapi):([A-Za-z][A-Za-z0-9_]*)", detail))
+            provider_failures.update(re.findall(r"\b(?:yahoo|oplab|brapi):([A-Za-z][A-Za-z0-9_]*)", detail))
             continue
         raise
     except ValueError as exc:
