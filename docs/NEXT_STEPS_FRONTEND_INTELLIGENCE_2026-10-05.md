@@ -1,5 +1,16 @@
 # Retomada — Inteligência do frontend B3 (2026-10-05)
 
+## Aceite da seleção no processo ativo — 06/10/2026, 11h20 BRT
+
+Usuário reiniciou o runtime. [Gate 37478059021 — SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37478059021) confirmou `ACTIVE_REVISION_AND_RESTART=PASS` e `ACTIVE_LAB_CURRENT_POSITION_AND_QUANTITY=PASS`. Hashes de server/seleção iguais à revisão testada, processo posterior à instalação. A sequência HTTP usa contrato do BTG atual, pede quantidade e aceita “toda a posição”, conservando hash do extrato, quantidade/lado e zero chamadas de cadeia/LLM. `operation_calculated=false`, `execution_authorized=false`: não houve cálculo de fechamento, rolagem nem ordem.
+
+[Walkthrough 37471916187 — SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37471916187): fixture de esclarecimento → contrato → quantidade e telas reais em 1920/1440/1366, sem erros de página. A fixture comprova a apresentação da seleção; o gate HTTP acima comprova a seleção real. CI da implementação: 1008 testes aprovados.
+
+A repetição inicial 37472294558 passou o reinício, mas falhou ao comparar hashes de dois extratos: o teste herdava diretório do runner, diferente do systemd. Corrigido apenas o gate em `20fd61e2e2f93be9c2db61bc9def3e2877ab023d`, lendo exclusivamente os dois parâmetros públicos de caminho do processo ativo, sem carregar/expor credenciais. O runtime não precisou de outro reinício. O bloqueio da instalação descrito abaixo foi superado para a seleção.
+
+**Aceito neste incremento:** esclarecimento, seleção única no snapshot corrente e quantidade explícita. LAB-01 integral/UC-04 continuam abertos: intenção com contrato novo de rolagem e objetivos/cenários completos ainda precisam dos blocos seguintes. Próximo passo concreto: modelo de três alternativas (manter/encerrar/rolar) e pernas com lado, unidades/multiplicador confirmado e fontes; depois motor de fluxos/execução, carteira completa antes/depois e aceites reais do plano. Não marcar o Lab integral como fechado.
+
+
 ## Ativação confirmada e seleção de posição — 06/10/2026
 
 O usuário ativou a correção. [Gate HTTP ativo 37470743000 — SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37470743000) confirmou hashes dos módulos instalados, processo iniciado após a instalação e `ACTIVE_LAB_CLARIFICATION_AND_RESTART=PASS`. O pedido genérico recebe `NEEDS_CLARIFICATION`, com zero chamadas de cadeia e LLM. O bloqueio de reinício anterior está superado para essa revisão.

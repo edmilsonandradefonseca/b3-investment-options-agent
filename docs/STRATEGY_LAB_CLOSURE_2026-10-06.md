@@ -33,3 +33,5 @@ Primeira correção da entrega 1: pedidos genéricos de encerrar/rolar/vender um
 O próximo incremento deve ligar a seleção de posição ao snapshot atual e ao modelo de pernas da entrega 2. Não declarar fechamento integral apenas porque a pergunta de esclarecimento funciona.
 
 Seleção implementada no segundo incremento: contrato único no BTG atual, lado e fonte preservados, quantidade explícita em unidades ou posição integral, rejeição de excesso e continuação relendo snapshot. Resposta `INPUTS_IDENTIFIED` conserva cálculo pendente. Identidade/multiplicador do provedor, pernas/alternativas e motor de operações ainda precisam das entregas 2 e 3; não há fechamento integral nem recomendação de ordem.
+
+Aceite do segundo incremento em 06/10 às 11h20 BRT: gate HTTP ativo 37478059021 SUCCESS (reinício, hash e seleção/quantidade no extrato vigente); visual 37471916187 SUCCESS (fixture central e walkthrough real). CI 1008 testes. Quantidades/seleção aceitas; cálculos de encerramento/rolagem continuam pendentes. Entregas 2–5 permanecem abertas.
