@@ -8,12 +8,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 import subprocess
 
-from b3_agent.config import load_settings
-from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
-from b3_agent.providers.oplab.options import OplabOptionsAdapter
-from b3_agent.repositories.market_data import MarketDataRepository
-from b3_agent.strategy_live import LiveStrategyComparisonService, _covered_call_capacity
-
 runtime = Path("/opt/b3-investment-options-agent")
 pid = int(subprocess.check_output([
     "systemctl", "show", "b3-runtime.service", "--property=MainPID", "--value"
@@ -33,6 +27,14 @@ for field in Path(f"/proc/{pid}/environ").read_bytes().split(bytes((0,))):
     name = key.decode()
     if sep and (name.startswith("B3_") or name in {"OPLAB_API_TOKEN", "BRAPI_TOKEN"}):
         os.environ[name] = value.decode()
+
+# Import configuration-dependent services only after mirroring the active systemd
+# process environment; otherwise their module-level Settings points at repo/data.
+from b3_agent.config import load_settings
+from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
+from b3_agent.providers.oplab.options import OplabOptionsAdapter
+from b3_agent.repositories.market_data import MarketDataRepository
+from b3_agent.strategy_live import LiveStrategyComparisonService, _covered_call_capacity
 
 settings = load_settings()
 portfolio_path = settings.data_dir / "imports" / "portfolio.xlsx"
