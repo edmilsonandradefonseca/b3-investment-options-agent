@@ -77,7 +77,8 @@ try{
  await panel.getByRole('button',{name:'Enviar continuação',exact:true}).click();
  const candidates=panel.getByRole('article',{name:'Análise 4'});
  await candidates.getByText('PETRK400',{exact:false}).waitFor();
- assert.equal(requests.at(-1).context.lab_conversation[1].response.lab_position_selection.status,'POSITION_AND_QUANTITY_IDENTIFIED');
+ assert.equal(requests.at(-1).context.lab_conversation.at(-1).response.lab_position_selection.status,'POSITION_AND_QUANTITY_IDENTIFIED');
+ assert.equal(requests.at(-1).context.lab_conversation.at(-1).response.lab_roll_candidates[0].option_id,'PETRK400');
  await panel.getByLabel('Ajustar ou aprofundar esta análise').fill('PETRK400');
  await panel.getByRole('button',{name:'Enviar continuação',exact:true}).click();
  const comparison=panel.getByRole('article',{name:'Análise 5'});
