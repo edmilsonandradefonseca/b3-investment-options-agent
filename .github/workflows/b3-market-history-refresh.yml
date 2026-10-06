@@ -32,6 +32,7 @@ jobs:
           ref: ${{ github.sha }}
 
       - name: Test COTAHIST ingestion and ticker selection
+        id: tests
         env:
           PYTHONPATH: ${{ github.workspace }}/src
         run: |
@@ -53,7 +54,8 @@ jobs:
             scripts/refresh_market_history.py
 
       - name: Install collector and enable weekday 19:30 BRT systemd timer
-        if: success()
+        id: install_timer
+        if: always() && steps.tests.outcome == 'success'
         shell: bash
         run: |
           set -euo pipefail
