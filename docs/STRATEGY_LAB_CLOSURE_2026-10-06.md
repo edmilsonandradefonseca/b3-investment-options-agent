@@ -82,3 +82,14 @@ A aceitação de Market Intelligence é **parcial quanto à evidência**: `insti
 3. Executar a matriz final dos dois espaços com fontes/limitações registradas. Manter status parcial até todos os critérios normativos serem aceitos.
 
 Os aceites desta seção são somente leitura. Nenhuma ordem foi enviada.
+
+
+## Quarto incremento — cobertura livre de CALL coberta
+
+O Strategy Lab agora desconta do total de ações da carteira as ações já comprometidas por CALLs vendidas antes de aceitar uma nova CALL coberta. Se uma CALL curta existente não tiver subjacente reconciliado, a cobertura livre fica desconhecida e a comparação é recusada. A resposta expõe ações totais, ações já comprometidas, cobertura livre e IDs das posições comprometedoras.
+
+A regressão valida dois casos: 200 ações com 100 já comprometidas deixam exatamente 100 ações livres para uma CALL de multiplicador 100; 100 ações com as mesmas 100 comprometidas não podem ser reutilizadas. O gate também conserva a validação anterior de insuficiência de cobertura.
+
+CI 37510530531 passou: 1.022 testes Python, 13 avisos de dependências e build/renderização React aprovados. Este é aceite de código/CI; o serviço ativo ainda não foi atualizado nem validado para esta revisão. O workflow de backend agora inclui `strategy_live.py` e `test_strategy_live.py` nos gatilhos/testes Ubuntu. A ativação ativa continua pendente de instalação, confirmação do usuário para reiniciar o serviço e gate HTTP.
+
+O Lab permanece parcial. Próximos aceites: ação × PUT; confirmar o cenário com horizonte/choques explícitos no Strategy Lab; reconciliação integral de caixa, obrigações e cobertura da carteira; e regressões de snapshot alterado, resposta fora de ordem, falha de fonte/síntese, retry e Nova análise. Só depois executar a matriz final e marcar o Lab como completo.
