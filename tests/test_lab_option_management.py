@@ -52,7 +52,7 @@ def test_short_roll_uses_ask_to_close_bid_to_open_and_never_calls_flow_profit():
     assert roll['incremental_gross_cash_flow_brl'] == -350
     assert roll['incremental_net_cash_flow_brl'] == -375
     assert roll['accumulated_realized_pnl_brl'] is None
-    assert 'lucro acumulado' in roll['reason']
+    assert 'não é lucro' in roll['reason']
     assert keep['incremental_gross_cash_flow_brl'] == 0
     assert result['comparison']['ranking'] == 'NOT_APPLIED'
     assert result['portfolio_after_close']['cash_after_brl'] is None
