@@ -93,3 +93,17 @@ A regressão valida dois casos: 200 ações com 100 já comprometidas deixam exa
 CI 37510530531 passou: 1.022 testes Python, 13 avisos de dependências e build/renderização React aprovados. Este é aceite de código/CI; o runner Ubuntu instalou a revisão `b37f8b4a1a1d49536ba8a2cf399a191ac6bf2e74` em `/opt/b3-investment-options-agent`, mas o processo ativo ainda não a carregou. O workflow 37510523633 parou antes do restart com `sudo: interactive authentication is required`, e os gates HTTP ativos foram ignorados. O workflow de backend agora inclui `strategy_live.py` e `test_strategy_live.py` nos gatilhos/testes Ubuntu. A ativação continua pendente do restart confirmado pelo usuário e da reexecução do gate.
 
 O Lab permanece parcial. Próximos aceites: ação × PUT; confirmar o cenário com horizonte/choques explícitos no Strategy Lab; reconciliação integral de caixa, obrigações e cobertura da carteira; e regressões de snapshot alterado, resposta fora de ordem, falha de fonte/síntese, retry e Nova análise. Só depois executar a matriz final e marcar o Lab como completo.
+
+
+## Quinto aceite — ação × PUT e cenários explícitos, 06/10/2026 15h57 BRT
+
+A validação ativa do runner passou no workflow [37515317840](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37515317840), após o usuário confirmar o restart:
+- revisão e processo ativo conferidos;
+- comparação de posição vigente, quantidade e rolagem continuou aprovada;
+- comparação real comprar ação × vender PUT passou com contrato OPLAB explícito, bid positivo e vencimento futuro;
+- cenários hipotéticos de -10%, 0% e +10% até o vencimento passaram, sem probabilidades ou ranking;
+- nenhuma ordem foi enviada.
+
+A CI do commit `713b30051f08d5798a1a3bf171bd481c2a32d8fa` passou no workflow [37515323818](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37515323818): 1.022 testes Python; build e renderização React aprovados. A seleção do gate foi alinhada aos critérios da rota live de uma PUT explícita: identidade do ativo/contrato, vencimento futuro e bid positivo. Uma tentativa anterior não passou porque o validador adicionava filtros próprios de PIT/qualidade que não são exigidos nesse caminho da rota; isso era um falso negativo do gate, e não uma aprovação de cotação inválida.
+
+O caso ação × PUT e os cenários explícitos estão aceitos. O Strategy Lab segue **parcial**. Próximos gates: CALL coberta real com a cobertura já comprometida; reconciliação integral de caixa/obrigações e demais posições; regressões de snapshot alterado, resposta fora de ordem, falha de fonte/síntese, retry e Nova análise; walkthrough final da matriz.
