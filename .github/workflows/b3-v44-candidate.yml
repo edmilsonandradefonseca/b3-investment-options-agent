@@ -2,7 +2,7 @@ name: B3 V4.4 candidate Lab acceptance (Ubuntu)
 on:
   push:
     branches: [feature/react-functional-v43-integration]
-    paths: [.github/workflows/b3-v44-candidate.yml]
+    paths: [.github/workflows/b3-v44-candidate.yml, scripts/validate_v44_lab_candidate.py]
   workflow_dispatch:
 permissions:
   contents: read
@@ -17,6 +17,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Record candidate revision
         run: echo "CANDIDATE_SHA=$GITHUB_SHA"
+      - name: Verify Lab financial and temporal regressions
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: /opt/b3-investment-options-agent/.venv/bin/python -m pytest tests/test_strategy_live.py tests/test_stock_purchase.py tests/test_economic_evidence.py tests/test_economic_decision.py
       - name: Validate candidate API and senior on real data without restarting service
         env:
           PYTHONPATH: ${{ github.workspace }}/src

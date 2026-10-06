@@ -57,3 +57,20 @@ def test_current_snapshots_are_visible_but_not_comparable_fiscal_periods():
     assert result["rows"][0]["fundamental_metrics"]["priceEarnings"]["value"] == 10
     assert result["fundamental_comparisons"][0]["status"] == "NONCOMPARABLE_OR_MISSING"
     assert result["fundamental_comparisons"][0]["right_minus_left"] is None
+
+def test_common_history_uses_intersection_and_one_price_basis_without_future_rows():
+    from b3_agent.stock_purchase import _common_normalized_history
+    left, _ = build()
+    right, _ = build()
+    right.ticker = 'BBDC4'
+    def point(day, close, adjusted=None, available=NOW):
+        return {'observation_timestamp':NOW-timedelta(days=day), 'available_timestamp':available,
+                'close':close, 'adjusted_close':adjusted}
+    left.market['price_history'] = [point(3,10,5), point(2,11,5.5), point(1,12,None), point(0,99,available=NOW+timedelta(seconds=1))]
+    right.market['price_history'] = [point(2,20,10), point(1,22,11)]
+    result = _common_normalized_history([left,right], NOW)
+    assert result['price_basis'] == 'close'
+    assert len(result['rows']) == 2
+    assert result['rows'][0]['left_index'] == result['rows'][0]['right_index'] == 100
+    assert abs(result['rows'][1]['left_index'] - 1200/11) < 1e-10
+    assert abs(result['rows'][1]['right_index'] - 110) < 1e-10

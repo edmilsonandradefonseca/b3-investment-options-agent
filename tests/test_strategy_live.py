@@ -655,3 +655,21 @@ def test_sell_stock_requires_existing_long_and_explicit_amount():
         assert "exceeds current long position value" in str(exc)
     else:
         raise AssertionError("SELL_STOCK must reject reduction above held value")
+
+def test_interactive_evidence_freezes_after_acquisition_but_historical_cutoff_stays_fixed():
+    from dataclasses import replace
+    cutoff = datetime.now(timezone.utc)
+    class NewlyAcquiredHistory(FakeMarketProvider):
+        def get_market_data(self, ticker, start, end):
+            acquired = datetime.now(timezone.utc)
+            return [replace(row, available_timestamp=acquired, ingested_at=acquired)
+                    for row in super().get_market_data(ticker,start,end)]
+    service = StrategyEvidenceService(market_provider=NewlyAcquiredHistory(),
+        fundamentals_provider=FakeFundamentalsProvider(), current_quote_provider=FakeCurrentQuoteProvider())
+    historical = service.build('ITUB4',as_of=cutoff)
+    interactive = service.build('ITUB4',as_of=cutoff,refresh_cutoff=True)
+    assert historical.market['historical_returns']['1W']['status'] == 'INSUFFICIENT_HISTORY'
+    assert historical.as_of == cutoff
+    assert interactive.market['historical_returns']['1W']['status'] == 'AVAILABLE'
+    assert interactive.as_of > cutoff
+    assert interactive.market['price_history']

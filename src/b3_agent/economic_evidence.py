@@ -11,6 +11,12 @@ from b3_agent.stock_purchase import _number
 def economic_evidence(row, *, budget=None, entry_cost=None, portfolio=None):
     spot=_number(row.get('current_price_brl'))
     budget=_number(budget); entry_cost=_number(entry_cost)
+    gross_quantity = gross_notional = gross_residual = None
+    if spot is not None and spot > 0 and budget is not None and budget > 0:
+        price, capital = Decimal(str(spot)), Decimal(str(budget))
+        gross_quantity = int((capital / price).to_integral_value(rounding=ROUND_FLOOR))
+        gross_notional = float(gross_quantity * price)
+        gross_residual = float(capital - gross_quantity * price)
     quantity=notional=residual=None
     if spot is not None and spot>0 and budget is not None and budget>0 and entry_cost is not None and 0<=entry_cost<=budget:
         price=Decimal(str(spot)); capital=Decimal(str(budget)); fee=Decimal(str(entry_cost))
@@ -53,7 +59,7 @@ def economic_evidence(row, *, budget=None, entry_cost=None, portfolio=None):
                 if total>0: impact['gross_asset_share_before']=abs(prior)/total
                 if denominator>0 and impact['status']!='INSUFFICIENT_RECORDED_CASH':
                     impact['gross_asset_share_after']=abs(prior+notional)/denominator
-    return {'ticker':row['ticker'],'policy_version':'sourced-economic-evidence-v1',
+    return {'gross_purchase_before_costs': {'quantity': gross_quantity, 'notional_brl': gross_notional, 'residual_cash_brl': gross_residual, 'basis': 'BEFORE_FEES_TAXES_AND_SLIPPAGE'}, 'ticker':row['ticker'],'policy_version':'sourced-economic-evidence-v1',
         'budget_brl':budget,'entry_cost_brl':entry_cost,'quantity':quantity,'notional_brl':notional,'residual_cash_brl':residual,
         'institution_target_potential':targets,
         'announced_conditional_gross_income_brl':quantity*announced if quantity is not None and announced is not None else None,

@@ -400,6 +400,17 @@ class WorkspaceIntelligenceContextService:
                         f"Current OPLAB quote unavailable for {ticker}: {exc}"
                     )
 
+            if workspace == "Market Intelligence":
+                from b3_agent.price_target_evidence import StoredPriceTargetService
+                from b3_agent.stored_dividends import StoredDividendService
+                from b3_agent.dividend_evidence import dividend_payload
+                market_entry["institution_targets"] = StoredPriceTargetService().build(ticker, research_as_of)
+                market_entry["issuer_dividends"] = dividend_payload(
+                    ticker, StoredDividendService().build(ticker, research_as_of), research_as_of)
+                for target in market_entry["institution_targets"].get("rows", []):
+                    if target.get("source_url"):
+                        source_refs.append(target["source_url"])
+
             ticker_query = (
                 f"{ticker} B3 resultados fato relevante dividendos mercado setor"
             )

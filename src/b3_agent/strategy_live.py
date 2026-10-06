@@ -79,15 +79,21 @@ _HISTORICAL_WINDOWS = (("1W", 5), ("1M", 21), ("3M", 63), ("6M", 126), ("1Y", 25
 def _historical_performance(records, as_of: datetime) -> dict[str, Any]:
     """Describe price changes over common trading-session windows; never forecast."""
     eligible = []
+    records = tuple(records)
+    adjusted_basis = bool(records) and all(
+        isinstance(getattr(row, "adjusted_close", None), (int, float))
+        and math.isfinite(row.adjusted_close) and row.adjusted_close > 0
+        for row in records
+        if row.observation_timestamp <= as_of and row.available_timestamp <= as_of)
     for row in records:
         observed = getattr(row, "observation_timestamp", None)
         available = getattr(row, "available_timestamp", None)
         if observed is None or observed > as_of or (available is not None and available > as_of):
             continue
         adjusted = getattr(row, "adjusted_close", None)
-        close = adjusted if isinstance(adjusted, (int, float)) and adjusted > 0 else getattr(row, "close", None)
+        close = adjusted if adjusted_basis else getattr(row, "close", None)
         if isinstance(close, (int, float)) and math.isfinite(float(close)) and close > 0:
-            eligible.append((observed, float(close), "adjusted close" if adjusted is not None else "close"))
+            eligible.append((observed, float(close), "adjusted close" if adjusted_basis else "close"))
 
     eligible.sort(key=lambda item: item[0])
     output = {}
@@ -137,6 +143,7 @@ class StrategyEvidenceService:
         *,
         as_of: datetime,
         portfolio: PortfolioContext | None = None,
+        refresh_cutoff: bool = False,
     ) -> AssetEvidencePack:
         normalized = _validated_equity_ticker(ticker)
         if as_of.tzinfo is None or as_of.utcoffset() is None:
@@ -154,7 +161,6 @@ class StrategyEvidenceService:
             market_records,
             key=lambda item: item.observation_timestamp,
         )
-        quant = compute_quant_features(market_records, as_of=as_of)
 
         limitations: list[str] = []
         current_quote = None
@@ -189,6 +195,21 @@ class StrategyEvidenceService:
             limitations.append(
                 f"Fundamentals unavailable for {normalized}: {exc}"
             )
+
+        # Interactive acquisition finishes before its evidence cutoff is frozen.
+        # Historical callers retain their explicit cutoff without advancement.
+        if refresh_cutoff:
+            as_of = datetime.now(timezone.utc)
+        eligible_history = tuple(row for row in market_records
+            if row.observation_timestamp <= as_of and row.available_timestamp <= as_of
+            and row.quality_status not in {"REJECTED", "INVALID"})
+        if eligible_history:
+            quant = compute_quant_features(eligible_history, as_of=as_of)
+        else:
+            from b3_agent.schemas.quant import QuantFeatures
+            quant = QuantFeatures(instrument_id=normalized, ticker=normalized,
+                                  as_of=as_of, quality_status="INSUFFICIENT_DATA")
+            limitations.append("No historical observations are available at this cutoff.")
 
         metrics = {
             row.metric: {
@@ -284,7 +305,8 @@ class StrategyEvidenceService:
                 "history_end": max(
                     row.observation_timestamp for row in market_records
                 ),
-                "historical_returns": _historical_performance(market_records, as_of),
+                "historical_returns": _historical_performance(eligible_history, as_of),
+                "price_history": [asdict(row) for row in eligible_history],
             },
             quant=asdict(quant),
             fundamentals={
@@ -671,6 +693,7 @@ class LiveStrategyComparisonService:
                     ticker,
                     as_of=effective_as_of,
                     portfolio=portfolio,
+                    refresh_cutoff=as_of is None,
                 )
                 for ticker in assets
             )

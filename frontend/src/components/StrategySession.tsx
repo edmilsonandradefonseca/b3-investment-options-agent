@@ -18,7 +18,7 @@ export default function StrategySession({researchMode='stored_first',portfolioRe
   if(!task||inFlight.current)return;
   inFlight.current=true;setStatus('running');setRetryQuestion(task);
   const index=turns.length;
-  const previous=turns.filter(t=>t.response&&!t.error);
+  const previous=turns.filter(t=>t.response&&!t.error&&t.portfolioRevision===portfolioRevision);
   setTurns(v=>[...v,{question:task,response:null,at:new Date().toISOString(),portfolioRevision}]);
   setQuestion('');
   try{

@@ -2,6 +2,7 @@ import {formatFundamental} from '../app/fundamentals';
 import {lazy,Suspense} from 'react';
 import {date,State} from './cockpit';
 const ScenarioChart=lazy(()=>import('./ScenarioChart'));
+const CommonHistoryChart=lazy(()=>import('./CommonHistoryChart'));
 import ResearchEvidence from './ResearchEvidence';
 import PersonalHistory from './PersonalHistory';
 import DecisionHistory from './DecisionHistory';
@@ -164,12 +165,16 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
   const stockPurchaseTickers = stockComparisonTickers.length === 2
     ? stockComparisonTickers
     : stockPurchaseRows.map(row => asText(row.ticker)).filter((ticker): ticker is string => Boolean(ticker));
+  const commonHistory = asObject(stockPurchase?.common_normalized_history);
+  const commonHistoryRows = asArray(commonHistory?.rows) as {date:string;left_index:number;right_index:number}[];
   const historicalComparisons = asArray(stockPurchase?.historical_comparisons).map(asObject).filter((row):row is Obj=>row!==null);
   const fundamentalComparisons = asArray(stockPurchase?.fundamental_comparisons).map(asObject).filter((row):row is Obj=>row!==null);
   const fundamentalMetricNames = [...new Set(stockPurchaseRows.flatMap(row => [
     ...Object.keys(asObject(row.fundamental_metrics) ?? {}),
     ...asArray(row.excluded_metrics).map(asObject).map(item => asText(item?.metric)).filter((name):name is string => Boolean(name)),
   ]))].sort((a,b) => fundamentalLabel(a).localeCompare(fundamentalLabel(b), 'pt-BR'));
+  const pairedFundamentalNames = fundamentalMetricNames.filter(name=>stockPurchaseTickers.every(ticker=>asObject(asObject(stockPurchaseByTicker.get(ticker)?.fundamental_metrics)?.[name])));
+  const unpairedFundamentalNames = fundamentalMetricNames.filter(name=>!pairedFundamentalNames.includes(name));
   const optionEvidenceEntries = optionEvidence
     ? Object.entries(optionEvidence)
         .map(([key, value]) => [key, asObject(value)] as const)
@@ -229,6 +234,10 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
     {stockPurchase&&<section className="analysis-section stock-pair-comparison">
       <h3>Compra entre ações · {stockPurchaseTickers.join(' × ') || 'ativos'} · comparação lado a lado</h3>
       <p>Dados observados até {when(asOf)}. O histórico mostra desempenho passado; não é previsão nem escolhe, sozinho, a melhor compra.</p>
+      <h4>Compra possível antes de custos</h4>
+      <p>Quantidade inteira calculada apenas com preço e orçamento. Taxas, impostos e slippage não estão incluídos; valores líquidos e efeitos financiados na carteira dependem desses dados.</p>
+      <div className="table-wrap"><table aria-label="Quantidade e caixa antes de custos"><thead><tr><th>Ação</th><th>Orçamento</th><th>Preço observado</th><th>Quantidade inteira · bruta</th><th>Valor da compra · bruto</th><th>Caixa residual · antes de custos</th></tr></thead><tbody>{stockPurchaseRows.map(row=>{const gross=asObject(asObject(row.economic_evidence)?.gross_purchase_before_costs);return <tr key={asText(row.alternative_id)}><td>{asText(row.ticker)}</td><td>{brl(numberValue(row.capital_required_brl))??'Não informado'}</td><td>{brl(numberValue(row.current_price_brl))??'Indisponível'}<small>{when(row.quote_observed_at)}</small></td><td>{numberValue(gross?.quantity)??'Indisponível'}</td><td>{brl(numberValue(gross?.notional_brl))??'Indisponível'}</td><td>{brl(numberValue(gross?.residual_cash_brl))??'Indisponível'}</td></tr>})}</tbody></table></div>
+      {commonHistory?.status==='AVAILABLE'&&commonHistoryRows.length>1&&<Suspense fallback={<p>Preparando histórico comum…</p>}><CommonHistoryChart rows={commonHistoryRows} left={String(commonHistory.left_ticker)} right={String(commonHistory.right_ticker)} basis={String(commonHistory.price_basis)}/></Suspense>}
       <h4>Desempenho histórico lado a lado</h4>
       <div className="table-wrap"><table aria-label="Desempenho histórico comparável das ações">
         <thead><tr><th>Período</th>{stockPurchaseTickers.map(ticker=><th key={ticker}>{ticker} · retorno observado</th>)}<th>Diferença entre ativos</th></tr></thead>
@@ -249,9 +258,9 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
       <p className="muted">Diferença = retorno de {stockPurchaseTickers[1]??'B'} menos {stockPurchaseTickers[0]??'A'}, somente quando o backend confirma datas comuns.</p>
       <h4>Fundamentos reportados</h4>
       <p>{fundamentalComparisons.filter(row=>asText(row.status)==='COMPARABLE').length} de {fundamentalMetricNames.length} métricas têm unidade, período e data compatíveis. A tabela mostra os valores de cada ativo e sinaliza métricas excluídas pelo corte ou sem comparação equivalente.</p>
-      {fundamentalMetricNames.length>0?<div className="table-wrap"><table aria-label="Fundamentos comparados lado a lado">
+      {pairedFundamentalNames.length>0?<div className="table-wrap"><table aria-label="Fundamentos comparados lado a lado">
         <thead><tr><th>Métrica</th>{stockPurchaseTickers.map(ticker=><th key={ticker}>{ticker}</th>)}<th>Comparabilidade / período</th></tr></thead>
-        <tbody>{fundamentalMetricNames.map(name=>{
+        <tbody>{pairedFundamentalNames.map(name=>{
           const comparison=fundamentalComparisons.find(row=>asText(row.metric)===name);
           const leftMetric=asObject(asObject(stockPurchaseByTicker.get(stockPurchaseTickers[0]??'')?.fundamental_metrics)?.[name]);
           const rightMetric=asObject(asObject(stockPurchaseByTicker.get(stockPurchaseTickers[1]??'')?.fundamental_metrics)?.[name]);
@@ -262,7 +271,8 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
           const cell=(metric:Obj|null,excluded:Obj|null)=>metric?<>{fundamentalDisplay(name,metric)}<small>{periodText(metric)}{asText(metric.quality_status)==='WARNING'?' · qualidade WARNING: disponibilidade histórica da fonte não comprovada':''}</small></>:excluded?<>{asText(excluded.reason)==='UNQUALIFIED_OR_FUTURE_FUNDAMENTAL'?'Excluída do corte':'Não qualificada'}<small>Data do registro: {asText(excluded.report_date)??'indisponível'} · não usada na comparação</small></>:'Sem dado elegível';
           return <tr key={name}><th scope="row">{fundamentalLabel(name)}</th><td>{cell(leftMetric,leftExcluded??null)}</td>{stockPurchaseTickers.length>1&&<td>{cell(rightMetric,rightExcluded??null)}</td>}<td>{status==='COMPARABLE'?'Comparável':status==='NONCOMPARABLE_OR_MISSING'?'Não comparável: falta dado equivalente ou período ou unidade não coincide':'Sem par comparável'}</td></tr>;
         })}</tbody>
-      </table></div>:<p className="muted">Nenhuma métrica fundamental passou pelos critérios de data, unidade e qualidade neste corte.</p>}
+      </table></div>:<p className="muted">Nenhuma métrica tem valores elegíveis para os dois ativos neste corte. Não há base fundamental comum para compará-los.</p>}
+      {unpairedFundamentalNames.length>0&&<details><summary>Dados sem par ou excluídos pelo corte ({unpairedFundamentalNames.length})</summary><ul>{unpairedFundamentalNames.map(name=><li key={name}><strong>{fundamentalLabel(name)}</strong>: {stockPurchaseTickers.map(ticker=>{const metric=asObject(asObject(stockPurchaseByTicker.get(ticker)?.fundamental_metrics)?.[name]);return `${ticker}: ${metric?fundamentalDisplay(name,metric):'sem dado elegível'}`}).join(' · ')}</li>)}</ul></details>}
       <h4>Risco histórico observado</h4>
       <div className="table-wrap"><table aria-label="Risco histórico por ativo"><thead><tr><th>Ativo</th><th>Volatilidade realizada · 60 pregões</th><th>Drawdown máximo observado</th></tr></thead>
         <tbody>{stockPurchaseTickers.map(ticker=>{const risk=asObject(stockPurchaseByTicker.get(ticker)?.observed_risk);return <tr key={ticker}><th scope="row">{ticker}</th><td>{pct(numberValue(risk?.volatility_60d))??'Indisponível'}</td><td>{pct(numberValue(risk?.max_drawdown))??'Indisponível'}</td></tr>;})}</tbody>

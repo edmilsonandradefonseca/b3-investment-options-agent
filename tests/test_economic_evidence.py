@@ -28,3 +28,13 @@ def test_rank_requires_same_institution_horizon_and_two_complete_assets():
     assert [r['rank'] for r in ranked['rows']]==[1,2]
     assert rank_target_potential(rows,'BTG','2027-12-31')['status']=='INSUFFICIENT_COMPARABLE_TARGETS'
     assert rank_target_potential(rows,'XP','2026-12-31')['rows']==[]
+
+def test_gross_purchase_can_be_shown_without_claiming_net_sizing_or_funding():
+    result = economic_evidence(row(), budget=1000)
+    gross = result['gross_purchase_before_costs']
+    assert gross['quantity'] == 33
+    assert gross['notional_brl'] + gross['residual_cash_brl'] == 1000
+    assert result['quantity'] is None
+    assert result['portfolio_impact']['stock_quantity_after'] is None
+    assert result['announced_conditional_gross_income_brl'] is None
+    assert economic_evidence(row(), budget=None)['gross_purchase_before_costs']['quantity'] is None

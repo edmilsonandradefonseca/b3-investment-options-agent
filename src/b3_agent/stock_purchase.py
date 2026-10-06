@@ -18,6 +18,39 @@ def _timestamp(value):
         return None
 
 
+
+def _common_normalized_history(packs, cutoff):
+    histories = []
+    adjusted = True
+    for pack in packs:
+        admitted = {}
+        for row in pack.market.get("price_history", []):
+            at = _timestamp(row.get("observation_timestamp"))
+            available = _timestamp(row.get("available_timestamp"))
+            price = _number(row.get("close"))
+            if not at or not available or at > cutoff or available > cutoff or not price or price <= 0:
+                continue
+            day = at.astimezone(ZoneInfo("America/Sao_Paulo")).date().isoformat()
+            if day in admitted:
+                # Ambiguous duplicated sessions cannot establish a common index.
+                return {"status": "AMBIGUOUS_SESSION", "rows": []}
+            admitted[day] = row
+            value = _number(row.get("adjusted_close"))
+            adjusted = adjusted and value is not None and value > 0
+        histories.append(admitted)
+    common = sorted(set(histories[0]) & set(histories[1]))
+    if len(common) < 2:
+        return {"status": "INSUFFICIENT_COMMON_HISTORY", "rows": []}
+    field = "adjusted_close" if adjusted else "close"
+    bases = [history[common[0]][field] for history in histories]
+    rows = [{"date": day, "left_index": histories[0][day][field] / bases[0] * 100,
+             "right_index": histories[1][day][field] / bases[1] * 100}
+            for day in common]
+    return {"status": "AVAILABLE", "base": 100, "price_basis": field,
+            "left_ticker": packs[0].ticker, "right_ticker": packs[1].ticker,
+            "start_date": common[0], "end_date": common[-1], "rows": rows}
+
+
 def stock_purchase_payload(alternatives, packs, cutoff, dividend_evidence=None, target_evidence=None, portfolio=None, economic_inputs=None):
     rows = []
     cutoff_local_date = cutoff.astimezone(ZoneInfo("America/Sao_Paulo")).date().isoformat()
@@ -101,6 +134,7 @@ def stock_purchase_payload(alternatives, packs, cutoff, dividend_evidence=None, 
         and rows[0]["history_start"] == rows[1]["history_start"]
         and rows[0]["history_end"] == rows[1]["history_end"])
     return {"policy_version": "stock-buy-evidence-v1", "rows": rows,
+        "common_normalized_history": _common_normalized_history(packs, cutoff),
         "fundamental_comparisons": comparisons, "historical_comparisons": historical_comparisons, "observed_risk_same_window": same_window,
         "ranking": "UNKNOWN_NO_QUALIFIED_RETURN_OR_DIVIDEND_FORECAST",
         "limitations": [
