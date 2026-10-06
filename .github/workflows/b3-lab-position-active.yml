@@ -2,7 +2,7 @@ name: B3 active Lab position selection (Ubuntu)
 on:
   push:
     branches: [feature/react-functional-v43-integration]
-    paths: [.github/workflows/b3-lab-position-active.yml, scripts/validate_lab_position_active.py]
+    paths: [.github/workflows/b3-lab-position-active.yml, scripts/validate_lab_position_active.py, src/b3_agent/strategy_live.py]
   workflow_dispatch:
 permissions:
   contents: read
