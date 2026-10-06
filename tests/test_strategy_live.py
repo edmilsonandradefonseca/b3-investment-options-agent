@@ -563,6 +563,8 @@ def test_sell_call_uses_current_bid_and_requires_covered_shares():
     assert alternative["assumptions"]["premium_basis"] == "current_bid"
     assert alternative["assumptions"]["covered_shares_required"] == 100.0
     assert alternative["assumptions"]["stock_shares_available"] == 100.0
+    assert alternative["assumptions"]["covered_shares_already_committed"] == 0.0
+    assert alternative["assumptions"]["covered_shares_free_before_trade"] == 100.0
     evidence_row = result["option_evidence"]["WEGEJ550"]
     assert evidence_row["current_quote"]["bid"] == 0.80
     assert evidence_row["call_analysis"]["premium"] == 0.80
@@ -591,6 +593,71 @@ def test_sell_call_rejects_uncovered_position():
         assert "not covered" in str(exc)
     else:
         raise AssertionError("SELL_CALL must reject insufficient underlying shares")
+
+
+def test_sell_call_uses_only_uncommitted_shares_for_coverage():
+    evidence = StrategyEvidenceService(
+        market_provider=FakeMarketProvider(),
+        fundamentals_provider=FakeFundamentalsProvider(),
+        current_quote_provider=FakeCurrentQuoteProvider(),
+    )
+    service = LiveStrategyComparisonService(
+        evidence_service=evidence,
+        options_provider=FakeOptionsProvider(),
+    )
+    short_call = Position(
+        position_id="WEGEJ500-OPEN", ticker="WEGEJ500", instrument_type="OPTION",
+        quantity=-1, strike=50.0, expiration_date=date(2026, 11, 20),
+        option_type="CALL", underlying_ticker="WEGE3", contract_multiplier=100.0,
+        source_ref="BTG:open-call",
+    )
+    base = _covered_portfolio(200.0)
+    portfolio = replace(base, positions=(*base.positions, short_call))
+    result = service.compare(
+        assets=("VALE3", "WEGE3"),
+        strategies=("Comprar ação", "Vender CALL coberta"),
+        option_ids=(None, "WEGEJ550"),
+        amount=50_000.0,
+        portfolio=portfolio,
+        as_of=datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc),
+    )
+    assumptions = result["strategy_comparison"]["alternatives"][1]["assumptions"]
+    assert assumptions["stock_shares_available"] == 200.0
+    assert assumptions["covered_shares_already_committed"] == 100.0
+    assert assumptions["covered_shares_free_before_trade"] == 100.0
+    assert assumptions["existing_short_call_position_ids"] == ["WEGEJ500-OPEN"]
+
+
+def test_sell_call_rejects_shares_already_committed_to_open_short_call():
+    evidence = StrategyEvidenceService(
+        market_provider=FakeMarketProvider(),
+        fundamentals_provider=FakeFundamentalsProvider(),
+        current_quote_provider=FakeCurrentQuoteProvider(),
+    )
+    service = LiveStrategyComparisonService(
+        evidence_service=evidence,
+        options_provider=FakeOptionsProvider(),
+    )
+    base = _covered_portfolio(100.0)
+    short_call = Position(
+        position_id="WEGEJ500-OPEN", ticker="WEGEJ500", instrument_type="OPTION",
+        quantity=-1, strike=50.0, expiration_date=date(2026, 11, 20),
+        option_type="CALL", underlying_ticker="WEGE3", contract_multiplier=100.0,
+        source_ref="BTG:open-call",
+    )
+    portfolio = replace(base, positions=(*base.positions, short_call))
+    try:
+        service.compare(
+            assets=("VALE3", "WEGE3"),
+            strategies=("Comprar ação", "Vender CALL coberta"),
+            option_ids=(None, "WEGEJ550"),
+            portfolio=portfolio,
+            as_of=datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc),
+        )
+    except ValueError as exc:
+        assert "100 already committed" in str(exc)
+    else:
+        raise AssertionError("covered-call comparison reused shares already pledged to an open CALL")
 
 
 def test_sell_stock_reduces_existing_long_position_as_notional_what_if():
