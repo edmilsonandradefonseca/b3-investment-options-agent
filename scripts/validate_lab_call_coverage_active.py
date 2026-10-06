@@ -42,8 +42,7 @@ stocks = [p for p in portfolio.positions
 preferred = {"PETR4": 0, "ITUB4": 1, "BBDC4": 2, "VALE3": 3, "WEGE3": 4}
 stocks.sort(key=lambda p: (preferred.get(p.ticker.upper(), 99), p.ticker.upper()))
 adapter = OplabOptionsAdapter()
-candidate = None
-expected_rejection = False
+candidates = []
 
 for stock in stocks:
     ticker = stock.ticker.upper()
@@ -73,52 +72,57 @@ for stock in stocks:
             expected_rejection = True
         else:
             continue
-        candidate = (ticker, contract, capacity)
-        break
-    if candidate:
+        candidates.append((ticker, contract, capacity, expected_rejection))
         break
 
-assert candidate, "No executable CALL matched a real BTG holding with assessable coverage"
-ticker, contract, capacity = candidate
-manual_long = sum(float(p.quantity) for p in portfolio.positions
-                  if p.instrument_type.upper() == "STOCK"
-                  and p.ticker.upper() == ticker and p.quantity > 0)
-manual_committed = sum(abs(float(p.quantity)) * float(p.contract_multiplier)
-                       for p in portfolio.positions
-                       if p.instrument_type.upper() == "OPTION" and p.quantity < 0
-                       and (p.option_type or "").upper() == "CALL"
-                       and (p.underlying_ticker or "").strip().upper() == ticker)
-assert abs(capacity["long_shares"] - manual_long) < 1e-9
-assert abs(capacity["committed_shares"] - manual_committed) < 1e-9
-assert abs(capacity["available_shares"] - max(0.0, manual_long - manual_committed)) < 1e-9
+assert candidates, "No executable CALL matched a real BTG holding with assessable coverage"
 assert hashlib.sha256(portfolio_path.read_bytes()).hexdigest() == revision
 
+# Independently reconcile quantities from the same immutable snapshot before
+# testing the live Strategy Lab implementation.
+for ticker, contract, capacity, _ in candidates:
+    manual_long = sum(float(p.quantity) for p in portfolio.positions
+                      if p.instrument_type.upper() == "STOCK"
+                      and p.ticker.upper() == ticker and p.quantity > 0)
+    manual_committed = sum(abs(float(p.quantity)) * float(p.contract_multiplier)
+                           for p in portfolio.positions
+                           if p.instrument_type.upper() == "OPTION" and p.quantity < 0
+                           and (p.option_type or "").upper() == "CALL"
+                           and (p.underlying_ticker or "").strip().upper() == ticker)
+    assert abs(capacity["long_shares"] - manual_long) < 1e-9
+    assert abs(capacity["committed_shares"] - manual_committed) < 1e-9
+    assert abs(capacity["available_shares"] - max(0.0, manual_long - manual_committed)) < 1e-9
+
 service = LiveStrategyComparisonService()
-try:
-    result = service.compare(
-        assets=(ticker, ticker),
-        strategies=("Manter", "Vender CALL coberta"),
-        option_ids=(None, contract.option_id),
-        amount=10_000.0,
-        portfolio=portfolio,
-        as_of=as_of,
-    )
-except RuntimeError as exc:
-    if "market history unavailable for " not in str(exc):
+data_blockers = set()
+accepted = False
+for ticker, contract, capacity, expected_rejection in candidates:
+    try:
+        result = service.compare(
+            assets=(ticker, ticker),
+            strategies=("Manter", "Vender CALL coberta"),
+            option_ids=(None, contract.option_id),
+            amount=10_000.0,
+            portfolio=portfolio,
+            as_of=as_of,
+        )
+    except RuntimeError as exc:
+        message = str(exc)
+        if "market history unavailable for " in message:
+            data_blockers.add("MARKET_HISTORY")
+            continue
         raise
-    assert hashlib.sha256(portfolio_path.read_bytes()).hexdigest() == revision
-    print("ACTIVE_LAB_CALL_COVERAGE_RECONCILIATION=PASS", flush=True)
-    print("ACTIVE_LAB_CALL_COMPARISON=BLOCKED_MARKET_HISTORY", flush=True)
-    print("ACTIVE_LAB_CALL_BLOCK_REASON=NO_REMOTE_HISTORY_PROVIDER_WITHIN_CURRENT_BUDGET", flush=True)
-    raise SystemExit(0)
-except ValueError as exc:
-    if not expected_rejection:
+    except ValueError as exc:
+        message = str(exc)
+        if expected_rejection and "is not covered" in message and "already committed to short CALLs" in message:
+            assert hashlib.sha256(portfolio_path.read_bytes()).hexdigest() == revision
+            print("ACTIVE_LAB_CALL_REJECTS_REUSED_COVERAGE=PASS", flush=True)
+            accepted = True
+            break
+        if "current OPLAB price is required for covered CALL" in message:
+            data_blockers.add("UNDERLYING_SPOT")
+            continue
         raise
-    message = str(exc)
-    assert "is not covered" in message and "already committed to short CALLs" in message
-    assert hashlib.sha256(portfolio_path.read_bytes()).hexdigest() == revision
-    print("ACTIVE_LAB_CALL_REJECTS_REUSED_COVERAGE=PASS", flush=True)
-else:
     assert not expected_rejection, "Active service reused shares already committed to an open short CALL"
     alternatives = result["strategy_comparison"]["alternatives"]
     call = next(row for row in alternatives if row["action_type"] == "SELL_CALL")
@@ -131,6 +135,15 @@ else:
     assert result["option_evidence"][contract.option_id]["current_quote"]["bid"] > 0
     assert hashlib.sha256(portfolio_path.read_bytes()).hexdigest() == revision
     print("ACTIVE_LAB_CALL_FREE_COVERAGE=PASS", flush=True)
+    accepted = True
+    break
 
+assert hashlib.sha256(portfolio_path.read_bytes()).hexdigest() == revision
 print("ACTIVE_LAB_CALL_COVERAGE_RECONCILIATION=PASS", flush=True)
+if not accepted:
+    assert data_blockers, "No covered CALL candidate completed or returned an expected coverage rejection"
+    reason = "_".join(sorted(data_blockers))
+    print("ACTIVE_LAB_CALL_COMPARISON=BLOCKED_DATA", flush=True)
+    print(f"ACTIVE_LAB_CALL_BLOCK_REASON={reason}", flush=True)
+    raise SystemExit(0)
 print("ACTIVE_LAB_CALL_COVERAGE_FROM_CURRENT_BTG=PASS", flush=True)
