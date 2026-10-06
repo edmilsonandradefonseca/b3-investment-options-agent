@@ -4,6 +4,10 @@ on:
     branches: [feature/react-functional-v43-integration]
     paths:
       - frontend/**
+      - scripts/validate_lab_position_active.py
+      - scripts/validate_lab_put_scenario_active.py
+      - scripts/validate_lab_call_coverage_active.py
+      - src/b3_agent/strategy_live.py
       - .github/workflows/b3-react-cockpit-visual.yml
   workflow_dispatch:
 permissions:
