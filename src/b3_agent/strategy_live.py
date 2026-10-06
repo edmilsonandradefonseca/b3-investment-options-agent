@@ -817,7 +817,7 @@ class LiveStrategyComparisonService:
                     underlying_quote = None
                     inadmissible_spot_tickers.add(pack.ticker)
                 else:
-                    raise ValueError(f"{pack.ticker} current underlying quote is invalid or outside the common as_of cutoff (PIT)")
+                    raise ValueError(f"{pack.ticker} requires an admissible current underlying quote; quote is invalid or outside the common as_of cutoff (PIT)")
             assumptions: dict[str, Any] = {
                 "amount": amount,
                 "expected_return": "not_inferred",
