@@ -1,4 +1,4 @@
-name: B3 local worker admission diagnostics
+name: B3 local worker and schedule diagnostics
 on:
   push:
     branches: [feature/react-functional-v43-integration]
@@ -9,22 +9,101 @@ permissions:
 jobs:
   diagnose:
     runs-on: [self-hosted, Linux, X64]
-    timeout-minutes: 2
+    timeout-minutes: 3
     steps:
-      - name: Read admission metadata without model calls or private content
+      - name: Read scheduler, persistence and worker metadata without private content
         run: |
           python3 - <<'PY'
-          import json,subprocess
+          import json, subprocess
+          from datetime import datetime, timezone
           from pathlib import Path
-          root=Path('/opt/b3-runtime/data/derived/local_evidence_analyst')
-          for path in root.joinpath('runs').glob('*.json'):
-              d=json.loads(path.read_text())
-              if not any('conteudos.xpi.com.br/acoes/relatorios/' in str(ref) for ref in d.get('evidence_refs',[])):
+
+          pairs = [
+              ("b3-continuous-intelligence.timer", "b3-continuous-intelligence.service"),
+              ("b3-local-relevance-screen.timer", "b3-local-relevance-screen.service"),
+              ("b3-local-evidence-analyst.timer", "b3-local-evidence-analyst.service"),
+              ("b3-nightly-intelligence.timer", "b3-nightly-intelligence.service"),
+              ("b3-cvm-reconciliation.timer", "b3-cvm-reconciliation.service"),
+          ]
+
+          def show(unit, properties):
+              completed = subprocess.run(
+                  ["systemctl", "show", unit, "--property=" + ",".join(properties)],
+                  text=True, capture_output=True, timeout=10,
+              )
+              values = dict(line.split("=", 1) for line in completed.stdout.splitlines() if "=" in line)
+              return values if completed.returncode == 0 else {"query_error": "UNIT_UNAVAILABLE"}
+
+          for timer, service in pairs:
+              print(json.dumps({
+                  "case": "TIMER_RUNTIME",
+                  "unit": timer,
+                  **show(timer, ["UnitFileState", "ActiveState", "NextElapseUSecRealtime", "LastTriggerUSec"]),
+              }, sort_keys=True))
+              print(json.dumps({
+                  "case": "SCHEDULED_SERVICE_LAST_RUN",
+                  "unit": service,
+                  **show(service, ["ActiveState", "SubState", "Result", "ExecMainStatus", "ExecMainStartTimestamp", "ExecMainExitTimestamp"]),
+              }, sort_keys=True))
+
+          timer_units = [timer for timer, _ in pairs]
+          listed = subprocess.run(
+              ["systemctl", "list-timers", "--all", "--no-pager", "--no-legend", *timer_units],
+              text=True, capture_output=True, timeout=15,
+          )
+          print(json.dumps({"case": "TIMER_CALENDARS", "lines": [line.strip() for line in listed.stdout.splitlines() if line.strip()]}))
+
+          data = Path("/opt/b3-runtime/data/derived")
+          manifests = {
+              "continuous_intelligence": data / "continuous_intelligence" / "latest.json",
+              "nightly_intelligence": data / "nightly_intelligence" / "latest.json",
+              "cvm_reconciliation": data / "cvm_reconciliation" / "latest.json",
+          }
+          allowed = {
+              "continuous_intelligence": ["status", "completed_at", "documents", "new_evidence", "duplicates", "material", "candidate", "non_material", "relevance_enqueued", "dossier_enqueued"],
+              "nightly_intelligence": ["as_of", "ticker_count", "completed", "queued_local_analysis", "skipped", "deferred", "coverage_insufficient", "failed", "local_analysis_enqueues"],
+              "cvm_reconciliation": ["status", "completed_at", "records", "added", "duplicates", "unmatched"],
+          }
+          for name, path in manifests.items():
+              if not path.is_file():
+                  print(json.dumps({"case": "PERSISTED_RUN_MANIFEST", "name": name, "status": "MISSING"}))
                   continue
-              analysis=d.get('analysis') or {}
-              required={'summary':'str','risks':'list','catalysts':'list','contradictions':'list','questions_for_senior_review':'list','escalation_recommended':'bool','evidence_refs':'list'}
-              print(json.dumps({'case':'TARGET_DOSSIER_METADATA','status':d.get('status'),'quality_flags':d.get('quality_flags'),'model':d.get('model'),'eval_count':d.get('eval_count'),'num_predict':d.get('num_predict'),'thinking_chars':d.get('thinking_chars'),'input_chars':d.get('input_chars'),'raw_chars':len(d.get('raw_analysis') or ''),'field_types':{key:type(analysis.get(key)).__name__ for key in required}}))
-          for unit in ['b3-nightly-intelligence.timer','b3-local-evidence-analyst.timer','b3-continuous-intelligence.timer']:
-              state=subprocess.run(['systemctl','is-active',unit],text=True,capture_output=True,timeout=10).stdout.strip()
-              print(json.dumps({'case':'TIMER_STATE','unit':unit,'state':state}))
+              try:
+                  payload = json.loads(path.read_text(encoding="utf-8"))
+                  summary = {key: payload[key] for key in allowed[name] if key in payload and isinstance(payload[key], (str, int, float, bool, type(None)))}
+                  summary["manifest_mtime_utc"] = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat()
+                  print(json.dumps({"case": "PERSISTED_RUN_MANIFEST", "name": name, **summary}, sort_keys=True))
+              except (OSError, ValueError):
+                  print(json.dumps({"case": "PERSISTED_RUN_MANIFEST", "name": name, "status": "UNREADABLE"}))
+
+          for name in ["continuous_intelligence/evidence", "cvm_reconciliation/evidence"]:
+              path = data / name
+              files = list(path.glob("*.json")) if path.is_dir() else []
+              newest = max((item.stat().st_mtime for item in files), default=None)
+              print(json.dumps({
+                  "case": "PERSISTED_EVIDENCE_COUNT",
+                  "store": name,
+                  "file_count": len(files),
+                  "newest_file_mtime_utc": datetime.fromtimestamp(newest, timezone.utc).isoformat() if newest else None,
+              }, sort_keys=True))
+
+          root = data / "local_evidence_analyst"
+          for path in root.joinpath("runs").glob("*.json") if root.joinpath("runs").is_dir() else []:
+              dossier = json.loads(path.read_text())
+              if not any("conteudos.xpi.com.br/acoes/relatorios/" in str(ref) for ref in dossier.get("evidence_refs", [])):
+                  continue
+              analysis = dossier.get("analysis") or {}
+              required = {"summary": "str", "risks": "list", "catalysts": "list", "contradictions": "list", "questions_for_senior_review": "list", "escalation_recommended": "bool", "evidence_refs": "list"}
+              print(json.dumps({
+                  "case": "TARGET_DOSSIER_METADATA",
+                  "status": dossier.get("status"),
+                  "quality_flags": dossier.get("quality_flags"),
+                  "model": dossier.get("model"),
+                  "eval_count": dossier.get("eval_count"),
+                  "num_predict": dossier.get("num_predict"),
+                  "thinking_chars": dossier.get("thinking_chars"),
+                  "input_chars": dossier.get("input_chars"),
+                  "raw_chars": len(dossier.get("raw_analysis") or ""),
+                  "field_types": {key: type(analysis.get(key)).__name__ for key in required},
+              }))
           PY
