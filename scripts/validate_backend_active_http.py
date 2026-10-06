@@ -99,8 +99,16 @@ snapshot=snapshot_response["response"] or {}
 positions=snapshot.get("positions") or []
 expected_stock={str(p.get("ticker","")).upper() for p in positions
     if str(p.get("instrument_type","")).upper()=="STOCK" and p.get("ticker")}
-expected_option_underlyings={str(p.get("underlying_ticker","")).upper() for p in positions
-    if str(p.get("instrument_type","")).upper()=="OPTION" and p.get("underlying_ticker")}
+import re
+def canonical_equity_identity(value):
+    normalized=str(value or "").upper().strip()
+    return normalized if re.fullmatch(r"[A-Z]{4}\\d{1,2}",normalized) else None
+option_underlying_values=[p.get("underlying_ticker") for p in positions
+    if str(p.get("instrument_type","")).upper()=="OPTION" and p.get("underlying_ticker")]
+expected_option_underlyings={ticker for value in option_underlying_values
+    if (ticker:=canonical_equity_identity(value)) is not None}
+unresolved_option_underlying_count=sum(canonical_equity_identity(value) is None
+    for value in option_underlying_values)
 integrated_request={"task":"UC-03: revise as ações acompanhadas e toda a carteira vigente. Use triagem determinística, contexto de ações e opções já possuídas, evidências disponíveis e síntese sênior. Explique cobertura e limitações sem inventar recomendação, retorno ou probabilidade.",
     "context":{"workspace":"Opportunities","selected_ticker":None,"opportunity_assets":["ITUB4","BBDC4"],
         "opportunity_objective":"LOWEST_REALIZED_VOLATILITY_60D","include_portfolio_stocks":True,"research_mode":"stored_only"}}
@@ -119,12 +127,13 @@ integrated_options=set(integrated_screen.get("portfolio_option_underlying_univer
 integrated_union=set(integrated_screen.get("requested_universe") or [])
 expected_union={"ITUB4","BBDC4"}|expected_stock|expected_option_underlyings
 missing_union = expected_union - integrated_union
-print(json.dumps({"case":"ACTIVE_OPPORTUNITY_COVERAGE_DIAGNOSTIC","expected_count":len(expected_union),"actual_count":len(integrated_union),"candidate_missing":len({"ITUB4","BBDC4"}-integrated_union),"stock_missing":len(expected_stock-integrated_stock),"option_underlying_missing":len(expected_option_underlyings-integrated_options),"union_missing":len(missing_union),"unexpected_count":len(integrated_union-expected_union)},ensure_ascii=False),flush=True)
+print(json.dumps({"case":"ACTIVE_OPPORTUNITY_COVERAGE_DIAGNOSTIC","expected_count":len(expected_union),"actual_count":len(integrated_union),"candidate_missing":len({"ITUB4","BBDC4"}-integrated_union),"stock_missing":len(expected_stock-integrated_stock),"option_underlying_missing":len(expected_option_underlyings-integrated_options),"unresolved_option_underlying_count":unresolved_option_underlying_count,"union_missing":len(missing_union),"unexpected_count":len(integrated_union-expected_union)},ensure_ascii=False),flush=True)
 assert expected_union==integrated_union, "Active Opportunities lost candidate/stock/option snapshot coverage"
 assert len(integrated_screen.get("rows") or [])==len(expected_union)
 assert integrated_scope.get("policy_version")=="B3_OPPORTUNITY_RESEARCH_ENRICHMENT_V1"
 assert len(integrated_scope.get("context_tickers") or [])<=8
 assert expected_stock<=integrated_stock and expected_option_underlyings<=integrated_options
+assert integrated_scope.get("portfolio_scope",{}).get("unresolved_option_underlying_count")==unresolved_option_underlying_count
 synthesis=integrated_result.get("synthesis") or {}
 proposal=integrated_result.get("decision_proposal") or integrated_result.get("proposal") or {}
 narrative=next((v for v in (synthesis.get("summary"),proposal.get("thesis"),proposal.get("rationale"),integrated_result.get("summary")) if isinstance(v,str) and v.strip()),None)
