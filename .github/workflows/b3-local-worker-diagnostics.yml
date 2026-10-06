@@ -105,6 +105,9 @@ jobs:
                   "rejected_identity_count": identity.get("rejected_identity_count"),
                   "nightly_failed_count": payload.get("failed"),
                   "dividend_status_counts": payload.get("issuer_dividend_refresh", {}).get("result_status_counts", {}),
+                  "official_sources": payload.get("official_sources", {}),
+                  "target_discovery_status_counts": payload.get("institution_target_discovery", {}).get("result_status_counts", {}),
+                  "target_refresh": payload.get("institution_target_refresh", {}),
               })
           elif log_path.is_file():
               log = log_path.read_text(encoding="utf-8", errors="replace")
@@ -120,6 +123,7 @@ jobs:
           PY
           rm -f "$private_log"
       - name: Read scheduler, persistence and worker metadata without private content
+        if: ${{ always() }}
         run: |
           python3 - <<'PY'
           import json, subprocess
