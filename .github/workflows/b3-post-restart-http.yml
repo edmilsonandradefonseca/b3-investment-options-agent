@@ -2,7 +2,9 @@ name: B3 active runtime post-restart (Ubuntu)
 on:
   push:
     branches: [feature/react-functional-v43-integration]
-    paths: [.github/workflows/b3-post-restart-http.yml]
+    paths:
+      - .github/workflows/b3-post-restart-http.yml
+      - scripts/validate_backend_active_http.py
   workflow_dispatch:
 permissions:
   contents: read
