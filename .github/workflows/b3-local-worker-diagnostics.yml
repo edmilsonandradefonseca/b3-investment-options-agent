@@ -54,46 +54,52 @@ jobs:
           set -euo pipefail
           cd /opt/b3-investment-options-agent
           .venv/bin/python -m pytest tests/test_nightly_intelligence.py
-      - name: Execute the configured nightly service and require a fresh safe summary
+      - name: Execute the nightly collector as its configured service user
         shell: bash
         run: |
           set -euo pipefail
           service=b3-nightly-intelligence.service
-          before="$(systemctl show "$service" --property=ExecMainStartTimestampMonotonic --value)"
-          current="$(systemctl show "$service" --property=ActiveState --value)"
-          test "$current" != "active"
-          systemctl start --no-block "$service"
-          completed=0
-          for attempt in $(seq 1 5400); do
-            state="$(systemctl show "$service" --property=ActiveState --value)"
-            started="$(systemctl show "$service" --property=ExecMainStartTimestampMonotonic --value)"
-            if test "$started" != "$before" && { test "$state" = "inactive" || test "$state" = "failed"; }; then
-              completed=1
-              break
+          service_user="$(systemctl show "$service" --property=User --value)"
+          if test -z "$service_user"; then service_user=root; fi
+          test "$service_user" = "$USER"
+          test "$(systemctl show "$service" --property=ActiveState --value)" != "active"
+          runtime_dir=/opt/b3-investment-options-agent
+          cd "$runtime_dir"
+          export B3_AGENT_PROJECT_ROOT="$runtime_dir"
+          export B3_AGENT_TIMEZONE=America/Sao_Paulo
+          export B3_NIGHTLY_MAX_LOCAL_ANALYSIS_ENQUEUES=5
+          for env_file in /opt/joao-runtime/joao.env /etc/b3-runtime.env /opt/b3-runtime/b3.env; do
+            if test -r "$env_file"; then
+              set -a
+              . "$env_file"
+              set +a
             fi
-            sleep 1
           done
-          test "$completed" -eq 1
-          result="$(systemctl show "$service" --property=Result --value)"
-          exit_status="$(systemctl show "$service" --property=ExecMainStatus --value)"
-          test "$result" = "success"
-          test "$exit_status" = "0"
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          path = Path("/opt/b3-runtime/data/derived/nightly_intelligence/runner_latest.json")
-          payload = json.loads(path.read_text(encoding="utf-8"))
-          assert payload.get("status") in {"PASS", "PASS_WITH_REJECTED_IDENTITIES"}
+          summary=/opt/b3-runtime/data/derived/nightly_intelligence/runner_latest.json
+          before="$(stat -c %Y "$summary" 2>/dev/null || echo 0)"
+          private_log="/tmp/b3-nightly-${GITHUB_RUN_ID}.log"
+          exit_status=0
+          timeout 5400 "$runtime_dir/.venv/bin/python" "$runtime_dir/scripts/run_nightly_intelligence.py" >"$private_log" 2>&1 || exit_status=$?
+          after="$(stat -c %Y "$summary" 2>/dev/null || echo 0)"
+          test "$after" -gt "$before"
+          python3 - "$summary" "$exit_status" <<'PY'
+          import json, sys
+          payload = json.loads(open(sys.argv[1], encoding="utf-8").read())
+          process_exit = int(sys.argv[2])
           identity = payload.get("identity_filter") or {}
           print(json.dumps({
               "case": "NIGHTLY_LIVE_ACCEPTANCE",
               "status": payload.get("status"),
+              "process_exit_status": process_exit,
               "accepted_ticker_count": identity.get("accepted_ticker_count"),
               "rejected_identity_count": identity.get("rejected_identity_count"),
               "nightly_failed_count": payload.get("failed"),
               "dividend_status_counts": payload.get("issuer_dividend_refresh", {}).get("result_status_counts", {}),
           }, sort_keys=True))
+          assert process_exit == 0
+          assert payload.get("status") in {"PASS", "PASS_WITH_REJECTED_IDENTITIES"}
           PY
+          rm -f "$private_log"
       - name: Read scheduler, persistence and worker metadata without private content
         run: |
           python3 - <<'PY'
