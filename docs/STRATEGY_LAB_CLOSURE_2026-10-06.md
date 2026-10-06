@@ -107,3 +107,14 @@ A validação ativa do runner passou no workflow [37515317840](https://github.co
 A CI do commit `713b30051f08d5798a1a3bf171bd481c2a32d8fa` passou no workflow [37515323818](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37515323818): 1.022 testes Python; build e renderização React aprovados. A seleção do gate foi alinhada aos critérios da rota live de uma PUT explícita: identidade do ativo/contrato, vencimento futuro e bid positivo. Uma tentativa anterior não passou porque o validador adicionava filtros próprios de PIT/qualidade que não são exigidos nesse caminho da rota; isso era um falso negativo do gate, e não uma aprovação de cotação inválida.
 
 O caso ação × PUT e os cenários explícitos estão aceitos. O Strategy Lab segue **parcial**. Próximos gates: CALL coberta real com a cobertura já comprometida; reconciliação integral de caixa/obrigações e demais posições; regressões de snapshot alterado, resposta fora de ordem, falha de fonte/síntese, retry e Nova análise; walkthrough final da matriz.
+
+
+## Gate de CALL coberta — 06/10/2026, 16h09 BRT
+
+O workflow ativo [37516694650](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37516694650) passou com o processo reiniciado e os hashes instalados conferidos. A comparação ação × PUT e os cenários até o vencimento também repetiram PASS. O novo gate reconstruiu, no snapshot BTG real, as ações positivas e as ações comprometidas por CALLs curtas e confirmou que a cobertura livre calculada pelo helper bate com a soma independente das posições. Resultado: `ACTIVE_LAB_CALL_COVERAGE_RECONCILIATION=PASS`.
+
+A comparação completa de CALL coberta no caminho de serviço ficou **bloqueada**, sem aceite: a evidência de histórico não estava disponível para os ativos tentados (`yahoo:ProviderRequestError`, `oplab:ProviderRequestError`, `brapi:BrapiBudgetExceeded`). O gate tenta outros ativos da carteira, não consome nova cota da BRAPI e registra a limitação como `ACTIVE_LAB_CALL_COMPARISON=BLOCKED_DATA`. A cobertura existente não foi reutilizada por hipótese; os cálculos de cobertura são aceitos por CI e reconciliação ativa, mas ainda falta a comparação live completa.
+
+CI [37516704532](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37516704532) passou no SHA `9c7a7721248be589bc025542f80e610847b1396f`: 1.022 testes Python, build e renderização React aprovados.
+
+**Estado do Lab:** comparação de ações, posição/rolagem e ação × PUT com cenários explícitos têm aceite ativo; cobertura livre de CALL está reconciliada e suas regressões estão verdes; CALL coberta ainda aguarda histórico/preço do subjacente para comparar pela rota ativa. Permanecem também a reconciliação integral de carteira/caixa/obrigações e a matriz de regressões finais (snapshot alterado, respostas fora de ordem, falha/retry e Nova análise). Não declarar o Lab completo.
