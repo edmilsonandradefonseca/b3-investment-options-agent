@@ -1,4 +1,4 @@
-"""Acceptance of Lab and MI on the running API; no service mutation."""
+"""Read-only active HTTP acceptance of Strategy Lab and Market Intelligence."""
 import json
 from time import monotonic
 import httpx
