@@ -1,0 +1,34 @@
+name: B3 Lab and Market active-data diagnosis
+on:
+  push:
+    branches: [feature/react-functional-v43-integration]
+    paths: [.github/workflows/b3-lab-market-diagnosis.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 10
+    steps:
+      - name: Read active HTTP evidence without raw financial payloads
+        run: |
+          python3 - <<'PY'
+          import json, time
+          from urllib.request import Request, urlopen
+          base="http://127.0.0.1:8000"
+          def call(path, body=None):
+              req=Request(base+path,data=json.dumps(body).encode() if body else None,headers={"Content-Type":"application/json"})
+              with urlopen(req,timeout=150) as r:
+                  return json.load(r)
+          data=call("/orchestrate",{"task":"Tenho R$ 10 mil. Comprar ITUB4 ou BBDC4?","context":{"workspace":"Strategy Lab","analysis_mode":"deterministic","research_mode":"stored_only"}})
+          result=data.get("result",{})
+          buy=result.get("stock_purchase_comparison") or {}
+          safe={"case":"LAB_ACTIVE", "error":bool(data.get("error")), "result_keys":list(result), "route":result.get("fast_route"), "rows":[], "historical_comparisons":buy.get("historical_comparisons"), "fundamental_comparisons":buy.get("fundamental_comparisons")}
+          for row in buy.get("rows",[]):
+              economics=row.get("economic_evidence") or {}
+              safe["rows"].append({"ticker":row.get("ticker"),"price_available":row.get("current_price_brl") is not None,"budget_available":row.get("capital_required_brl") is not None,"quantity_available":economics.get("quantity") is not None,"history_count":row.get("history_count"),"historical_returns":row.get("historical_returns"),"fundamentals":{k:{"unit":v.get("unit"),"period_type":v.get("period_type"),"report_date":v.get("report_date")} for k,v in row.get("fundamental_metrics",{}).items()}})
+          print(json.dumps(safe,default=str))
+          live=call("/analysis/live/PETR4")
+          print(json.dumps({"case":"MI_ACTIVE","market_keys":list(live.get("market",{})),"history_count":live.get("market",{}).get("history_count"),"quant_keys":list(live.get("quant",{})),"option_count":live.get("options",{}).get("contract_count"),"sources":live.get("source_refs")}))
+          PY
