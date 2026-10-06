@@ -1,5 +1,12 @@
 # Retomada — Inteligência do frontend B3 (2026-10-05)
 
+## Terceiro incremento do Strategy Lab — aguardando aceites
+
+Em 06/10, o incremento adiciona comparação `manter/encerrar/rolar` sobre opção explicitamente mantida: revalida BTG corrente, lê cadeia OPLAB, exige escolha explícita do destino e quantidade, precifica compras/recompras pelo ask e vendas pelo bid, separa fluxo de caixa de lucro, mostra pernas/fontes/carteira antes e depois, e entrega os fatos determinísticos à síntese sênior. A lista de destinos é transportada na conversa para que o código escolhido não seja confundido com a posição original.
+
+Verificado localmente: `compileall`, `git diff --check`, build React e `check-decision-rendering` passaram. O ambiente local não tem `pytest` nem Chromium Playwright; testes Python e browser serão confirmados na CI/workflows Ubuntu. **Ainda não validado:** cadeia de opções real no processo ativo, reinício desta revisão e walkthrough visual atualizado. Não declarar entrega aceita nem Lab fechado até esses gates terminarem. Se o instalador do runner pedir autenticação para reiniciar, o próximo passo é reiniciar o runtime e repetir o workflow de aceite ativo.
+
+
 ## Aceite da seleção no processo ativo — 06/10/2026, 11h20 BRT
 
 Usuário reiniciou o runtime. [Gate 37478059021 — SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37478059021) confirmou `ACTIVE_REVISION_AND_RESTART=PASS` e `ACTIVE_LAB_CURRENT_POSITION_AND_QUANTITY=PASS`. Hashes de server/seleção iguais à revisão testada, processo posterior à instalação. A sequência HTTP usa contrato do BTG atual, pede quantidade e aceita “toda a posição”, conservando hash do extrato, quantidade/lado e zero chamadas de cadeia/LLM. `operation_calculated=false`, `execution_authorized=false`: não houve cálculo de fechamento, rolagem nem ordem.

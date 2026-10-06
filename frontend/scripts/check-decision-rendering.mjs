@@ -56,6 +56,17 @@ try {
   }],limitations:[]}}}})).split('<details class="technical-output">')[0];
   for(const value of ['78,83%','-9%','20%','1,2×']) assert.ok(unitsHTML.includes(value),`Fundamental unit lost: ${value}`);
   assert.ok(!unitsHTML.includes('R$'), 'Growth and leverage must not appear as currency');
+  const managementHTML=renderToStaticMarkup(createElement(AnalysisOutput,{data:{status:'COMPLETED',error:null,sources:[],audit:[],result:{
+    policy_version:'lab-option-management-v1',
+    summary:'Comparação determinística de manter, encerrar e rolar.',
+    alternatives:[
+      {alternative_id:'KEEP',label:'Manter posição',incremental_gross_cash_flow_brl:0,transaction_costs_brl:0,incremental_net_cash_flow_brl:0,accumulated_realized_pnl_brl:null,legs:[]},
+      {alternative_id:'CLOSE',label:'Encerrar quantidade selecionada',incremental_gross_cash_flow_brl:null,transaction_costs_brl:null,incremental_net_cash_flow_brl:null,accumulated_realized_pnl_brl:null,legs:[{contract_id:'PETRK376',option_type:'CALL',strike:37.6,expiration_date:'2026-11-20',trade_side:'BUY',quantity_contract_units:100,contract_multiplier:100,price_field:'ask',price_brl_per_underlying_unit:null,source:'OPLAB',quote_as_of:'2026-10-06T14:00:00+00:00'}]},
+      {alternative_id:'ROLL',label:'Rolar para o contrato selecionado',incremental_gross_cash_flow_brl:-50,transaction_costs_brl:null,incremental_net_cash_flow_brl:null,accumulated_realized_pnl_brl:null,legs:[{contract_id:'PETRK376',option_type:'CALL',strike:37.6,expiration_date:'2026-11-20',trade_side:'BUY',quantity_contract_units:100,contract_multiplier:100,price_field:'ask',price_brl_per_underlying_unit:0.11,source:'OPLAB',quote_as_of:'2026-10-06T14:00:00+00:00'},{contract_id:'PETRK400',option_type:'CALL',strike:40,expiration_date:'2026-12-18',trade_side:'SELL',quantity_contract_units:100,contract_multiplier:100,price_field:'bid',price_brl_per_underlying_unit:0.105,source:'OPLAB',quote_as_of:'2026-10-06T14:00:00+00:00'}]},
+    ],portfolio_before:{cash_status:'UNKNOWN',positions:[]},portfolio_after_close:{positions:[],cash_after_brl:null},portfolio_after_roll:{positions:[],cash_after_brl:null},comparison:{ranking:'NOT_APPLIED',reason:'Alternativas não ranqueadas.'},limitations:['Custo permanece desconhecido.']
+  }}})).split('<details class="technical-output">')[0];
+  for(const value of ['Manter, encerrar ou rolar','Fluxos incrementais brutos; não representam lucro ou retorno esperado','PETRK376','PETRK400','UNKNOWN · preço executável','UNKNOWN · custos','UNKNOWN · histórico de abertura/custos','Alternativas não ranqueadas.','Custo permanece desconhecido.']) assert.ok(managementHTML.includes(value),`Option management comparison lost: ${value}`);
+  assert.ok(!managementHTML.includes('R$ 0,00 de lucro'), 'Gross flow must not be presented as profit');
   const noScenarioHTML=renderToStaticMarkup(createElement(AnalysisOutput,{data:{status:'COMPLETED',error:null,sources:[],audit:[],result:{economic_decision:{ranking:'NOT_REQUESTED',rows:[{alternative_id:'A',ticker:'ITUB4',scenarios:[]}],limitations:[]}}}})).split('<details class="technical-output">')[0];
   assert.ok(!noScenarioHTML.includes('Ação / cenário'));
   assert.ok(noScenarioHTML.includes('não informou preços futuros hipotéticos'));

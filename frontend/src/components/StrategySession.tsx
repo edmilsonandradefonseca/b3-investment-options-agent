@@ -28,6 +28,8 @@ export default function StrategySession({researchMode='stored_first',portfolioRe
      summary:t.response?.result.summary,
      lab_clarification:t.response?.result.lab_clarification,
      lab_position_selection:t.response?.result.lab_position_selection,
+     lab_roll_candidates:t.response?.result.lab_roll_candidates,
+     lab_option_management:t.response?.result.lab_option_management,
      proposal:t.response?.result.proposal??t.response?.result.decision_proposal,
      synthesis:t.response?.result.synthesis,
      stock_purchase_comparison:t.response?.result.stock_purchase_comparison,

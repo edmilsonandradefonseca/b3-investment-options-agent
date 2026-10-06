@@ -8,6 +8,10 @@ on:
       - scripts/validate_backend_active_http.py
       - .github/workflows/b3-backend-closure.yml
       - src/b3_agent/server.py
+      - src/b3_agent/routing/lab_option_management.py
+      - src/b3_agent/routing/lab_position.py
+      - tests/test_lab_option_management.py
+      - scripts/validate_lab_position_active.py
       - src/b3_agent/opportunity_screen.py
       - src/b3_agent/opportunity_materiality.py
       - src/b3_agent/stock_opportunity_service.py
@@ -53,7 +57,7 @@ jobs:
       - name: Verify issuer timezone regression on Ubuntu
         env:
           PYTHONPATH: ${{ github.workspace }}/src
-        run: /opt/b3-investment-options-agent/.venv/bin/python -m pytest tests/test_bradesco_dividends.py tests/test_stored_dividends.py tests/test_dividend_evidence.py tests/test_lab_position.py tests/test_lab_clarification.py
+        run: /opt/b3-investment-options-agent/.venv/bin/python -m pytest tests/test_bradesco_dividends.py tests/test_stored_dividends.py tests/test_dividend_evidence.py tests/test_lab_position.py tests/test_lab_clarification.py tests/test_lab_option_management.py
       - name: Install tested revision and request service restart
         shell: bash
         run: |

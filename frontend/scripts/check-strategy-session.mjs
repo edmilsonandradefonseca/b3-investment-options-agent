@@ -16,6 +16,14 @@ try{
   if(req.url().endsWith('/orchestrate')&&body?.context?.workspace==='Strategy Lab'){
    requests.push(body);
    if(body.task==='Vale manter, encerrar ou rolar uma opção da minha carteira?')return route.fulfill({json:{status:'NEEDS_CLARIFICATION',result:{lab_clarification:{status:'NEEDS_CLARIFICATION',question:'Qual é o código exato da opção que deseja analisar?',reason:'Informe o contrato.'},derived_synthesis_status:'NOT_REQUESTED'},sources:[],audit:[],error:null},headers:{'Access-Control-Allow-Origin':'*'}});
+   if(body.task==='Compare manter, encerrar e rolar.'){
+    const result={lab_position_selection:{option_id:'PETRK376',status:'POSITION_AND_QUANTITY_IDENTIFIED',side:'SHORT',snapshot_as_of:'2026-10-06',available_quantity_units:2500,selected_quantity_units:100,position:{underlying_ticker:'PETR4',option_type:'CALL',strike:37.6,expiration_date:'2026-11-20',source_ref:'fixture:current-snapshot'}},lab_clarification:{status:'NEEDS_CLARIFICATION',question:'Escolha o código exato do novo contrato de rolagem entre os contratos elegíveis abaixo.',reason:'Nenhum destino foi escolhido.'},lab_roll_candidates:[{option_id:'PETRK400',option_type:'CALL',strike:40,expiration_date:'2026-12-18',executable_side:'BID',executable_quote_brl:1.5,source:'OPLAB',quote_as_of:'2026-10-06T14:00:00+00:00'}],summary:'Selecione o contrato de destino.'};
+    return route.fulfill({json:{status:'NEEDS_CLARIFICATION',result,sources:[],audit:[],error:null},headers:{'Access-Control-Allow-Origin':'*'}});
+   }
+   if(body.task==='PETRK400'){
+    const result={policy_version:'lab-option-management-v1',summary:'Comparação determinística de manter, encerrar e rolar.',alternatives:[{alternative_id:'KEEP',label:'Manter posição',incremental_gross_cash_flow_brl:0,transaction_costs_brl:0,incremental_net_cash_flow_brl:0,accumulated_realized_pnl_brl:null,legs:[]},{alternative_id:'CLOSE',label:'Encerrar quantidade selecionada',incremental_gross_cash_flow_brl:-1100,transaction_costs_brl:25,incremental_net_cash_flow_brl:-1125,accumulated_realized_pnl_brl:null,legs:[{contract_id:'PETRK376',option_type:'CALL',strike:37.6,expiration_date:'2026-11-20',trade_side:'BUY',quantity_contract_units:100,contract_multiplier:100,price_field:'ask',price_brl_per_underlying_unit:0.11,gross_incremental_cash_flow_brl:-1100,source:'OPLAB',quote_as_of:'2026-10-06T14:00:00+00:00'}]},{alternative_id:'ROLL',label:'Rolar para o contrato selecionado',incremental_gross_cash_flow_brl:-950,transaction_costs_brl:50,incremental_net_cash_flow_brl:-1000,accumulated_realized_pnl_brl:null,legs:[{contract_id:'PETRK376',option_type:'CALL',strike:37.6,expiration_date:'2026-11-20',trade_side:'BUY',quantity_contract_units:100,contract_multiplier:100,price_field:'ask',price_brl_per_underlying_unit:0.11,gross_incremental_cash_flow_brl:-1100,source:'OPLAB',quote_as_of:'2026-10-06T14:00:00+00:00'},{contract_id:'PETRK400',option_type:'CALL',strike:40,expiration_date:'2026-12-18',trade_side:'SELL',quantity_contract_units:100,contract_multiplier:100,price_field:'bid',price_brl_per_underlying_unit:0.015,gross_incremental_cash_flow_brl:150,source:'OPLAB',quote_as_of:'2026-10-06T14:00:00+00:00'}]}],portfolio_before:{cash_status:'UNKNOWN',positions:[]},portfolio_after_close:{positions:[],cash_after_brl:null},portfolio_after_roll:{positions:[],cash_after_brl:null},comparison:{ranking:'NOT_APPLIED',reason:'Sem ranking.'},limitations:['Custos parciais.']};
+    return route.fulfill({json:{status:'COMPLETED',result,sources:[],audit:[],error:null},headers:{'Access-Control-Allow-Origin':'*'}});
+   }
    if(body.task==='A opção é PETRK376.'||body.task==='100 unidades.'){
     const selected=body.task==='100 unidades.';
     const result={lab_position_selection:{option_id:'PETRK376',side:'SHORT',snapshot_as_of:'2026-10-06',available_quantity_units:2500,...(selected?{selected_quantity_units:100}:{}),position:{underlying_ticker:'PETR4',option_type:'CALL',strike:37.6,expiration_date:'2026-11-20',source_ref:'fixture:current-snapshot'}},...(selected?{summary:'Posição e quantidade identificadas; cálculos pendentes.'}:{lab_clarification:{status:'NEEDS_CLARIFICATION',question:'Deseja analisar toda a posição ou quantas unidades?',reason:'Quantidade explícita necessária.'}}),derived_synthesis_status:'NOT_REQUESTED'};
@@ -64,6 +72,19 @@ try{
  assert.equal(requests.at(-1).context.lab_conversation[1].response.lab_position_selection.option_id,'PETRK376');
  assert.equal(await identified.getByText('Síntese concluída',{exact:false}).count(),0);
  await page.screenshot({path:resolve(out,'lab-position-selection-fixture.png'),animations:'disabled'});
+
+ await panel.getByLabel('Ajustar ou aprofundar esta análise').fill('Compare manter, encerrar e rolar.');
+ await panel.getByRole('button',{name:'Enviar continuação',exact:true}).click();
+ const candidates=panel.getByRole('article',{name:'Análise 4'});
+ await candidates.getByText('PETRK400',{exact:false}).waitFor();
+ assert.equal(requests.at(-1).context.lab_conversation[1].response.lab_position_selection.status,'POSITION_AND_QUANTITY_IDENTIFIED');
+ await panel.getByLabel('Ajustar ou aprofundar esta análise').fill('PETRK400');
+ await panel.getByRole('button',{name:'Enviar continuação',exact:true}).click();
+ const comparison=panel.getByRole('article',{name:'Análise 5'});
+ await comparison.getByRole('region',{name:'Comparação de manter, encerrar e rolar no Strategy Lab'}).waitFor();
+ await comparison.getByText('Fluxos incrementais brutos; não representam lucro ou retorno esperado',{exact:true}).waitFor();
+ await comparison.getByText('UNKNOWN · histórico de abertura/custos',{exact:false}).waitFor();
+ await page.screenshot({path:resolve(out,'lab-management-comparison-fixture.png'),animations:'disabled'});
  assert.deepEqual(errors,[]);
- console.log('PASS LAB-01/02/06: central response, no hidden defaults, continuation and reset (fixtures).');
+ console.log('PASS LAB-01/02/03/04/05/06/07: clarification, current position, exact roll choice, three alternatives and provenance (fixtures).');
 }finally{await browser.close();}

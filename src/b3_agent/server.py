@@ -1116,6 +1116,112 @@ def orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
             ticker=request.ticker,
             context=request.context,
         )
+        from b3_agent.routing.lab_option_management import (
+            compare_management, management_selection_from_turns,
+        )
+        management_context = management_selection_from_turns(normalized)
+        if management_context is not None:
+            if normalized.context.get('as_of') is not None:
+                raise ValueError('Option management requires current portfolio and quotes')
+            prior_selection, management_inputs = management_context
+            import hashlib
+            from datetime import datetime
+            from zoneinfo import ZoneInfo
+            from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
+            from b3_agent.routing.lab_position import resolve_position
+            from b3_agent.providers.oplab.options import OplabOptionsAdapter
+            portfolio_path = settings.data_dir / 'imports' / 'portfolio.xlsx'
+            revision = hashlib.sha256(portfolio_path.read_bytes()).hexdigest() if portfolio_path.is_file() else None
+            portfolio = BtgRendaVariavelLoader().load(portfolio_path) if portfolio_path.is_file() else None
+            as_of = datetime.now(timezone.utc)
+            current = resolve_position({'option_id': prior_selection.get('option_id'),
+                                        'quantity_units': prior_selection.get('selected_quantity_units')},
+                                       portfolio, revision=revision,
+                                       today=datetime.now(ZoneInfo('America/Sao_Paulo')).date())
+            if current.get('lab_clarification'):
+                return _response_to_model(OrchestratorResponse(status='NEEDS_CLARIFICATION', result=current))
+            if revision is not None and hashlib.sha256(portfolio_path.read_bytes()).hexdigest() != revision:
+                raise ValueError('Portfolio changed during option comparison; retry against the current snapshot')
+            selected_id = current['lab_position_selection']['position']['position_id']
+            position = next(p for p in portfolio.positions if p.position_id == selected_id)
+            provider = OplabOptionsAdapter()
+            underlying = position.underlying_ticker
+            contracts, quotes = provider.get_snapshot(underlying, as_of)
+            old_id = position.ticker.upper()
+            old_contracts = [c for c in contracts if c.option_id.upper() == old_id]
+            old_quotes = [q for q in quotes if q.option_id.upper() == old_id]
+            if len(old_contracts) != 1 or len(old_quotes) != 1:
+                raise ValueError('Current OPLAB chain has no unique identity and quote for the held option')
+            destination_id = management_inputs.get('destination_option_id')
+            if not destination_id:
+                candidates = []
+                for contract in contracts:
+                    if contract.option_type.upper() != position.option_type.upper() or contract.expiration_date <= old_contracts[0].expiration_date:
+                        continue
+                    quote_matches = [q for q in quotes if q.option_id.upper() == contract.option_id.upper()]
+                    if len(quote_matches) != 1:
+                        continue
+                    quote = quote_matches[0]
+                    executable = quote.bid if position.quantity < 0 else quote.ask
+                    if executable is None:
+                        continue
+                    try:
+                        from b3_agent.routing.lab_option_management import _valid_contract_quote
+                        _valid_contract_quote(contract, quote, option_id=contract.option_id.upper(),
+                                              underlying=underlying.upper(), option_type=position.option_type.upper(),
+                                              strike=None, expiration=contract.expiration_date, as_of=as_of)
+                    except ValueError:
+                        continue
+                    candidates.append({'option_id': contract.option_id, 'option_type': contract.option_type,
+                                       'strike': contract.strike, 'expiration_date': contract.expiration_date.isoformat(),
+                                       'contract_multiplier': contract.contract_multiplier,
+                                       'executable_side': 'BID' if position.quantity < 0 else 'ASK',
+                                       'executable_quote_brl': executable,
+                                       'quote_as_of': quote.observation_timestamp.isoformat(), 'source': quote.source})
+                candidates.sort(key=lambda row: (row['expiration_date'], row['strike'], row['option_id']))
+                clarification = {'lab_position_selection': current['lab_position_selection'],
+                                 'lab_clarification': {'status': 'NEEDS_CLARIFICATION',
+                                    'missing_fields': ['destination_option_id'],
+                                    'question': 'Escolha o código exato do novo contrato de rolagem entre os contratos elegíveis abaixo.',
+                                    'reason': 'A rolagem exige nova opção do mesmo ativo e tipo, com vencimento posterior. Nenhuma foi escolhida automaticamente.'},
+                                 'lab_roll_candidates': candidates,
+                                 'summary': 'Selecione o contrato de destino para calcular manter, encerrar e rolar.',
+                                 'derived_synthesis_status': 'NOT_REQUESTED',
+                                 'telemetry': {'llm_calls': 0, 'option_chain_calls': 1}}
+                return _response_to_model(OrchestratorResponse(status='NEEDS_CLARIFICATION', result=clarification))
+            destination_id = str(destination_id).upper().strip()
+            destination_contracts = [c for c in contracts if c.option_id.upper() == destination_id]
+            destination_quotes = [q for q in quotes if q.option_id.upper() == destination_id]
+            if len(destination_contracts) != 1 or len(destination_quotes) != 1:
+                raise ValueError('Selected destination contract is not uniquely available in the current OPLAB chain')
+            result = compare_management(
+                position=position, quantity_units=int(current['lab_position_selection']['selected_quantity_units']),
+                old_contract=old_contracts[0], old_quote=old_quotes[0],
+                new_contract=destination_contracts[0], new_quote=destination_quotes[0],
+                portfolio=portfolio, portfolio_revision=revision or 'UNKNOWN', as_of=as_of,
+                transaction_costs_brl=management_inputs.get('transaction_costs_brl'))
+            result['telemetry'] = {'llm_calls': 0, 'option_chain_calls': 1}
+            deterministic_response = OrchestratorResponse(status='COMPLETED', result=result,
+                                                          sources=tuple(result['source_refs']))
+            if normalized.context.get('analysis_mode') == 'deterministic':
+                result['derived_synthesis_status'] = 'NOT_REQUESTED'
+                return _response_to_model(deterministic_response)
+            synthesis_request = OrchestratorRequest(
+                task=(f"Compare manter, encerrar ou rolar a posição de opção {old_id} "
+                      f"para {destination_id}. Explique vantagens, contrapontos e condições "
+                      "de mudança usando a comparação determinística fornecida; fluxo de caixa "
+                      "não é lucro nem retorno esperado. Não recomende ordem."),
+                ticker=underlying,
+                context={**normalized.context, 'selected_ticker': underlying,
+                         'response_guidance': (
+                             'Explique a comparação determinística lab-option-management-v1. '
+                             'Não altere preços, quantidades, lados, custos ou fontes. '
+                             'Não trate fluxo incremental como lucro, retorno esperado ou recomendação. '
+                             'Explicite dados UNKNOWN e limitações de comparação entre vencimentos.'
+                         )},
+            )
+            return _response_to_model(_workspace_intelligence_response(
+                synthesis_request, deterministic_response=deterministic_response))
         from b3_agent.routing.lab_position import position_intent, resolve_position
         position_inputs = position_intent(normalized)
         if position_inputs is not None:

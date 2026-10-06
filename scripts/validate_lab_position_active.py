@@ -17,7 +17,8 @@ assert pid > 0
 boot = next(int(line.split()[1]) for line in Path('/proc/stat').read_text().splitlines() if line.startswith('btime '))
 fields = Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()
 started = boot + int(fields[19]) / os.sysconf('SC_CLK_TCK')
-for name in ('src/b3_agent/server.py', 'src/b3_agent/routing/lab_position.py'):
+for name in ('src/b3_agent/server.py', 'src/b3_agent/routing/lab_position.py',
+             'src/b3_agent/routing/lab_option_management.py'):
     installed = runtime/name
     assert hashlib.sha256(installed.read_bytes()).digest() == hashlib.sha256(Path(name).read_bytes()).digest()
     assert started >= installed.stat().st_mtime, 'Restart required after installation'
@@ -40,7 +41,7 @@ today = datetime.now(ZoneInfo('America/Sao_Paulo')).date()
 positions = [p for p in portfolio.positions if p.instrument_type == 'OPTION' and p.expiration_date >= today]
 assert positions, 'No open option in current BTG snapshot; real selection acceptance unavailable'
 position = positions[0]
-context = {'workspace': 'Strategy Lab'}
+context = {'workspace': 'Strategy Lab', 'analysis_mode': 'deterministic'}
 with httpx.Client(base_url='http://127.0.0.1:8000', timeout=15) as client:
     response = client.post('/orchestrate', json={'task': f'Quero encerrar {position.ticker}.', 'context': context})
     assert response.status_code == 200
@@ -59,5 +60,49 @@ with httpx.Client(base_url='http://127.0.0.1:8000', timeout=15) as client:
     assert selection['operation_calculated'] is False
     assert selection['execution_authorized'] is False
     assert payload['result']['telemetry'] == {'llm_calls': 0, 'option_chain_calls': 0}
+    selected_turns = [
+        {'question': f'Quero encerrar {position.ticker}.', 'response': first['result']},
+        {'question': 'Toda a posição.', 'response': payload['result']},
+    ]
+    compare_context = {**context, 'lab_request_kind': 'follow_up',
+                       'lab_conversation': selected_turns}
+    response = client.post('/orchestrate', json={
+        'task': 'Compare manter, encerrar e rolar.', 'context': compare_context})
+    assert response.status_code == 200
+    candidates_response = response.json()
+    assert candidates_response['status'] == 'NEEDS_CLARIFICATION'
+    candidates = candidates_response['result']['lab_roll_candidates']
+    assert candidates, 'No eligible real OPLAB roll destination; management comparison not accepted'
+    assert candidates_response['result']['telemetry'] == {'llm_calls': 0, 'option_chain_calls': 1}
+    candidate = candidates[0]
+    selected_turns.append({'question': 'Compare manter, encerrar e rolar.',
+                           'response': candidates_response['result']})
+    response = client.post('/orchestrate', json={
+        'task': candidate['option_id'],
+        'context': {**context, 'lab_request_kind': 'follow_up',
+                    'lab_conversation': selected_turns}})
+    assert response.status_code == 200
+    result_response = response.json()
+    assert result_response['status'] == 'COMPLETED'
+    result = result_response['result']
+    assert result['policy_version'] == 'lab-option-management-v1'
+    assert [item['alternative_id'] for item in result['alternatives']] == ['KEEP', 'CLOSE', 'ROLL']
+    assert result['position']['option_id'] == position.ticker
+    assert result['position']['selected_quantity_units'] == abs(position.quantity)
+    assert result['comparison']['ranking'] == 'NOT_APPLIED'
+    assert result['derived_synthesis_status'] == 'NOT_REQUESTED'
+    assert result['telemetry'] == {'llm_calls': 0, 'option_chain_calls': 1}
+    close_leg = result['alternatives'][1]['legs'][0]
+    roll_legs = result['alternatives'][2]['legs']
+    assert close_leg['contract_id'] == position.ticker
+    assert roll_legs[1]['contract_id'] == candidate['option_id']
+    assert close_leg['trade_side'] == ('BUY' if position.quantity < 0 else 'SELL')
+    all_legs = [close_leg, *roll_legs]
+    assert all(leg['price_field'] == ('ask' if leg['trade_side'] == 'BUY' else 'bid')
+               for leg in all_legs)
+    assert all(leg['contract_multiplier'] > 0 and leg['source'] and leg['quote_as_of']
+               for leg in all_legs)
+    assert all(item['accumulated_realized_pnl_brl'] is None for item in result['alternatives'])
+    assert result['portfolio_after_close']['cash_status'] == 'UNKNOWN_COSTS_OR_CASH_BASIS'
 assert hashlib.sha256(path.read_bytes()).hexdigest() == revision
-print('ACTIVE_LAB_CURRENT_POSITION_AND_QUANTITY=PASS; calculations pending', flush=True)
+print('ACTIVE_LAB_CURRENT_POSITION_QUANTITY_ROLL_AND_COMPARISON=PASS', flush=True)
