@@ -82,4 +82,47 @@ for row in result["opportunity_screen"]["rows"]:
     assert abs(evidence["notional_brl"]+evidence["entry_cost_brl"]+evidence["residual_cash_brl"]-10000)<1e-7
     assert evidence["expected_return"] is None
 print(json.dumps({"case":"ACTIVE_SOURCED_OPPORTUNITIES","http":200,"elapsed_ms":opportunity_response["elapsed_ms"],"target_count":sum(len(row["economic_evidence"]["institution_target_potential"]) for row in result["opportunity_screen"]["rows"]),"cash_conservation":"PASS","llm_calls":0}),flush=True)
+
+# Exercise the same integrated contract used by the Opportunities workspace UI
+# against the active systemd process after the candidate revision is installed.
+snapshot_response=call_json(base+"/portfolio/current",None,15)
+assert snapshot_response["http_status"]==200 and not snapshot_response["transport_error_type"]
+snapshot=snapshot_response["response"] or {}
+positions=snapshot.get("positions") or []
+expected_stock={str(p.get("ticker","")).upper() for p in positions
+    if str(p.get("instrument_type","")).upper()=="STOCK" and p.get("ticker")}
+expected_option_underlyings={str(p.get("underlying_ticker","")).upper() for p in positions
+    if str(p.get("instrument_type","")).upper()=="OPTION" and p.get("underlying_ticker")}
+integrated_request={"task":"UC-03: revise as ações acompanhadas e toda a carteira vigente. Use triagem determinística, contexto de ações e opções já possuídas, evidências disponíveis e síntese sênior. Explique cobertura e limitações sem inventar recomendação, retorno ou probabilidade.",
+    "context":{"workspace":"Opportunities","selected_ticker":None,"opportunity_assets":["ITUB4","BBDC4"],
+        "opportunity_objective":"LOWEST_REALIZED_VOLATILITY_60D","include_portfolio_stocks":True,"research_mode":"stored_only"}}
+integrated_response=call_json(base+"/orchestrate",integrated_request,240)
+write_private_report(Path.home()/".local/share/b3-investment-options-agent/live-validation/active-opportunities-integrated",
+    {"instance":"ACTIVE HTTP systemd after tested revision install","response":integrated_response})
+integrated_body=integrated_response.get("response") or {}
+assert integrated_response["http_status"]==200 and not integrated_body.get("error")
+integrated_result=integrated_body.get("result") or {}
+integrated_screen=integrated_result.get("opportunity_screen") or {}
+integrated_scope=integrated_result.get("opportunity_research_scope") or {}
+assert integrated_result.get("derived_synthesis_status")=="COMPLETED"
+assert integrated_screen.get("candidate_universe")==["ITUB4","BBDC4"]
+integrated_stock=set(integrated_screen.get("portfolio_stock_universe") or [])
+integrated_options=set(integrated_screen.get("portfolio_option_underlying_universe") or [])
+integrated_union=set(integrated_screen.get("requested_universe") or [])
+expected_union={"ITUB4","BBDC4"}|expected_stock|expected_option_underlyings
+assert expected_union==integrated_union, "Active Opportunities lost candidate/stock/option snapshot coverage"
+assert len(integrated_screen.get("rows") or [])==len(expected_union)
+assert integrated_scope.get("policy_version")=="B3_OPPORTUNITY_RESEARCH_ENRICHMENT_V1"
+assert len(integrated_scope.get("context_tickers") or [])<=8
+assert expected_stock<=integrated_stock and expected_option_underlyings<=integrated_options
+synthesis=integrated_result.get("synthesis") or {}
+proposal=integrated_result.get("decision_proposal") or integrated_result.get("proposal") or {}
+narrative=next((v for v in (synthesis.get("summary"),proposal.get("thesis"),proposal.get("rationale"),integrated_result.get("summary")) if isinstance(v,str) and v.strip()),None)
+assert narrative, "Active Opportunities has no usable senior narrative"
+print(json.dumps({"case":"ACTIVE_INTEGRATED_OPPORTUNITIES","http":200,
+    "elapsed_ms":integrated_response["elapsed_ms"],"synthesis_status":integrated_result.get("derived_synthesis_status"),
+    "candidate_count":len(integrated_screen.get("candidate_universe") or []),
+    "portfolio_stock_count":len(integrated_stock),"option_underlying_count":len(integrated_options),
+    "requested_universe_count":len(integrated_union),"research_context_count":integrated_scope.get("contextual_research_count"),
+    "source_count":len(integrated_body.get("sources") or [])}),flush=True)
 print("ACTIVE_BACKEND_CLOSURE=PASS", flush=True)

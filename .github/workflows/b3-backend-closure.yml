@@ -7,6 +7,13 @@ on:
       - tests/test_bradesco_dividends.py
       - scripts/validate_backend_active_http.py
       - .github/workflows/b3-backend-closure.yml
+      - src/b3_agent/server.py
+      - src/b3_agent/opportunity_screen.py
+      - src/b3_agent/opportunity_materiality.py
+      - src/b3_agent/stock_opportunity_service.py
+      - frontend/src/App.tsx
+      - frontend/scripts/validate-cockpit-real.mjs
+      - scripts/validate_stock_screen_real.py
   workflow_dispatch:
 permissions:
   contents: read
