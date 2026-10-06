@@ -42,8 +42,8 @@ assert positions, 'No open option in current BTG snapshot; real selection accept
 context = {'workspace': 'Strategy Lab', 'analysis_mode': 'deterministic'}
 accepted = False
 with httpx.Client(base_url='http://127.0.0.1:8000', timeout=15) as client:
-    # The active gate must run against the just-installed source revision.
-    # Try each open option until one has an admissible later executable quote; do not weaken quote rules.
+    # Verify deterministic option management and output against the installed service revision.
+    # Try each open option until one has an admissible later executable quote; keep quote rules strict.
     for position in positions:
         response = client.post('/orchestrate', json={'task': f'Quero encerrar {position.ticker}.', 'context': context})
         assert response.status_code == 200
