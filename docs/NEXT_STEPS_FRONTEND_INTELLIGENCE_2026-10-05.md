@@ -1,5 +1,14 @@
 # Retomada — Inteligência do frontend B3 (2026-10-05)
 
+## Verificação real do Qwen — 06/10/2026, 06h32 (America/Sao_Paulo)
+
+- Diagnóstico read-only no Ubuntu: [run 37443614434 — SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37443614434). O sucesso deste workflow certifica a leitura, não o sucesso completo da cadeia.
+- Store de produção `/opt/b3-runtime/data`: um dossier READY nas últimas 24 horas, modelo `qwen3:4b-instruct-2507-q4_K_M`, criado em 05/10 às 22h10m20 BRT. Nenhum dossier FAILED/DEGRADED observado nessa janela. Fila atual vazia. Último manifesto do consumidor em 06/10 às 06h25 registra zero itens processados e zero falhas; foi uma execução sem trabalho.
+- Store usada pela repetição manual da coleta `/opt/b3-investment-options-agent/data`: quatro itens PENDING, todos vencidos para processamento, sem dossier nem manifesto do Qwen. Não confundir esta fila com a fila vazia da produção. A configuração efetiva do teste manual e a do consumidor devem ser alinhadas antes do aceite integrado; não mover nem duplicar filas sem verificar identidade/fingerprint e origem.
+- A repetição da coleta [run 37443192215](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37443192215) gravou resumo novo, mas terminou PARTIAL/exit 2: 24 tickers aceitos, quatro identidades rejeitadas, cobertura CVM de 22/24, duas identidades de emissor sem resolução; zero falhas por ativo e 24 projeções de dividendos. O KeyError não voltou. O critério de aceite não foi relaxado.
+- Conclusão: Qwen processou com sucesso a evidência enfileirada na produção em 05/10, mas a cadeia completa da repetição manual NÃO está validada. Próximo passo operacional: usar no workflow a mesma configuração/data_dir efetiva do serviço systemd, confirmar os quatro itens sem duplicação e resolver/explicitar a cobertura dos dois emissores CVM.
+- Opportunities continua aceita conforme o checkpoint de encerramento; não reabrir com base em estados históricos da descrição da PR. Strategy Lab e Market Intelligence continuam pendentes de fechamento.
+
 ## Atualização operacional — 06/10/2026 UTC
 
 - A correção da coleta noturna está em `scripts/run_nightly_intelligence.py`: identidades monitoradas são validadas e deduplicadas antes das etapas agendadas; ativos inválidos ficam fora dos provedores de ações/dividendos, sem alterar a carteira. O resumo `runner_latest.json` registra contagem e hashes curtos, sem símbolos rejeitados.
