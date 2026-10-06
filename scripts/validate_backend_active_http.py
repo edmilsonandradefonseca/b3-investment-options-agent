@@ -19,7 +19,13 @@ rows = pair["rows"]
 assert len(rows) == 2 and {row["ticker"] for row in rows} == {"ITUB4","BBDC4"}
 assert all(row["current_price_brl"] is not None and row["capital_required_brl"] == 10000 for row in rows)
 brapi_budget = call_json(base + "/providers/budget/brapi", None, 15)
-print(json.dumps({"case":"ACTIVE_BRAPI_BUDGET","http":brapi_budget["http_status"],"budget":brapi_budget.get("response")},ensure_ascii=False),flush=True)
+budget_state=brapi_budget.get("response") or {}
+print(json.dumps({"case":"ACTIVE_BRAPI_BUDGET","http":brapi_budget["http_status"],"budget":budget_state},ensure_ascii=False),flush=True)
+assert brapi_budget["http_status"]==200
+assert budget_state.get("period")=="2026-10-06"
+assert budget_state.get("monthly_hard_limit")==15000 and budget_state.get("baseline_used")==770
+assert budget_state.get("local_ceiling")==14130 and budget_state.get("local_remaining",0)>0
+assert budget_state.get("status")=="AVAILABLE" and budget_state.get("account_balance_verified") is False
 print(json.dumps({"case":"ACTIVE_FUNDAMENTAL_DIAGNOSTIC","rows":[{"ticker":row["ticker"],"admitted_count":len(row.get("fundamental_metrics") or {}),"excluded_metrics":row.get("excluded_metrics") or [],"source_refs":row.get("source_refs") or [],"provider":((result.get("asset_evidence") or {}).get(row["ticker"]) or {}).get("fundamentals",{}).get("provider"),"metric_count":((result.get("asset_evidence") or {}).get(row["ticker"]) or {}).get("fundamentals",{}).get("metric_count"),"fundamental_limitations":[item for item in ((result.get("asset_evidence") or {}).get(row["ticker"]) or {}).get("limitations",[]) if "Fundamentals" in item]} for row in rows]},ensure_ascii=False),flush=True)
 missing_fundamentals = [row["ticker"] for row in rows if not row.get("fundamental_metrics")]
 asset_evidence = result.get("asset_evidence") or {}
