@@ -133,7 +133,7 @@ assert len(integrated_screen.get("rows") or [])==len(expected_union)
 assert integrated_scope.get("policy_version")=="B3_OPPORTUNITY_RESEARCH_ENRICHMENT_V1"
 assert len(integrated_scope.get("context_tickers") or [])<=8
 assert expected_stock<=integrated_stock and expected_option_underlyings<=integrated_options
-assert integrated_scope.get("portfolio_scope",{}).get("unresolved_option_underlying_count")==unresolved_option_underlying_count
+assert integrated_screen.get("portfolio_scope",{}).get("unresolved_option_underlying_count")==unresolved_option_underlying_count
 synthesis=integrated_result.get("synthesis") or {}
 proposal=integrated_result.get("decision_proposal") or integrated_result.get("proposal") or {}
 narrative=next((v for v in (synthesis.get("summary"),proposal.get("thesis"),proposal.get("rationale"),integrated_result.get("summary")) if isinstance(v,str) and v.strip()),None)
