@@ -1,0 +1,88 @@
+name: B3 Qwen read-only verification
+on:
+  push:
+    branches: [feature/react-functional-v43-integration]
+    paths: [.github/workflows/b3-qwen-verification.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 5
+    steps:
+      - name: Inspect persisted Qwen results and queue without invoking the model
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /opt/b3-investment-options-agent
+          for env_file in /opt/joao-runtime/joao.env /etc/b3-runtime.env /opt/b3-runtime/b3.env; do
+            if test -r "$env_file"; then
+              set -a
+              . "$env_file"
+              set +a
+            fi
+          done
+          export PYTHONPATH=/opt/b3-investment-options-agent/src
+          .venv/bin/python - <<'PY'
+          import json, subprocess
+          from collections import Counter
+          from datetime import datetime, timezone, timedelta
+          from pathlib import Path
+          from b3_agent.config import settings
+          now = datetime.now(timezone.utc)
+          root = settings.data_dir / "derived" / "local_evidence_analyst"
+          def read(path):
+              try:
+                  return json.loads(path.read_text())
+              except (OSError, ValueError):
+                  return {}
+          latest = read(root / "manifests" / "latest.json")
+          allowed = ("as_of", "started_at", "batches", "worker_busy", "remaining_queue", "processed", "ready", "degraded", "failed", "deferred")
+          print(json.dumps({"case": "QWEN_LATEST_MANIFEST", **{k: latest[k] for k in allowed if k in latest}}))
+          nightly = read(settings.data_dir / "derived" / "nightly_intelligence" / "runner_latest.json")
+          print(json.dumps({"case": "NIGHTLY_CONTEXT", **{k: nightly[k] for k in ("as_of", "status", "queued_local_analysis", "local_analysis_enqueues", "coverage_insufficient", "failed", "official_sources") if k in nightly}}))
+          counts, models, flags = Counter(), Counter(), Counter()
+          recent, malformed = [], 0
+          for path in root.joinpath("runs").glob("*.json"):
+              row = read(path)
+              try:
+                  created = datetime.fromisoformat(row["created_at"].replace("Z", "+00:00"))
+                  if created.tzinfo is None:
+                      created = created.replace(tzinfo=timezone.utc)
+              except (KeyError, ValueError, TypeError):
+                  malformed += 1
+                  continue
+              if created < now - timedelta(hours=24):
+                  continue
+              counts[row.get("status", "UNKNOWN")] += 1
+              models[row.get("model", "UNKNOWN")] += 1
+              flags.update(row.get("quality_flags", []))
+              recent.append((created, row))
+          newest = max(recent, default=None, key=lambda item: item[0])
+          print(json.dumps({"case": "QWEN_LAST_24H", "observed_at": now.isoformat(), "status_counts": dict(counts), "model_counts": dict(models), "quality_flag_counts": dict(flags), "unreadable_run_count": malformed, "newest_created_at": newest[0].isoformat() if newest else None}))
+          if newest:
+              row = newest[1]
+              analysis = row.get("analysis") or {}
+              keys = ("summary", "risks", "catalysts", "contradictions", "questions_for_senior_review", "escalation_recommended", "evidence_refs")
+              print(json.dumps({"case": "QWEN_NEWEST_RESULT", **{k: row.get(k) for k in ("status", "model", "eval_count", "num_predict", "thinking_chars", "quality_flags")}, "field_types": {k: type(analysis.get(k)).__name__ for k in keys}}))
+          queue, due, retries, oldest, unreadable = Counter(), 0, 0, None, 0
+          for path in root.joinpath("queue").glob("*.json"):
+              row = read(path)
+              if not row:
+                  unreadable += 1
+                  continue
+              queue[row.get("status", "UNKNOWN")] += 1
+              retries += bool(row.get("attempt_count", 0))
+              try:
+                  created = datetime.fromisoformat(row["created_at"].replace("Z", "+00:00"))
+                  oldest = min(oldest, created) if oldest else created
+                  next_attempt = row.get("next_attempt_at")
+                  due += not next_attempt or datetime.fromisoformat(next_attempt.replace("Z", "+00:00")) <= now
+              except (KeyError, TypeError, ValueError):
+                  unreadable += 1
+          print(json.dumps({"case": "QWEN_CURRENT_QUEUE", "status_counts": dict(queue), "due_count": due, "retry_count": retries, "unreadable_count": unreadable, "oldest_created_at": oldest.isoformat() if oldest else None}))
+          for unit in ("b3-local-evidence-analyst.timer", "b3-local-evidence-analyst.service"):
+              result = subprocess.run(["systemctl", "show", unit, "--property=ActiveState,SubState,Result,ExecMainStatus,ExecMainStartTimestamp,ExecMainExitTimestamp,NextElapseUSecRealtime"], text=True, capture_output=True, timeout=10)
+              print(json.dumps({"case": "QWEN_SYSTEMD", "unit": unit, "query_exit": result.returncode, "properties": dict(line.split("=", 1) for line in result.stdout.splitlines() if "=" in line)}))
+          PY
