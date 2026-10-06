@@ -6,7 +6,7 @@ Em 06/10, o incremento adiciona comparação `manter/encerrar/rolar` sobre opç�
 
 Verificado localmente: `compileall`, `git diff --check`, build React e `check-decision-rendering` passaram. O ambiente local não tem `pytest` nem Chromium Playwright; testes Python e browser serão confirmados na CI/workflows Ubuntu. **Ainda não validado:** cadeia de opções real no processo ativo, reinício desta revisão e walkthrough visual atualizado. Não declarar entrega aceita nem Lab fechado até esses gates terminarem. Se o instalador do runner pedir autenticação para reiniciar, o próximo passo é reiniciar o runtime e repetir o workflow de aceite ativo.
 
-A primeira CI deste incremento passou no build/renderizador e em 1.018 testes, mas falhou numa asserção excessivamente específica que esperava a expressão “lucro acumulado”; a regra já cobria que fluxo de rolagem não é lucro. A asserção foi corrigida para verificar essa regra diretamente. A repetição da CI e os gates Ubuntu estão pendentes.
+A primeira CI deste incremento passou no build/renderizador e em 1.018 testes, mas falhou numa asserção excessivamente específica que esperava a expressão “lucro acumulado”; a regra já cobria que fluxo de rolagem não é lucro. A asserção foi corrigida para verificar essa regra diretamente. A repetição da CI e os gates Ubuntu estão pendentes. O walkthrough `37487319322` confirmou que a primeira versão não exibia a lista de candidatos devolvida pela API; a apresentação central foi corrigida e o gate visual será repetido. O gate ativo `37487319451` comparou o processo ainda não atualizado e falhou corretamente na verificação de hash; não houve instalação nem reinício.
 
 
 ## Aceite da seleção no processo ativo — 06/10/2026, 11h20 BRT
