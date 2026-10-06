@@ -90,6 +90,8 @@ export default function AnalysisOutput({ data }: { data: OrchestrateResponse | n
   if (!data) return <p className="muted">Consulte o backend para obter análise canônica.</p>;
 
   const result = data.result || {};
+  const clarification = asObject(result.lab_clarification);
+  if (clarification?.status === 'NEEDS_CLARIFICATION') return <section className="analysis-summary" aria-label="Esclarecimento necessário para a estratégia"><h3>Identificar a opção</h3><p>{asText(clarification.question)}</p><p className="muted">{asText(clarification.reason)}</p><p>Responda no campo de continuação abaixo. Nenhuma cadeia foi consultada para escolher um contrato em seu lugar.</p></section>;
   const synthesis = asObject(result.synthesis);
   const proposal =
     asObject(result.proposal) ??

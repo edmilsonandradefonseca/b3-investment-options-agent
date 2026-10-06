@@ -10,7 +10,7 @@ const examples = ['Tenho R$ 10 mil. Comprar ITUB4 ou BBDC4?', 'Acredito que PETR
 export default function StrategySession({researchMode='stored_first',portfolioRevision=null}:{researchMode?:string;portfolioRevision?:string|null}){
  const [question,setQuestion]=useState('');
  const [turns,setTurns]=useState<Turn[]>([]);
- const [status,setStatus]=useState<'idle'|'running'|'done'|'error'>('idle');
+ const [status,setStatus]=useState<'idle'|'running'|'done'|'clarification'|'error'>('idle');
  const inFlight=useRef(false);
  const [retryQuestion,setRetryQuestion]=useState('');
  async function analyze(text=question){
@@ -26,6 +26,7 @@ export default function StrategySession({researchMode='stored_first',portfolioRe
     workspace:'Strategy Lab',research_mode:researchMode,
     lab_conversation:previous.map(t=>({question:t.question,response:{
      summary:t.response?.result.summary,
+     lab_clarification:t.response?.result.lab_clarification,
      proposal:t.response?.result.proposal??t.response?.result.decision_proposal,
      synthesis:t.response?.result.synthesis,
      stock_purchase_comparison:t.response?.result.stock_purchase_comparison,
@@ -38,15 +39,15 @@ export default function StrategySession({researchMode='stored_first',portfolioRe
    }});
    const failed=Boolean(response.error)||response.result.derived_synthesis_status==='FAILED';
    setTurns(v=>v.map((t,i)=>i===index?{...t,response,error:failed?'Não foi possível concluir a síntese. Os dados recebidos permanecem disponíveis.':undefined}:t));
-   setStatus(failed?'error':'done');
+   setStatus(failed?'error':response.status==='NEEDS_CLARIFICATION'?'clarification':'done');
   }catch{
    setTurns(v=>v.map((t,i)=>i===index?{...t,error:'Não foi possível concluir a análise. Tente novamente; as respostas anteriores foram preservadas.'}:t));
    setStatus('error');
   }finally{inFlight.current=false;}
  }
- const label={idle:'Aguardando',running:'Em processamento · avaliando dados e evidências',done:'Concluído',error:'Problema na análise'}[status];
+ const label={idle:'Aguardando',running:'Em processamento · avaliando dados e evidências',done:'Concluído',clarification:'Aguardando identificação do contrato',error:'Problema na análise'}[status];
  return <section className="panel strategy-session" aria-label="Pergunta e análise do Strategy Lab">
-  <div className="section-head"><h2>O que você deseja analisar?</h2><div className="action-row"><span role="status" aria-live="polite"><span aria-hidden="true" style={{color:{idle:'#94a3b8',running:'#eab308',done:'#22c55e',error:'#ef4444'}[status]}}>● </span>{label}</span><button type="button" disabled={status==='running'} onClick={()=>{setTurns([]);setQuestion('');setRetryQuestion('');setStatus('idle')}}>Nova análise</button></div></div>
+  <div className="section-head"><h2>O que você deseja analisar?</h2><div className="action-row"><span role="status" aria-live="polite"><span aria-hidden="true" style={{color:{idle:'#94a3b8',running:'#eab308',done:'#22c55e',clarification:'#94a3b8',error:'#ef4444'}[status]}}>● </span>{label}</span><button type="button" disabled={status==='running'} onClick={()=>{setTurns([]);setQuestion('');setRetryQuestion('');setStatus('idle')}}>Nova análise</button></div></div>
   <p>Escreva uma pergunta, uma tese ou as alternativas que deseja comparar.</p>
   {!turns.length&&<div className="workspace-tabs">{examples.map(text=><button key={text} type="button" disabled={status==='running'} onClick={()=>setQuestion(text)}>{text}</button>)}</div>}
   {turns.map((turn,i)=><article className="panel" key={i} aria-label={`Análise ${i+1}`}>

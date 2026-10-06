@@ -1116,6 +1116,10 @@ def orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
             ticker=request.ticker,
             context=request.context,
         )
+        from b3_agent.routing.lab_clarification import lab_operation_clarification
+        clarification = lab_operation_clarification(normalized)
+        if clarification is not None:
+            return _response_to_model(OrchestratorResponse(status='NEEDS_CLARIFICATION', result=clarification))
         normalized = explicit_stock_comparison(normalized)
         if normalized.context.get('funded_switch') is not None:
             if _workspace_name(normalized) != 'Strategy Lab' or normalized.context.get('as_of') is not None:

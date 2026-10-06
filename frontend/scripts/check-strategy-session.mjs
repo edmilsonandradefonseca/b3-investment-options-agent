@@ -15,6 +15,7 @@ try{
   const body=req.postDataJSON();
   if(req.url().endsWith('/orchestrate')&&body?.context?.workspace==='Strategy Lab'){
    requests.push(body);
+   if(body.task==='Vale manter, encerrar ou rolar uma opção da minha carteira?')return route.fulfill({json:{status:'NEEDS_CLARIFICATION',result:{lab_clarification:{status:'NEEDS_CLARIFICATION',question:'Qual é o código exato da opção que deseja analisar?',reason:'Informe o contrato.'},derived_synthesis_status:'NOT_REQUESTED'},sources:[],audit:[],error:null},headers:{'Access-Control-Allow-Origin':'*'}});
    return route.fulfill({json:{status:'COMPLETED',result:{summary:'Resposta de fixture: tese exige verificar premissas.',derived_synthesis_status:'COMPLETED'},sources:[],audit:[],error:null},headers:{'Access-Control-Allow-Origin':'*'}});
   }
   const json=req.url().endsWith('/health')?{status:'ok'}:req.url().includes('/transactions')?[]:req.url().endsWith('/orchestrate')?{status:'COMPLETED',result:{},sources:[],audit:[],error:null}:{positions:[],operations:[]};
@@ -41,6 +42,15 @@ try{
  await panel.getByRole('button',{name:'Analisar pergunta ou tese',exact:true}).click();
  await panel.getByText('Resposta de fixture: tese exige verificar premissas.',{exact:true}).waitFor();
  assert.equal(requests[2].context.lab_conversation.length,0);
+ await panel.getByRole('button',{name:'Nova análise',exact:true}).click();
+ await panel.getByLabel('Sua pergunta ou tese').fill('Vale manter, encerrar ou rolar uma opção da minha carteira?');
+ await panel.getByRole('button',{name:'Analisar pergunta ou tese',exact:true}).click();
+ await panel.getByRole('region',{name:'Esclarecimento necessário para a estratégia'}).getByText('Qual é o código exato da opção que deseja analisar?',{exact:true}).waitFor();
+ await panel.getByText('Aguardando identificação do contrato',{exact:false}).waitFor();
+ await panel.getByLabel('Ajustar ou aprofundar esta análise').fill('A opção é PETRK376.');
+ await panel.getByRole('button',{name:'Enviar continuação',exact:true}).click();
+ await panel.getByRole('article',{name:'Análise 2'}).getByText('Resposta de fixture: tese exige verificar premissas.',{exact:true}).waitFor();
+ assert.equal(requests.at(-1).context.lab_conversation[0].response.lab_clarification.status,'NEEDS_CLARIFICATION');
  assert.deepEqual(errors,[]);
  console.log('PASS LAB-01/02/06: central response, no hidden defaults, continuation and reset (fixtures).');
 }finally{await browser.close();}
