@@ -1,5 +1,22 @@
 # Retomada — Inteligência do frontend B3 (2026-10-05)
 
+## Checkpoint de encerramento — 05/10/2026 (America/Sao_Paulo)
+
+### Estado confirmado
+
+- Branch: `feature/react-functional-v43-integration`; PR [#66](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/pull/66) continua aberta em draft.
+- Revisão de código/teste visual: `a57745a1113c098492a752c3673814232b1bf052`. O commit atual ajusta o validador visual; não altera o backend de produção.
+- **Opportunities — vertical funcional aceita**: reinício de `b3-runtime.service` feito pelo usuário; o gate confirmou processo ativo posterior à instalação do backend e ausência de diferenças nos módulos de Opportunities entre o runtime e o código testado.
+- Aceitação integrada pelo HTTP ativo: [run 37395826026 — SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37395826026). HTTP 200, síntese sênior COMPLETED, 21 ações da carteira, 11 subjacentes de opções, universo completo de 24 ativos, 8 ativos no contexto de pesquisa e 57 fontes; resposta em 76,6 s. Sem truncar o universo.
+- Aceitação visual real: [run 37396778650 — SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37396778650). CI e build passaram; walkthrough em 1920, 1440 e 1366 px; oito áreas navegadas; busca automática e manual em Opportunities responderam HTTP 200; tratamento de indisponibilidade e nova tentativa passaram; zero erros de página/JavaScript.
+- [Capturas visuais](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37396778650/artifacts/11383635486) retidas como artefato até 09/10/2026. Nenhum payload bruto foi anexado.
+- O workflow amplo de fechamento falhou antes do gate HTTP porque o runner tentou reiniciar o serviço sem sudo interativo. Isso não bloqueou a aceitação específica: o usuário reiniciou o serviço e os gates ativo e visual passaram depois.
+- Esta aceitação fecha o fluxo funcional acordado de Opportunities (descoberta a partir de candidatas + snapshot integral, síntese, detalhe, atualização manual/automática e estados de erro). O ranking observado continua sujeito aos limites documentados na política: não é retorno esperado nem recomendação automática de ordem.
+
+### Próximas áreas
+
+Sim: os próximos fechamentos são **Strategy Lab (UC-04)** e **Market Intelligence (UC-05/06/10)**, nesta ordem. Reusar os critérios existentes AC-01–28 e a rastreabilidade por UC; não criar especificação concorrente. Não reabrir Opportunities sem regressão ou requisito já definido que ainda falhe.
+
 ## Contexto e estado confirmado
 
 - Branch: `feature/react-functional-v43-integration`.
@@ -27,63 +44,23 @@ Na análise reportada em 04/10, a decisão ficou essencialmente em “aguardar�
 
 O sistema precisa explicar o que os dados atuais significam para o ativo e para a posição existente, separar fatos, interpretação, hipóteses e desconhecidos, e propor alternativas condicionais quando os dados permitirem. Não inventar notícia, valuation, cadeia de opções, caixa, custos, probabilidade ou preço-alvo.
 
-## Objetivo de amanhã
+## Objetivo da próxima sessão
 
-Fazer uma revisão profunda, guiada por casos reais, das três telas. O resultado deve ser um fluxo útil de apoio à decisão, ancorado em dados determinísticos e histórico armazenado, com síntese interpretativa clara e limites explícitos. A tarefa não termina com uma revisão textual: reproduzir, corrigir, testar e deixar uma versão verificável pronta para o usuário.
+A próxima sessão deve concluir Strategy Lab e Market Intelligence pelo fluxo ponta a ponta, com casos reais, critérios rastreáveis, evidência da API ativa no Ubuntu e walkthrough visual. As observações de 04/10 registradas acima são a linha de base para comparação. Opportunities fica encerrada no escopo funcional validado; só reabrir se surgir regressão ou uma lacuna objetiva contra os critérios já aprovados.
 
-## Prompt para iniciar amanhã
+## Prompt para a próxima sessão
 
-> Continue o desenvolvimento no repositório `edmilsonandradefonseca/b3-investment-options-agent`, branch `feature/react-functional-v43-integration`. Leia este checkpoint e a especificação `docs/REACT_FRONTEND_UC01_UC12_COVERAGE_PLAN_2026-09-27.md`. Não trate “build passou” como prova de que os serviços ativos estão atualizados. Meu objetivo é elevar substancialmente a inteligência útil das telas **Opportunities (UC-03)**, **Strategy Lab (UC-04)** e **Market Intelligence (UC-05/06/10)**.
+> Continue no repositório `edmilsonandradefonseca/b3-investment-options-agent`, branch `feature/react-functional-v43-integration`. Leia este checkpoint atualizado e os documentos autoritativos da arquitetura V4.3, dos casos de uso/rastreabilidade e do plano de cobertura React UC-01…UC-12. Confirme branch, HEAD, PR #66 e CI antes de alterar código. **Opportunities já passou a aceitação funcional integrada no Ubuntu e no navegador real; não a reabra sem regressão ou critério existente comprovadamente pendente.**
 >
-> **Primeiro, reconstrua o caminho real dos dados e reproduza as falhas antes de editar.**
+> Prioridade 1: concluir **Strategy Lab (UC-04)**. Reproduza ITUB4 × BBDC4 com orçamento de R$ 10.000 e sem premissa de futuro inventada. Confira o payload real e corrija causas comprovadas para: janelas comuns de retorno/histórico, métricas bancárias comparáveis e unidades, corte temporal de São Paulo/PIT, cálculo explicado de quantidade/capital, apresentação de cenários hipotéticos editáveis e síntese que explique o que favorece cada alternativa e o que impede preferência. Preserve fatos, hipóteses e UNKNOWN separados; não duplique cálculos financeiros no React.
 >
-> 1. Confirme branch/HEAD e alterações locais. Identifique quais versões estão rodando no frontend Windows e no backend Ubuntu, consultando o endpoint de health/build ou outro identificador existente. Não sobrescreva trabalho local. Confirme o contrato real dos endpoints e compare o JSON recebido pela tela com o que o backend atual produz.
-> 2. Reproduza pelo menos estes casos, com request/response guardados de forma sanitizada:
->    - Market Intelligence: PETR4, incluindo carteira, ações/opções abertas, indicadores, notícias/eventos e histórico armazenado.
->    - Strategy Lab: comprar ITUB4 versus comprar BBDC4, orçamento de R$ 10.000, sem hipótese futura informada.
->    - Opportunities: ranking de candidatas e operações compatíveis com o perfil real do usuário — compra/venda de ações, venda de PUT, CALL coberta, fechamento com lucro e rolagem — sempre respeitando caixa, posições e opções da carteira.
-> 3. Use corte temporal de São Paulo. Para cada informação, preserve data de observação, disponibilidade, publicação e fonte. Uma notícia futura ou dado posterior ao corte não pode influenciar a síntese. Investigue especificamente o caso de timestamps UTC de 05/10 aparecendo num relatório de 04/10 à noite em São Paulo.
-> 4. Rastreie no código e nos dados por que retornos históricos foram “Indisponível”, por que os fundamentos dos dois bancos tiveram cobertura muito desigual e por que unidades como `debtToEquity`/crescimento podem ser renderizadas como moeda. Diferencie falha do frontend, do contrato, do provider, do banco local e de implantação.
+> Prioridade 2: concluir **Market Intelligence (UC-05/06/10)** com PETR4 e a posição/opção efetivamente aberta. Integre histórico, retornos e indicadores técnicos, regime/fatores, notícias/eventos com fonte e datas, fundamentos qualificados e exposição da carteira. Explique sinais concordantes/divergentes e condições que invalidariam a leitura; diferencie ausência de evidência de busca não executada e dado fora do corte. Não invente valuation, notícia, preço-alvo, probabilidade ou recomendação de ordem.
 >
-> **Depois, corrija por camadas e com inteligência explicável.**
->
-> - **B3 determinístico:** permanece autoridade para cotações, históricos, indicadores, carteira, opções, custos e proveniência. Corrija bugs de cálculo, unidade, corte, alinhamento de datas e contrato; não mova cálculo financeiro para o LLM.
-> - **João / síntese:** deve ler todo o contexto admissível já armazenado — carteira completa, caixa quando conhecido, ações e opções abertas, histórico pessoal elegível, mercado, fundamentos e notícias/eventos — e explicar como isso muda a decisão. Não pode preencher lacunas com invenções nem substituir os fatos determinísticos. Toda afirmação relevante deve apontar evidência/fonte/data ou ser marcada como hipótese.
-> - **Dados insuficientes:** separar ausência de cobertura da fonte, histórico insuficiente, incompatibilidade entre métricas, dado fora do corte e falha de serviço. Exibir uma lacuna única e útil com motivo/impacto e próxima evidência necessária; não despejar 18 linhas repetindo “não comparável”.
-> - **Português claro:** começar por síntese curta; usar linguagem operacional e explicar siglas. Em cada alternativa, mostrar fatores a favor, contra, impacto de carteira/capital, condição que mudaria a decisão e grau de confiança. Nunca declarar recomendação automática de ordem.
->
-> **Critérios de qualidade por tela**
->
-> **Opportunities**
-> - Mostrar ranking explicado e estável, com ação/estratégia, capital necessário, prêmio/retorno quando calculável, liquidez, risco/atribuição, compatibilidade com carteira, evidência histórica pessoal pertinente, fatores favoráveis/contrários e lacunas.
-> - Não sugerir PUT sem caixa/margem elegível conhecida; não sugerir CALL coberta sem quantidade elegível de ações; considerar concentração e opções existentes; não confundir prêmio bruto com resultado líquido.
-> - Deixar evidente por que cada candidata ficou acima/abaixo das demais. Se o backend não suporta ranking com qualidade, indicar o que falta no contrato em vez de gerar pontuação fictícia.
->
-> **Strategy Lab**
-> - Para ITUB4 × BBDC4, comparar janelas históricas comuns com datas inicial/final comuns, retornos comparáveis e risco realizado, explicando que passado não é previsão. Validar ajuste por proventos/desdobramentos e declarar a metodologia.
-> - Usar apenas fundamentos economicamente adequados e comparáveis para bancos; mostrar datas, unidades, período, fonte e qualidade. Classificar corretamente razões, múltiplos, percentuais e valores monetários. Se cobertura for assimétrica, apresentar contagem e motivo por ativo, destacar apenas pares comparáveis e recolher campos individuais num detalhe expansível.
-> - Com R$ 10.000 e preço corrente, calcular quantidade indicativa antes de custos apenas se a semântica deixar isso claro; não inventar taxas nem apresentar residual líquido falso. Se não houver premissa de futuro, esconder tabela de payoff vazia e explicar como inserir cenários. Oferecer cenários hipotéticos editáveis claramente separados dos dados observados.
-> - A síntese final deve responder “o que favorece ITUB4?”, “o que favorece BBDC4?”, “qual risco pode inverter a comparação?” e “o que impede uma preferência?”. Só declarar vencedor condicional se os dados suportarem; caso contrário, explicar a evidência decisiva ausente.
->
-> **Market Intelligence**
-> - Integrar gráfico e retornos, RSI/SMA/MACD/volatilidade/drawdown com conclusão em português: estado observado, horizonte, concordância/divergência dos sinais, níveis/situações que invalidam a leitura. Indicador isolado não é sinal de compra/venda.
-> - Mostrar notícias e eventos com título, fonte, data de publicação, data do evento, ticker impactado, relevância, direção/ambiguidade, evidência e link. Diferenciar “busca não executada”, “sem evidência encontrada” e “evidência fora do corte”.
-> - Interpretar fundamentos e valuation somente com métricas e research qualificadas. Contextualizar fatos corporativos/setoriais e macro com ligação explícita a PETR4 e ao horizonte.
-> - Integrar a carteira: posição em PETR4 e CALL vendida devem alterar análise de exposição, alternativas, risco de exercício/rolagem e custo de oportunidade. Reconciliar quantidades por fonte/data ou marcar a divergência; não concluir “manter” sem explicar exposição/condições.
->
-> **Validação e conclusão obrigatórias**
->
-> 1. Criar testes de regressão para os bugs comprovados: corte São Paulo/UTC, unidades fundamentais, janelas históricas e datas iguais, cobertura assimétrica de fundamentos, interpretação integrada com posição/opções e renderização para ausência de cenários/news.
-> 2. Rodar testes backend afetados, build React, verificações de renderização e smoke tests nos três casos. Não afirmar que está “pronto para testar” se o backend ativo ainda não recebeu a versão. Registrar comandos de atualização separados para Windows (frontend) e Ubuntu (serviço `b3-runtime.service`) quando necessário.
-> 3. Fazer verificação visual das telas e comparar com os critérios acima. Guardar exemplos de resposta antes/depois, tempos de execução e limitações.
-> 4. Concluir com: causas-raiz confirmadas, arquivos/commits alterados, testes com resultado, serviços que precisam ser atualizados, roteiro curto para Edmilson testar e quaisquer lacunas que dependam de provider ou configuração.
->
-> Trabalhe em blocos grandes, preserve a arquitetura V4.3 e evite uma refatoração ampla sem evidência. Resolva o que for comprovável no código; não encerre apenas com um plano ou com perguntas que possam ser respondidas inspecionando o repositório/runtime. Se uma dependência externa impedir uma parte, conclua as demais e identifique precisamente a dependência.
+> Em cada área: reproduza o defeito com request/response sanitizados, rastreie frontend → API → serviço/dado, faça a menor correção que resolve a causa, rode regressões focadas/CI, valide o serviço Ubuntu ativo depois do reinício autorizado e faça walkthrough visual com capturas. Atualize este checkpoint com commits, critérios UC/AC cobertos, evidência, limitações e próximo passo. Preserve V4.3, proveniência/PIT, UNKNOWN e controle humano.
 
-## Sequência recomendada para amanhã
+## Sequência recomendada
 
-1. Abrir o repositório e confirmar branch/HEAD em Windows e Ubuntu; verificar health/build do serviço.
-2. Coletar reproduções sanitizadas dos três casos e comparar payloads com o frontend.
-3. Corrigir primeiro dados/corte/unidades/contratos; depois síntese e hierarquia das telas.
-4. Rodar testes focados e walkthrough visual.
-5. Atualizar backend Ubuntu e frontend Windows em separado; confirmar versão ativa antes do teste final do usuário.
+1. **Strategy Lab (UC-04):** reproduzir o caso ITUB4 × BBDC4; confrontar payload e UI com os defeitos registrados; corrigir dados/unidades/corte antes da síntese; validar cenários e resultado real.
+2. **Market Intelligence (UC-05/06/10):** reproduzir PETR4 com carteira/opção; validar fontes e timestamps; integrar interpretação técnica, regime/eventos e exposição existente.
+3. Rodar CI e aceitação no Ubuntu com o serviço atualizado; completar walkthrough visual e guardar evidência sem payload financeiro bruto.
+4. Atualizar este checkpoint e a rastreabilidade AC-01–28/UC correspondente. Só então considerar essas áreas fechadas. A PR #66 permanece draft até decisão de integração.
