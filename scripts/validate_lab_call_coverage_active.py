@@ -103,6 +103,11 @@ for ticker, contract, capacity, _ in candidates:
     assert abs(capacity["committed_shares"] - manual_committed) < 1e-9
     assert abs(capacity["available_shares"] - max(0.0, manual_long - manual_committed)) < 1e-9
 
+candidate_history_counts = [len(market_archive.read(ticker)) for ticker, *_ in candidates]
+print(f"ACTIVE_LAB_CALL_EXECUTABLE_CANDIDATES={len(candidates)}", flush=True)
+print(f"ACTIVE_LAB_CALL_CANDIDATES_WITH_LOCAL_HISTORY={sum(count > 0 for count in candidate_history_counts)}/{len(candidates)}", flush=True)
+print(f"ACTIVE_LAB_CALL_CANDIDATE_HISTORY_ROWS={sum(candidate_history_counts)}", flush=True)
+
 service = LiveStrategyComparisonService()
 data_blockers = set()
 provider_failures = set()
