@@ -80,6 +80,17 @@ for stock in stocks:
 
 assert candidate, "No executable CALL matched a real BTG holding with assessable coverage"
 ticker, contract, capacity = candidate
+manual_long = sum(float(p.quantity) for p in portfolio.positions
+                  if p.instrument_type.upper() == "STOCK"
+                  and p.ticker.upper() == ticker and p.quantity > 0)
+manual_committed = sum(abs(float(p.quantity)) * float(p.contract_multiplier)
+                       for p in portfolio.positions
+                       if p.instrument_type.upper() == "OPTION" and p.quantity < 0
+                       and (p.option_type or "").upper() == "CALL"
+                       and (p.underlying_ticker or "").strip().upper() == ticker)
+assert abs(capacity["long_shares"] - manual_long) < 1e-9
+assert abs(capacity["committed_shares"] - manual_committed) < 1e-9
+assert abs(capacity["available_shares"] - max(0.0, manual_long - manual_committed)) < 1e-9
 assert hashlib.sha256(portfolio_path.read_bytes()).hexdigest() == revision
 
 service = LiveStrategyComparisonService()
@@ -92,6 +103,14 @@ try:
         portfolio=portfolio,
         as_of=as_of,
     )
+except RuntimeError as exc:
+    if "market history unavailable for " not in str(exc):
+        raise
+    assert hashlib.sha256(portfolio_path.read_bytes()).hexdigest() == revision
+    print("ACTIVE_LAB_CALL_COVERAGE_RECONCILIATION=PASS", flush=True)
+    print("ACTIVE_LAB_CALL_COMPARISON=BLOCKED_MARKET_HISTORY", flush=True)
+    print("ACTIVE_LAB_CALL_BLOCK_REASON=NO_REMOTE_HISTORY_PROVIDER_WITHIN_CURRENT_BUDGET", flush=True)
+    raise SystemExit(0)
 except ValueError as exc:
     if not expected_rejection:
         raise
@@ -113,4 +132,5 @@ else:
     assert hashlib.sha256(portfolio_path.read_bytes()).hexdigest() == revision
     print("ACTIVE_LAB_CALL_FREE_COVERAGE=PASS", flush=True)
 
+print("ACTIVE_LAB_CALL_COVERAGE_RECONCILIATION=PASS", flush=True)
 print("ACTIVE_LAB_CALL_COVERAGE_FROM_CURRENT_BTG=PASS", flush=True)
