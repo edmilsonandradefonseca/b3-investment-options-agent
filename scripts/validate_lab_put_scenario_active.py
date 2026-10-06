@@ -56,7 +56,7 @@ for ticker in ("PETR4", "ITUB4", "BBDC4", "VALE3", "WEGE3"):
         if available.tzinfo is None:
             available = available.replace(tzinfo=timezone.utc)
         if (quote.bid is None or quote.bid <= 0 or observed > as_of or available > as_of
-                or observed < as_of - timedelta(days=7) or quote.quality_status in {"REJECTED", "INVALID"}
+                or quote.quality_status in {"REJECTED", "INVALID"}
                 or not quote.source or contract.contract_multiplier <= 0):
             continue
         ticker_eligible.append((contract, quote))
