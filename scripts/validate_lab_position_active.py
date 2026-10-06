@@ -18,7 +18,7 @@ boot = next(int(line.split()[1]) for line in Path('/proc/stat').read_text().spli
 fields = Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()
 started = boot + int(fields[19]) / os.sysconf('SC_CLK_TCK')
 for name in ('src/b3_agent/server.py', 'src/b3_agent/routing/lab_position.py',
-             'src/b3_agent/routing/lab_option_management.py'):
+             'src/b3_agent/routing/lab_option_management.py', 'src/b3_agent/strategy_live.py'):
     installed = runtime/name
     assert hashlib.sha256(installed.read_bytes()).digest() == hashlib.sha256(Path(name).read_bytes()).digest()
     assert started >= installed.stat().st_mtime, 'Restart required after installation'
