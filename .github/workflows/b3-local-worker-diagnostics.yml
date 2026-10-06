@@ -75,28 +75,44 @@ jobs:
               set +a
             fi
           done
-          summary=/opt/b3-runtime/data/derived/nightly_intelligence/runner_latest.json
+          data_dir="$("$runtime_dir/.venv/bin/python" -c 'from b3_agent.config import settings; print(settings.data_dir)')"
+          summary="$data_dir/derived/nightly_intelligence/runner_latest.json"
           before="$(stat -c %Y "$summary" 2>/dev/null || echo 0)"
           private_log="/tmp/b3-nightly-${GITHUB_RUN_ID}.log"
           exit_status=0
           timeout 5400 "$runtime_dir/.venv/bin/python" "$runtime_dir/scripts/run_nightly_intelligence.py" >"$private_log" 2>&1 || exit_status=$?
           after="$(stat -c %Y "$summary" 2>/dev/null || echo 0)"
-          test "$after" -gt "$before"
-          python3 - "$summary" "$exit_status" <<'PY'
-          import json, sys
-          payload = json.loads(open(sys.argv[1], encoding="utf-8").read())
-          process_exit = int(sys.argv[2])
-          identity = payload.get("identity_filter") or {}
-          print(json.dumps({
+          python3 - "$summary" "$private_log" "$exit_status" "$before" "$after" <<'PY'
+          import json, re, sys
+          from pathlib import Path
+          summary_path, log_path = Path(sys.argv[1]), Path(sys.argv[2])
+          process_exit, before, after = map(int, sys.argv[3:])
+          safe = {
               "case": "NIGHTLY_LIVE_ACCEPTANCE",
-              "status": payload.get("status"),
               "process_exit_status": process_exit,
-              "accepted_ticker_count": identity.get("accepted_ticker_count"),
-              "rejected_identity_count": identity.get("rejected_identity_count"),
-              "nightly_failed_count": payload.get("failed"),
-              "dividend_status_counts": payload.get("issuer_dividend_refresh", {}).get("result_status_counts", {}),
-          }, sort_keys=True))
-          assert process_exit == 0
+              "summary_refreshed": after > before,
+              "summary_exists": summary_path.is_file(),
+          }
+          if summary_path.is_file() and after > before:
+              payload = json.loads(summary_path.read_text(encoding="utf-8"))
+              identity = payload.get("identity_filter") or {}
+              safe.update({
+                  "status": payload.get("status"),
+                  "accepted_ticker_count": identity.get("accepted_ticker_count"),
+                  "rejected_identity_count": identity.get("rejected_identity_count"),
+                  "nightly_failed_count": payload.get("failed"),
+                  "dividend_status_counts": payload.get("issuer_dividend_refresh", {}).get("result_status_counts", {}),
+              })
+          elif log_path.is_file():
+              log = log_path.read_text(encoding="utf-8", errors="replace")
+              frames = re.findall(r'File "([^"]+)", line (\d+), in ([^\n]+)', log)
+              exceptions = re.findall(r'^([A-Za-z_][A-Za-z_0-9]*(?:Error|Exception))(?::|$)', log, flags=re.MULTILINE)
+              safe["failure_class"] = exceptions[-1] if exceptions else "SUMMARY_NOT_WRITTEN"
+              safe["frames"] = [{"file": Path(file).name, "line": int(line), "function": function.strip()} for file, line, function in frames[-6:]]
+          print(json.dumps(safe, sort_keys=True))
+          assert process_exit == 0, "nightly collector returned non-zero; safe failure metadata emitted"
+          assert after > before, "nightly collector did not refresh the run summary"
+          payload = json.loads(summary_path.read_text(encoding="utf-8"))
           assert payload.get("status") in {"PASS", "PASS_WITH_REJECTED_IDENTITIES"}
           PY
           rm -f "$private_log"
