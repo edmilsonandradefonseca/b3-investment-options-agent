@@ -2,7 +2,7 @@ name: B3 active Lab position selection (Ubuntu)
 on:
   push:
     branches: [feature/react-functional-v43-integration]
-    paths: [.github/workflows/b3-lab-position-active.yml, scripts/validate_lab_position_active.py, scripts/validate_lab_put_scenario_active.py, src/b3_agent/strategy_live.py]
+    paths: [.github/workflows/b3-lab-position-active.yml, scripts/validate_lab_position_active.py, scripts/validate_lab_put_scenario_active.py, scripts/validate_lab_call_coverage_active.py, src/b3_agent/strategy_live.py]
   workflow_dispatch:
 permissions:
   contents: read
@@ -23,3 +23,7 @@ jobs:
         env:
           PYTHONPATH: /opt/b3-investment-options-agent/src
         run: /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_lab_put_scenario_active.py
+      - name: Accept active covered CALL share reservations
+        env:
+          PYTHONPATH: /opt/b3-investment-options-agent/src
+        run: /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_lab_call_coverage_active.py
