@@ -48,7 +48,15 @@ def management_intent(request: OrchestratorRequest) -> dict[str, Any] | None:
     codes = list(dict.fromkeys(_CODE.findall(text)))
     candidate_ids = {str(item.get("option_id", "")).upper()
                      for item in prior["response"].get("lab_roll_candidates", []) if isinstance(item, dict)}
-    choosing_displayed_candidate = len(codes) == 1 and codes[0] in candidate_ids
+    # Provider contract identifiers are authoritative when shown to the user;
+    # do not require them to match the regular-expression shape for typed codes.
+    displayed_candidates = [
+        candidate_id for candidate_id in candidate_ids
+        if candidate_id and re.search(rf"(?<![A-Z0-9]){re.escape(candidate_id)}(?![A-Z0-9])", text)
+    ]
+    choosing_displayed_candidate = len(displayed_candidates) == 1
+    if choosing_displayed_candidate:
+        codes = list(dict.fromkeys([*codes, displayed_candidates[0]]))
     if not re.search(r"\b(MANTER|ENCERRAR|FECHAR|RECOMPRAR|ROLAR|ROLAGEM|COMPARAR)\b", text) and not choosing_displayed_candidate:
         return None
     destinations = [code for code in codes if code != old_id]
