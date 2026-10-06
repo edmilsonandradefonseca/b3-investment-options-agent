@@ -1,5 +1,16 @@
 # Retomada — Inteligência do frontend B3 (2026-10-05)
 
+## Plano de fechamento do Lab e primeiro incremento — 06/10/2026 BRT
+
+Plano de execução: [STRATEGY_LAB_CLOSURE_2026-10-06.md](STRATEGY_LAB_CLOSURE_2026-10-06.md), subordinado à V1.2, LAB-01–07 e AC existentes. Cinco entregas: (1) intenção/posição e esclarecimento; (2) alternativas/pernas/quantidades; (3) manter/encerrar/rolar com fluxos e cenários; (4) carteira completa antes/depois e tela central; (5) aceite real integrado.
+
+Primeiro incremento publicado em `8fd802d473fc4c4aa1dbcc1656c54075e8c7175b`: pedido genérico de operação sem código exato recebe `NEEDS_CLARIFICATION` no centro, sem cadeia nem chamada sênior. A sessão conserva o esclarecimento para a continuação e mostra “Aguardando identificação do contrato”, em vez de síntese concluída. Perguntas conceituais/teses e comparações estruturadas seguem seus fluxos. Não representa seleção/validação de contrato nem cálculo de rolagem; LAB-01 integral permanece em andamento.
+
+[CI 37466654990 — SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37466654990): testes e build aprovados, incluindo teste HTTP que bloqueia qualquer dispatch externo antes do esclarecimento. Walkthrough da nova revisão ainda deve concluir; não confundir o incremento com o bloco anterior já ativo/aceito. Não pedir novo reinício até concluir a revisão de código que será ativada.
+
+Próximo incremento concreto: ligar contrato selecionado à posição do snapshot vigente; validar unidade/multiplicador e quantidade, permitir alternativas de manter/encerrar/rolar sem a restrição de duas alternativas, preservando compatibilidade da compra entre ações.
+
+
 ## Aceite do bloco no processo ativo — 06/10/2026, 09h22 BRT
 
 - Usuário reiniciou o serviço. Gate [37462396255 — SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37462396255) confirmou PID 446803, início em 06/10 às 09h17m31 BRT, processo posterior à instalação e hashes de seis módulos do backend iguais à revisão testada. Não houve novo reinício pelo workflow.
