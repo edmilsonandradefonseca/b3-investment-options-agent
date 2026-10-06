@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from datetime import date, datetime, timedelta, timezone
 
 from b3_agent.schemas.fundamental import StockFundamental
