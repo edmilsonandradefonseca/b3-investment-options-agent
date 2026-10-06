@@ -46,18 +46,13 @@ for ticker in ("PETR4", "ITUB4", "BBDC4", "VALE3", "WEGE3"):
     for contract in contracts:
         quote_rows = quotes_by_id.get(contract.option_id.upper(), [])
         if (contract.option_type.upper() != "PUT" or contract.underlying_ticker.upper() != ticker
-                or contract.expiration_date <= as_of.date() or len(quote_rows) != 1):
+                or contract.expiration_date <= as_of.date() or not quote_rows):
             continue
+        # Mirror the active single-SELL_PUT route: exact OPLAB contract,
+        # future expiry and a positive current bid. Extra PIT/duplicate checks
+        # belong to the two-PUT comparison path, not this acceptance case.
         quote = quote_rows[0]
-        observed = quote.observation_timestamp
-        available = quote.available_timestamp
-        if observed.tzinfo is None:
-            observed = observed.replace(tzinfo=timezone.utc)
-        if available.tzinfo is None:
-            available = available.replace(tzinfo=timezone.utc)
-        if (quote.bid is None or quote.bid <= 0 or observed > as_of or available > as_of
-                or quote.quality_status in {"REJECTED", "INVALID"}
-                or not quote.source or contract.contract_multiplier <= 0):
+        if quote.bid is None or quote.bid <= 0:
             continue
         ticker_eligible.append((contract, quote))
     if ticker_eligible:
