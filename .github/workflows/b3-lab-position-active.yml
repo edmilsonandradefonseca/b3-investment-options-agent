@@ -27,3 +27,5 @@ jobs:
         env:
           PYTHONPATH: /opt/b3-investment-options-agent/src
         run: /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_lab_call_coverage_active.py
+      - name: Verify active API remains healthy after read-only Lab comparisons
+        run: curl --fail --silent --show-error --max-time 15 http://127.0.0.1:8000/health >/dev/null
