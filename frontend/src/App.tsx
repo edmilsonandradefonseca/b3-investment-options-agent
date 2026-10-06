@@ -175,7 +175,7 @@ export default function App(){
     }else{
       const hasDeterministicResult=!!deterministicResult?.result&&typeof deterministicResult.result==='object';
       const displayed:OrchestrateResponse=apiError&&hasDeterministicResult?{...deterministicResult!,error:apiError}:r;
-      const priorOpportunity=page==='Opportunities'&&options?.preservePrevious===true&&workspaceResults.Opportunities!==null&&workspaceResults.Opportunities!==undefined;
+      const priorOpportunity=options?.preservePrevious===true&&analysis!==null;
       const serverSynthesisStatus=typeof displayed.result?.derived_synthesis_status==='string'?displayed.result.derived_synthesis_status:context.analysis_mode==='deterministic'?'NOT_REQUESTED':'COMPLETED';
       if(!priorOpportunity||!apiError)setAnalysis({...displayed,result:{...(displayed.result||{}),derived_synthesis_status:apiError?'FAILED':serverSynthesisStatus}});
       if(apiError)setNotice(`Análise: ${apiError}`);
@@ -303,7 +303,7 @@ export default function App(){
   };
   await Promise.allSettled([
     b3Api.personalHistory(v).then(value=>{if(current())setPersonalHistory(value)}),
-    b3Api.fundamentals(v).then(value=>{if(current()){setFundamentals(value);setFundamentalsError('')}}).catch(error=>{if(current()){setFundamentals(null);setFundamentalsError(err(error))}}),
+    b3Api.fundamentals(v).then(value=>{if(current()){setFundamentals(value);setFundamentalsError('')}}).catch(error=>{if(current()){setFundamentalsError(err(error))}}),
     b3Api.liveAnalysis(v).then(value=>{if(current())setLive(value)}).catch(error=>{if(current())setNotice(`Cotação/histórico indisponível: ${err(error)}`)}),
     loadResearch(),
     b3Api.pilotAnalysis(v).then(value=>{if(current())setPilot(value)}),

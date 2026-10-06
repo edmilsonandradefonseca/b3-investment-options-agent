@@ -1,4 +1,4 @@
-﻿import math
+import math
 import pytest
 from datetime import datetime, timedelta, timezone
 
@@ -60,7 +60,7 @@ def test_quant_engine_drawdown():
     assert result.max_drawdown == 90 / 110 - 1
 
 
-def test_quant_engine_adjusted_close():
+def test_quant_engine_partial_adjustments_use_uniform_raw_close():
     records = make_records([100, 110, 120])
 
     records[-1] = StockMarketData(
@@ -80,7 +80,8 @@ def test_quant_engine_adjusted_close():
 
     result = compute_quant_features(records)
 
-    assert result.return_1d == 100 / 110 - 1
+    assert result.return_1d == 120 / 110 - 1
+    assert result.max_drawdown == 0.0
 
 def test_return_1d_is_none_when_latest_observation_has_gap():
     records = [
@@ -105,3 +106,12 @@ def test_return_1d_uses_immediately_previous_observation():
 
     assert features.return_1d == pytest.approx(0.05)
     assert features.log_return_1d == pytest.approx(math.log(1.05))
+
+
+def test_quant_engine_full_adjustments_use_uniform_adjusted_series():
+    from dataclasses import replace
+    records = [replace(row, adjusted_close=price) for row, price in zip(make_records([100, 110, 120]), [50, 55, 50])]
+    result = compute_quant_features(records)
+    assert result.return_1d == pytest.approx(50 / 55 - 1)
+    assert result.max_drawdown == pytest.approx(50 / 55 - 1)
+    assert result.average_dollar_volume_20d == 110000.0

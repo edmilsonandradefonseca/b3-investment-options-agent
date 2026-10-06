@@ -20,7 +20,7 @@ jobs:
       - name: Verify Lab financial and temporal regressions
         env:
           PYTHONPATH: ${{ github.workspace }}/src
-        run: /opt/b3-investment-options-agent/.venv/bin/python -m pytest tests/test_strategy_live.py tests/test_stock_purchase.py tests/test_economic_evidence.py tests/test_economic_decision.py
+        run: /opt/b3-investment-options-agent/.venv/bin/python -m pytest tests/test_strategy_live.py tests/test_stock_purchase.py tests/test_economic_evidence.py tests/test_economic_decision.py tests/test_quant_engine.py tests/test_quant_beta.py tests/test_quant_indicators.py
       - name: Validate candidate API and senior on real data without restarting service
         env:
           PYTHONPATH: ${{ github.workspace }}/src
