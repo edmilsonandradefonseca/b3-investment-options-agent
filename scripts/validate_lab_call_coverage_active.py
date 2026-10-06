@@ -5,6 +5,7 @@ import hashlib
 import os
 import re
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 import subprocess
 
@@ -147,6 +148,25 @@ for ticker, contract, capacity, expected_rejection in candidates:
     alternatives = result["strategy_comparison"]["alternatives"]
     call = next(row for row in alternatives if row["action_type"] == "SELL_CALL")
     assumptions = call["assumptions"]
+    current_quote = assumptions.get("current_underlying_quote")
+    assert isinstance(current_quote, dict), "Active CALL comparison must include a current underlying quote"
+    assert current_quote.get("ticker", "").upper() == ticker
+    assert current_quote.get("currency") == "BRL"
+    assert current_quote.get("source")
+    assert isinstance(current_quote.get("close"), (int, float)) and current_quote["close"] > 0
+
+    def quote_time(value):
+        if isinstance(value, datetime):
+            return value
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+
+    observed_at = quote_time(current_quote["observation_timestamp"])
+    available_at = quote_time(current_quote["available_timestamp"])
+    assert observed_at <= as_of and available_at <= as_of, "Underlying quote must be point-in-time admissible"
+    assert observed_at.astimezone(ZoneInfo("America/Sao_Paulo")).date() == as_of.astimezone(
+        ZoneInfo("America/Sao_Paulo")
+    ).date(), "Underlying quote must represent the current B3 session"
+    print("ACTIVE_LAB_CALL_UNDERLYING_CURRENT_QUOTE=PASS", flush=True)
     assert assumptions["covered_call"] is True
     assert assumptions["covered_shares_free_before_trade"] >= assumptions["covered_shares_required"]
     assert assumptions["stock_shares_available"] == capacity["long_shares"]
