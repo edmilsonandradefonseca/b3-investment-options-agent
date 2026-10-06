@@ -26,16 +26,26 @@ def main() -> int:
     positions = portfolio.get("positions") or []
     assert positions, "Active portfolio snapshot is empty"
 
-    stock_tickers = {
-        str(position.get("ticker", "")).strip().upper()
-        for position in positions
-        if str(position.get("instrument_type", "")).upper() == "STOCK" and position.get("ticker")
-    }
-    option_underlyings = {
-        str(position.get("underlying_ticker", "")).strip().upper()
-        for position in positions
-        if str(position.get("instrument_type", "")).upper() == "OPTION" and position.get("underlying_ticker")
-    }
+    # Match the exact canonical identity policy used by the active screen. Raw
+    # workbook strings can be present but inadmissible as B3 equity tickers.
+    from b3_agent.strategy_live import _validated_equity_ticker
+
+    def canonical_tickers(instrument_type: str, field: str) -> set[str]:
+        result: set[str] = set()
+        for position in positions:
+            if str(position.get("instrument_type", "")).upper() != instrument_type:
+                continue
+            raw = position.get(field)
+            if not raw:
+                continue
+            try:
+                result.add(_validated_equity_ticker(raw))
+            except (TypeError, ValueError):
+                continue
+        return result
+
+    stock_tickers = canonical_tickers("STOCK", "ticker")
+    option_underlyings = canonical_tickers("OPTION", "underlying_ticker")
     request = {
         "task": (
             "UC-03: revise as ações acompanhadas e toda a carteira vigente. "
