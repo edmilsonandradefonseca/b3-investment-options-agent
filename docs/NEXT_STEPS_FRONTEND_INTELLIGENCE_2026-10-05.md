@@ -35,12 +35,11 @@ Os instaladores noturno e contínuo definem calendários diferentes para `b3-loc
 
 Conclusão operacional: schedule **parcialmente operacional**. Com Ubuntu ligado, timers ativos disparam; a coleta CVM e reconciliação gravam evidência, mas o job noturno não terminou com sucesso nesta execução. Esses fluxos atualizam stores de evidência/artefatos e filas derivados; não importam automaticamente novos extratos BTG/notas nem substituem o carregamento da carteira/ledger.
 
-## Contexto e estado confirmado
+## Contexto de referência — observações de 04/10
 
-- Branch: `feature/react-functional-v43-integration`.
-- Commit consultado no GitHub: `e39c2202152aacc17581a1cf9a4350f2ef540e32` (`ui: retain fundamental source provenance`).
-- A checagem de CI registrada para esse commit passou em backend tests, build React e validação de renderização. Isso valida o código daquele commit, mas não confirma que o backend Ubuntu ou a cópia local do Windows estejam rodando essa mesma versão.
-- O usuário encerrou o trabalho em 04/10/2026 e pediu retomar amanhã para aportar inteligência em **Opportunities**, **Strategy Lab** e **Market Intelligence**.
+Este bloco preserva o diagnóstico visual e técnico feito em 04/10, antes do aceite funcional de Opportunities em 05/10. Os estados atuais, o schedule e as próximas ações estão no checkpoint de encerramento no início deste documento. O commit `e39c2202152aacc17581a1cf9a4350f2ef540e32` e a ressalva abaixo são contexto histórico, não a revisão atual do branch/runtime.
+
+As evidências a seguir continuam sendo a linha de base para Strategy Lab (ITUB4 × BBDC4) e Market Intelligence (PETR4). Opportunities foi aceita no fluxo funcional integrado e visual descrito no checkpoint atual.
 
 ## Evidências do teste Strategy Lab ITUB4 × BBDC4
 
