@@ -71,7 +71,26 @@ jobs:
           git -C "$runtime_dir" merge --ff-only "$GITHUB_SHA"
           test "$(git -C "$runtime_dir" rev-parse HEAD)" = "$GITHUB_SHA"
           echo "TESTED_REVISION_INSTALLED=$GITHUB_SHA"
-          if sudo -n systemctl restart b3-runtime.service; then
+          if python3 - "$runtime_dir" <<'PY'
+          import os, subprocess, sys
+          from pathlib import Path
+          root = Path(sys.argv[1])
+          pid = int(subprocess.check_output([
+              "systemctl", "show", "b3-runtime.service", "--property=MainPID", "--value"
+          ], text=True, timeout=10))
+          if pid <= 0:
+              sys.exit(1)
+          boot = next(int(line.split()[1]) for line in Path("/proc/stat").read_text().splitlines()
+                      if line.startswith("btime "))
+          fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+          started = boot + int(fields[19]) / os.sysconf("SC_CLK_TCK")
+          candidate = (root / "src/b3_agent/strategy_live.py").stat().st_mtime
+          sys.exit(0 if started >= candidate else 1)
+          PY
+          then
+            echo "RUNTIME_REVISION_ALREADY_ACTIVE=PASS"
+            echo "RUNTIME_RESTART=NOT_REQUIRED"
+          elif sudo -n systemctl restart b3-runtime.service; then
             echo "RUNTIME_RESTART=PERFORMED"
           else
             echo "RUNTIME_RESTART=BLOCKED_AUTHENTICATION_REQUIRED"
