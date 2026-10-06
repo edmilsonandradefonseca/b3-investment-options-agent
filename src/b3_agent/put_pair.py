@@ -1,5 +1,6 @@
 """Explicit two-PUT tradeoffs using canonical per-contract evidence."""
 import math
+from datetime import datetime
 from b3_agent.strategy_live import _put_model_probabilities, _normalize_exercise_style
 
 OBJECTIVES = {'COMPARE_ONLY':None,'LOWEST_MODEL_EXPIRY_ITM':'expiry_itm_probability','HIGHEST_GROSS_PREMIUM_PER_CAPITAL_30D':'gross_premium_per_capital_30d_pct'}
@@ -12,8 +13,23 @@ def put_pair_payload(alternatives, evidence, packs, cutoff, objective='COMPARE_O
         item=evidence[alternative.subject_id]; contract=item['contract']; quote=item['current_quote']
         pack=next(pack for pack in packs if pack.ticker==item['underlying_ticker'])
         underlying=pack.market.get('current_quote')
-        if underlying and (cutoff.date()-underlying['observation_timestamp'].date()).days>7:
-            underlying=None
+        if underlying:
+            observed=underlying.get('observation_timestamp')
+            available=underlying.get('available_timestamp')
+            if isinstance(observed,str):
+                observed=datetime.fromisoformat(observed.replace('Z','+00:00'))
+            if isinstance(available,str):
+                available=datetime.fromisoformat(available.replace('Z','+00:00'))
+            price=underlying.get('close')
+            if (str(underlying.get('ticker') or '').upper()!=pack.ticker
+                    or underlying.get('currency')!='BRL'
+                    or not underlying.get('source')
+                    or underlying.get('quality_status') in {'REJECTED','INVALID'}
+                    or not isinstance(observed,datetime) or not isinstance(available,datetime)
+                    or observed>cutoff or available>cutoff
+                    or (cutoff.date()-observed.date()).days>7
+                    or not isinstance(price,(int,float)) or not math.isfinite(float(price)) or price<=0):
+                underlying=None
         spot=underlying.get('close') if underlying else None
         expiry=contract['expiration_date']; days=(expiry-cutoff.date()).days
         strike=float(contract['strike']); multiplier=float(contract['contract_multiplier']); bid=float(quote['bid'])

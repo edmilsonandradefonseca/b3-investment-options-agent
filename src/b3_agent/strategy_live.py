@@ -776,6 +776,7 @@ class LiveStrategyComparisonService:
             source for pack in packs for source in pack.source_refs
         ]
 
+        inadmissible_spot_tickers: set[str] = set()
         for index, (pack, original, normalized_strategy, option_id) in enumerate(
             zip(
                 packs,
@@ -788,33 +789,41 @@ class LiveStrategyComparisonService:
         ):
             assert normalized_strategy is not None
             underlying_quote = pack.market.get("current_quote")
-            if not isinstance(underlying_quote, dict):
-                raise ValueError(f"{pack.ticker} requires an admissible current underlying quote")
-            quote_ticker = str(underlying_quote.get("ticker") or "").upper()
-            quote_price = underlying_quote.get("close")
-            quote_currency = str(underlying_quote.get("currency") or "").upper()
-            quote_source = underlying_quote.get("source")
-            quote_observed = underlying_quote.get("observation_timestamp")
-            quote_available = underlying_quote.get("available_timestamp")
-            if isinstance(quote_observed, str):
-                quote_observed = datetime.fromisoformat(quote_observed.replace("Z", "+00:00"))
-            if isinstance(quote_available, str):
-                quote_available = datetime.fromisoformat(quote_available.replace("Z", "+00:00"))
-            if (quote_ticker != pack.ticker or quote_currency != "BRL"
+            quote_admissible = isinstance(underlying_quote, dict)
+            if quote_admissible:
+                quote_ticker = str(underlying_quote.get("ticker") or "").upper()
+                quote_price = underlying_quote.get("close")
+                quote_currency = str(underlying_quote.get("currency") or "").upper()
+                quote_source = underlying_quote.get("source")
+                quote_observed = underlying_quote.get("observation_timestamp")
+                quote_available = underlying_quote.get("available_timestamp")
+                if isinstance(quote_observed, str):
+                    quote_observed = datetime.fromisoformat(quote_observed.replace("Z", "+00:00"))
+                if isinstance(quote_available, str):
+                    quote_available = datetime.fromisoformat(quote_available.replace("Z", "+00:00"))
+                quote_admissible = not (
+                    quote_ticker != pack.ticker or quote_currency != "BRL"
                     or not isinstance(quote_price, (int, float))
                     or not math.isfinite(float(quote_price)) or quote_price <= 0
                     or underlying_quote.get("quality_status") in {"REJECTED", "INVALID"}
-                    or not quote_source
-                    or not isinstance(quote_observed, datetime)
+                    or not quote_source or not isinstance(quote_observed, datetime)
                     or not isinstance(quote_available, datetime)
-                    or quote_observed > effective_as_of or quote_available > effective_as_of):
-                raise ValueError(f"{pack.ticker} current underlying quote is invalid or outside the common as_of cutoff")
+                    or quote_observed > effective_as_of or quote_available > effective_as_of
+                )
+            if not quote_admissible:
+                if normalized_strategy == "SELL_PUT":
+                    # PUT tradeoffs can still show contract economics while
+                    # leaving spot-based distances/probabilities UNKNOWN.
+                    underlying_quote = None
+                    inadmissible_spot_tickers.add(pack.ticker)
+                else:
+                    raise ValueError(f"{pack.ticker} requires an admissible current underlying quote at the common PIT as_of cutoff")
             assumptions: dict[str, Any] = {
                 "amount": amount,
                 "expected_return": "not_inferred",
                 "valuation": "not_computed_without_explicit_assumptions",
                 "ranking": "not_applied",
-                "current_underlying_quote": pack.market.get("current_quote"),
+                "current_underlying_quote": underlying_quote,
             }
             capital_required = (
                 amount if normalized_strategy == "BUY_STOCK" else 0.0
@@ -920,7 +929,7 @@ class LiveStrategyComparisonService:
                     )
                 if quote.observation_timestamp > effective_as_of or quote.available_timestamp > effective_as_of:
                     raise ValueError(
-                        f"OPLAB quote {normalized_option} is after the common as_of cutoff"
+                        f"OPLAB quote {normalized_option} is after the common point-in-time (PIT) as_of cutoff"
                     )
                 if quote.bid is None or quote.bid <= 0:
                     raise ValueError(
@@ -1168,6 +1177,20 @@ class LiveStrategyComparisonService:
                     quality_status=pack.quality_status,
                 )
             )
+
+        if inadmissible_spot_tickers:
+            sanitized_packs = []
+            for pack in packs:
+                if pack.ticker not in inadmissible_spot_tickers:
+                    sanitized_packs.append(pack)
+                    continue
+                payload = asdict(pack)
+                payload["market"]["current_quote"] = None
+                payload["limitations"] = tuple((*payload.get("limitations", ()),
+                    "Current underlying quote excluded because it was not admissible at the common PIT cutoff."))
+                payload["quality_status"] = "WARNING"
+                sanitized_packs.append(AssetEvidencePack(**payload))
+            packs = tuple(sanitized_packs)
 
         comparison = self.comparison_engine.compare(
             alternatives[0],
