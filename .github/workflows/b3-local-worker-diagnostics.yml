@@ -2,7 +2,10 @@ name: B3 local worker and schedule diagnostics
 on:
   push:
     branches: [feature/react-functional-v43-integration]
-    paths: [.github/workflows/b3-local-worker-diagnostics.yml]
+    paths:
+      - .github/workflows/b3-local-worker-diagnostics.yml
+      - scripts/run_nightly_intelligence.py
+      - tests/test_nightly_intelligence.py
   workflow_dispatch:
 permissions:
   contents: read
