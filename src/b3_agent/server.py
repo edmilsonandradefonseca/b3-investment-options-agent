@@ -1201,10 +1201,14 @@ def orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
                 portfolio=portfolio, portfolio_revision=revision or 'UNKNOWN', as_of=as_of,
                 transaction_costs_brl=management_inputs.get('transaction_costs_brl'))
             result['telemetry'] = {'llm_calls': 0, 'option_chain_calls': 1}
+            deterministic_only = normalized.context.get('analysis_mode') == 'deterministic'
+            if deterministic_only:
+                # OrchestratorResponse copies the result in __post_init__; set
+                # the synthesis state before constructing that immutable response.
+                result['derived_synthesis_status'] = 'NOT_REQUESTED'
             deterministic_response = OrchestratorResponse(status='COMPLETED', result=result,
                                                           sources=tuple(result['source_refs']))
-            if normalized.context.get('analysis_mode') == 'deterministic':
-                result['derived_synthesis_status'] = 'NOT_REQUESTED'
+            if deterministic_only:
                 return _response_to_model(deterministic_response)
             synthesis_request = OrchestratorRequest(
                 task=(f"Compare manter, encerrar ou rolar a posição de opção {old_id} "
