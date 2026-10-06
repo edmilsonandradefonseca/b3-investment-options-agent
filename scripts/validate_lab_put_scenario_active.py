@@ -33,29 +33,38 @@ token = next((entry.split(b"=", 1)[1].decode() for entry in environ
 assert token, "Active runtime has no OPLAB credential; real option acceptance is unavailable"
 os.environ["OPLAB_API_TOKEN"] = token
 as_of = datetime.now(timezone.utc)
-contracts, quotes = OplabOptionsAdapter().get_snapshot("PETR4", as_of)
-quotes_by_id = {}
-for quote in quotes:
-    quotes_by_id.setdefault(quote.option_id.upper(), []).append(quote)
 eligible = []
-for contract in contracts:
-    quote_rows = quotes_by_id.get(contract.option_id.upper(), [])
-    if (contract.option_type.upper() != "PUT" or contract.underlying_ticker.upper() != "PETR4"
-            or contract.expiration_date <= as_of.date() or len(quote_rows) != 1):
+for ticker in ("PETR4", "ITUB4", "BBDC4", "VALE3", "WEGE3"):
+    try:
+        contracts, quotes = OplabOptionsAdapter().get_snapshot(ticker, as_of)
+    except (OSError, RuntimeError, ValueError):
         continue
-    quote = quote_rows[0]
-    observed = quote.observation_timestamp
-    available = quote.available_timestamp
-    if observed.tzinfo is None:
-        observed = observed.replace(tzinfo=timezone.utc)
-    if available.tzinfo is None:
-        available = available.replace(tzinfo=timezone.utc)
-    if (quote.bid is None or quote.bid <= 0 or observed > as_of or available > as_of
-            or observed < as_of - timedelta(days=7) or quote.quality_status in {"REJECTED", "INVALID"}
-            or not quote.source or contract.contract_multiplier <= 0):
-        continue
-    eligible.append((contract, quote))
-assert eligible, "No current executable PETR4 PUT quote; active action × PUT acceptance unavailable"
+    quotes_by_id = {}
+    for quote in quotes:
+        quotes_by_id.setdefault(quote.option_id.upper(), []).append(quote)
+    ticker_eligible = []
+    for contract in contracts:
+        quote_rows = quotes_by_id.get(contract.option_id.upper(), [])
+        if (contract.option_type.upper() != "PUT" or contract.underlying_ticker.upper() != ticker
+                or contract.expiration_date <= as_of.date() or len(quote_rows) != 1):
+            continue
+        quote = quote_rows[0]
+        observed = quote.observation_timestamp
+        available = quote.available_timestamp
+        if observed.tzinfo is None:
+            observed = observed.replace(tzinfo=timezone.utc)
+        if available.tzinfo is None:
+            available = available.replace(tzinfo=timezone.utc)
+        if (quote.bid is None or quote.bid <= 0 or observed > as_of or available > as_of
+                or observed < as_of - timedelta(days=7) or quote.quality_status in {"REJECTED", "INVALID"}
+                or not quote.source or contract.contract_multiplier <= 0):
+            continue
+        ticker_eligible.append((contract, quote))
+    if ticker_eligible:
+        eligible = ticker_eligible
+        underlying_ticker = ticker
+        break
+assert eligible, "No current executable PUT quote across tested underlyings; active action × PUT acceptance unavailable"
 contract, chosen_quote = max(
     eligible,
     key=lambda row: ((row[1].open_interest or 0), (row[1].volume or 0),
@@ -63,7 +72,7 @@ contract, chosen_quote = max(
 )
 horizon = contract.expiration_date.isoformat()
 budget = float(contract.strike) * float(contract.contract_multiplier)
-task = (f"Strategy Lab: compare comprar PETR4 com vender uma PUT exata "
+task = (f"Strategy Lab: compare comprar {underlying_ticker} com vender uma PUT exata "
         f"{contract.option_id}; horizonte {horizon}; testar choques hipotéticos "
         f"de -10%, 0% e +10% no vencimento. São cenários fornecidos, não previsões. "
         f"Use orçamento de R$ {budget:.2f}; não ordene nem recomende execução.")
@@ -72,7 +81,7 @@ request = {
     "context": {
         "workspace": "Strategy Lab",
         "analysis_mode": "deterministic",
-        "comparison_assets": ["PETR4", "PETR4"],
+        "comparison_assets": [underlying_ticker, underlying_ticker],
         "strategy_a": "Comprar ação",
         "strategy_b": "Vender PUT",
         "option_a": None,
