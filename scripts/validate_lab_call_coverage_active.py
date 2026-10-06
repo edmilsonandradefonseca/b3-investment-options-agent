@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 import subprocess
@@ -10,6 +11,7 @@ import subprocess
 from b3_agent.config import load_settings
 from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
 from b3_agent.providers.oplab.options import OplabOptionsAdapter
+from b3_agent.repositories.market_data import MarketDataRepository
 from b3_agent.strategy_live import LiveStrategyComparisonService, _covered_call_capacity
 
 runtime = Path("/opt/b3-investment-options-agent")
@@ -78,6 +80,14 @@ for stock in stocks:
 assert candidates, "No executable CALL matched a real BTG holding with assessable coverage"
 assert hashlib.sha256(portfolio_path.read_bytes()).hexdigest() == revision
 
+# Report aggregate archive visibility only; do not expose portfolio symbols in
+# the public Actions log.
+market_archive = MarketDataRepository(settings.data_dir / "archive" / "cotahist_raw")
+history_counts = [len(market_archive.read(position.ticker)) for position in stocks]
+print(f"ACTIVE_LAB_CALL_DATA_ROOT_IS_SHARED={settings.data_dir == Path('/opt/b3-runtime/data')}", flush=True)
+print(f"ACTIVE_LAB_CALL_STOCKS_WITH_LOCAL_HISTORY={sum(count > 0 for count in history_counts)}/{len(stocks)}", flush=True)
+print(f"ACTIVE_LAB_CALL_LOCAL_HISTORY_ROWS={sum(history_counts)}", flush=True)
+
 # Independently reconcile quantities from the same immutable snapshot before
 # testing the live Strategy Lab implementation.
 for ticker, contract, capacity, _ in candidates:
@@ -95,6 +105,7 @@ for ticker, contract, capacity, _ in candidates:
 
 service = LiveStrategyComparisonService()
 data_blockers = set()
+provider_failures = set()
 accepted = False
 for ticker, contract, capacity, expected_rejection in candidates:
     try:
@@ -110,6 +121,8 @@ for ticker, contract, capacity, expected_rejection in candidates:
         message = str(exc)
         if "market history unavailable for " in message:
             data_blockers.add("MARKET_HISTORY")
+            detail = message.partition("market history unavailable for ")[2].partition(": ")[2]
+            provider_failures.update(re.findall(r"\\b(?:yahoo|oplab|brapi):([A-Za-z][A-Za-z0-9_]*)", detail))
             continue
         raise
     except ValueError as exc:
@@ -145,5 +158,7 @@ if not accepted:
     reason = "_".join(sorted(data_blockers))
     print("ACTIVE_LAB_CALL_COMPARISON=BLOCKED_DATA", flush=True)
     print(f"ACTIVE_LAB_CALL_BLOCK_REASON={reason}", flush=True)
+    if provider_failures:
+        print("ACTIVE_LAB_CALL_PROVIDER_FAILURE_TYPES=" + ",".join(sorted(provider_failures)), flush=True)
     raise SystemExit(0)
 print("ACTIVE_LAB_CALL_COVERAGE_FROM_CURRENT_BTG=PASS", flush=True)
