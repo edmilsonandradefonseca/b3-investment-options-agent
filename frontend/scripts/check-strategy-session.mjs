@@ -38,6 +38,7 @@ try{
    }
    return route.fulfill({json:{status:'COMPLETED',result:{summary:'Resposta de fixture: tese exige verificar premissas.',derived_synthesis_status:'COMPLETED'},sources:[],audit:[],error:null},headers:{'Access-Control-Allow-Origin':'*'}});
   }
+  if(req.url().includes('/admin/collection-universe'))return route.fulfill({json:{configured_tickers:[],portfolio_tickers:[],effective_tickers:[],updated_at:null,source:'default'},headers:{'Access-Control-Allow-Origin':'*'}});
   const json=req.url().endsWith('/health')?{status:'ok'}:req.url().includes('/transactions')?[]:req.url().endsWith('/orchestrate')?{status:'COMPLETED',result:{},sources:[],audit:[],error:null}:{positions:[],operations:[]};
   return route.fulfill({json,headers:{'Access-Control-Allow-Origin':'*'}});
  });
