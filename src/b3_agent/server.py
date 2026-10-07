@@ -45,6 +45,10 @@ from b3_agent.providers.brapi.budget import BrapiBudget
 from b3_agent.providers.oplab.adapter import OplabAdapter
 from b3_agent.providers.oplab.options import OplabOptionsAdapter
 from b3_agent.providers.searxng_news import SearxngNewsAdapter
+from b3_agent.providers.dadosdemercado_investors import (
+    DadosDeMercadoInvestorsAdapter,
+    InvestorFlowProviderError,
+)
 from b3_agent.research_events import ResearchEventService
 from b3_agent.runtime import RuntimeManager
 from b3_agent.intelligence.observability import (
@@ -1176,6 +1180,26 @@ def intelligence_local_ticker(ticker: str) -> dict[str, Any]:
     if re.fullmatch(r"[A-Z]{4}\d{1,2}", normalized) is None:
         raise HTTPException(status_code=400, detail="invalid B3 ticker")
     return local_ticker_intelligence(normalized)
+
+
+
+@app.get("/market-intelligence/investor-flows")
+def market_intelligence_investor_flows() -> dict[str, Any]:
+    """Return observed investor flow from the authenticated Dados de Mercado API."""
+    try:
+        records = DadosDeMercadoInvestorsAdapter().get_history()
+    except InvestorFlowProviderError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"{exc.code}: {exc}",
+        ) from exc
+    return {
+        "status": "OK" if records else "NO_DATA",
+        "source": "dadosdemercado",
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "unit": "NOT_DECLARED_BY_PROVIDER",
+        "observations": [asdict(record) for record in records],
+    }
 
 
 @app.get("/version")
