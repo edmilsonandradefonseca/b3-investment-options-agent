@@ -1,3 +1,17 @@
+# Status atual — 07/10/2026
+
+## Strategy Lab concluído; Market Intelligence em andamento
+
+O Strategy Lab foi aceito na matriz desta entrega. Runner ativo [37550727964 — SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37550727964) confirmou posição/rolagem, ação × PUT, cenários e CALL coberta com cobertura livre reconciliada e cotação atual do BTG. Walkthrough [37550727944 — SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37550727944) e CI [37550733471 — SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37550733471) passaram. Nenhuma ordem foi enviada; custos sem evidência continuam UNKNOWN.
+
+O trabalho avançou para o Market Intelligence. No caminho ativo de PETR4, o gate anterior cobrava síntese e presença de targets/dividendos, porém não cobrava frescor da cotação nem suficiência e datas do histórico. O validador foi ampliado em `scripts/validate_lab_market_active.py` para exigir cotação positiva em BRL, fonte e timestamps timezone-aware recentes (até 24h), pelo menos 60 observações históricas com cauda de até 7 dias, retorno histórico de 1M disponível e eventos sempre acompanhados de fonte/data. Targets e dividendos devem declarar status, mesmo quando não há evidência admissível. A CI e a execução no serviço ativo desta revisão estão pendentes.
+
+PR #66 permanece draft. Próximo aceite de Market Intelligence: conferir o resultado desse gate, corrigir a primeira lacuna concreta se falhar, e então ampliar para cobertura de macro/regime, fundamentos, alvos institucionais, proventos, notícias/eventos e exposição da carteira, sempre com fonte, data e limitações explícitas. Não afirmar cobertura exaustiva de pesquisa; o serviço rotula a aquisição como limitada. Não declarar Market Intelligence concluído antes dos aceites real e visual.
+
+Checkpoint detalhado do Lab: [STRATEGY_LAB_CLOSURE_2026-10-06.md](STRATEGY_LAB_CLOSURE_2026-10-06.md).
+
+---
+
 # Retomada — Inteligência do frontend B3 (2026-10-05)
 
 ## Terceiro incremento do Strategy Lab — CI e visual aprovados; aceite ativo pendente
