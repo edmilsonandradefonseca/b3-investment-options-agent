@@ -4,6 +4,9 @@ on:
     branches: [feature/react-functional-v43-integration]
     paths:
       - src/b3_agent/providers/bradesco_dividends.py
+      - src/b3_agent/providers/b3_yield_curve.py
+      - src/b3_agent/schemas/yield_curve.py
+      - pyproject.toml
       - tests/test_bradesco_dividends.py
       - scripts/validate_backend_active_http.py
       - .github/workflows/b3-backend-closure.yml
@@ -59,7 +62,9 @@ jobs:
       - name: Verify issuer timezone regression on Ubuntu
         env:
           PYTHONPATH: ${{ github.workspace }}/src
-        run: /opt/b3-investment-options-agent/.venv/bin/python -m pytest tests/test_bradesco_dividends.py tests/test_stored_dividends.py tests/test_dividend_evidence.py tests/test_lab_position.py tests/test_lab_clarification.py tests/test_lab_option_management.py tests/test_strategy_live.py
+        run: |
+          /opt/b3-investment-options-agent/.venv/bin/python -m pip install -e "$GITHUB_WORKSPACE"
+          /opt/b3-investment-options-agent/.venv/bin/python -m pytest tests/test_bradesco_dividends.py tests/test_stored_dividends.py tests/test_dividend_evidence.py tests/test_lab_position.py tests/test_lab_clarification.py tests/test_lab_option_management.py tests/test_strategy_live.py
       - name: Install tested revision and request service restart
         shell: bash
         run: |
@@ -101,6 +106,7 @@ jobs:
           rmdir -p "$preserved_root/scripts" 2>/dev/null || true
           test "$(git -C "$runtime_dir" rev-parse HEAD)" = "$GITHUB_SHA"
           echo "TESTED_REVISION_INSTALLED=$GITHUB_SHA"
+          "$runtime_dir/.venv/bin/python" -m pip install -e "$runtime_dir"
           if python3 - "$runtime_dir" <<'PY'
           import os, subprocess, sys
           from pathlib import Path
