@@ -187,6 +187,7 @@ export type LiveAnalysisResponse = {
     price_history?: StockMarketData[];
     quant?: Record<string, unknown> | null;
     current_quote: StockMarketData | null;
+    current_quote_status: "AVAILABLE" | "UNAVAILABLE";
     history_latest: StockMarketData;
     latest: StockMarketData;
   };
