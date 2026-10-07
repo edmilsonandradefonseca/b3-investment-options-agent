@@ -20,12 +20,13 @@ _DECISION_SCHEMA: dict[str, Any] = {
             "items": {"type": "object", "additionalProperties": False,
                 "properties": {
                     "alternative_id": {"type": "string"},
+                    "opportunity_status": {"type": "string", "enum": ["QUALIFIED_OPPORTUNITY", "MONITOR", "INSUFFICIENT_EVIDENCE", "REJECTED_THESIS"]},
                     "priority_rank": {"type": "integer", "minimum": 0, "maximum": 40},
                     **{key: {"type": "array", "items": {"type": "string"}} for key in (
                         "supporting_evidence", "contradicting_evidence", "decision_implications", "unknowns", "evidence_refs"
                     )},
                 },
-                "required": ["alternative_id", "priority_rank", "supporting_evidence", "contradicting_evidence", "decision_implications", "unknowns", "evidence_refs"],
+                "required": ["alternative_id", "opportunity_status", "priority_rank", "supporting_evidence", "contradicting_evidence", "decision_implications", "unknowns", "evidence_refs"],
             },
         },
         "action": {"type": "string"},
@@ -100,11 +101,16 @@ class InvestmentReasoningAgent:
                 "the supplied share-price history and observed risk, available fundamentals, B3 PRE/DIC future-yield "
                 "curve vertices, portfolio exposure and source dates. Explain when each factor is unavailable; "
                 "do not infer causal effects from co-movement or treat a missing factor as neutral. "
-                "In each alternative_assessments item, priority_rank is 1..N only for a specific, material, "
-                "currently evidenced stock opportunity whose supporting evidence outweighs its contradictions; "
-                "rank those items by urgency/materiality, not by volatility, liquidity, target upside alone, or "
-                "ticker order. Set priority_rank=0 for monitor-only, incomplete, contradicted or unsupported theses. "
-                "Use contiguous ranks starting at 1, and use no positive rank when no thesis qualifies. "
+                "Classify every eligible asset in alternative_assessments as QUALIFIED_OPPORTUNITY, MONITOR, "
+                "INSUFFICIENT_EVIDENCE or REJECTED_THESIS. QUALIFIED_OPPORTUNITY requires a specific, material, "
+                "current thesis, an explained why-now catalyst, attributable dated evidence, and explicit review "
+                "of counterevidence and portfolio impact. MONITOR means a plausible thesis without a material "
+                "current action trigger; INSUFFICIENT_EVIDENCE means the available coverage cannot decide; "
+                "REJECTED_THESIS means evidence contradicts or fails to support the proposed thesis. "
+                "Assign priority_rank 1..N only to QUALIFIED_OPPORTUNITY assets, ordered by urgency/materiality, "
+                "not by volatility, liquidity, target upside alone, or ticker order. All other statuses require "
+                "priority_rank=0. Use contiguous ranks starting at 1; use no positive rank when none qualifies. "
+                "A rank is review priority, never BUY/sell advice or expected return. "
                 "A priority rank means review priority, never a BUY recommendation or expected-return forecast. "
                 "Answer in Portuguese with a decision-specific thesis, not a generic market overview. "
                 "In rationale compare every supplied alternative, its strongest supporting and contradicting evidence, "
@@ -137,7 +143,11 @@ class InvestmentReasoningAgent:
             schema_name="investment_decision",
             schema=schema,
         )
-        assessments = _parse_assessments(result.get("alternative_assessments", []), allowed_ids)
+        assessments = _parse_assessments(
+            result.get("alternative_assessments", []),
+            allowed_ids,
+            allowed_source_refs=_collect_source_refs(payload),
+        )
         return DecisionProposal(
             action=result["action"],
             subject_id=result["subject_id"],
@@ -154,7 +164,12 @@ class InvestmentReasoningAgent:
         )
 
 
-def _parse_assessments(values: Any, allowed_ids: list[str]) -> tuple[AlternativeAssessment, ...]:
+def _parse_assessments(
+    values: Any,
+    allowed_ids: list[str],
+    *,
+    allowed_source_refs: set[str] | None = None,
+) -> tuple[AlternativeAssessment, ...]:
     if not isinstance(values, list) or len(values) > 20:
         raise ValueError('Invalid alternative assessments')
     if values and not allowed_ids:
@@ -162,6 +177,7 @@ def _parse_assessments(values: Any, allowed_ids: list[str]) -> tuple[Alternative
     assessments = []
     seen = set()
     seen_ranks = set()
+    rank_status_pairs: list[tuple[int, str]] = []
     for item in values:
         if not isinstance(item, dict):
             raise ValueError('Alternative assessment must be an object')
@@ -169,18 +185,56 @@ def _parse_assessments(values: Any, allowed_ids: list[str]) -> tuple[Alternative
         if not isinstance(identifier, str) or not identifier.strip() or identifier in seen or (allowed_ids and identifier not in allowed_ids):
             raise ValueError('Assessment must link to a unique supplied alternative')
         seen.add(identifier)
+        opportunity_status = item.get('opportunity_status', 'INSUFFICIENT_EVIDENCE')
+        valid_statuses = {'QUALIFIED_OPPORTUNITY', 'MONITOR', 'INSUFFICIENT_EVIDENCE', 'REJECTED_THESIS'}
+        if opportunity_status not in valid_statuses:
+            raise ValueError('Assessment has an unsupported opportunity status')
         priority_rank = item.get('priority_rank', 0)
         if isinstance(priority_rank, bool) or not isinstance(priority_rank, int) or not 0 <= priority_rank <= 40:
             raise ValueError('Assessment priority rank must be an integer from 0 to 40')
+        if (priority_rank > 0) != (opportunity_status == 'QUALIFIED_OPPORTUNITY'):
+            raise ValueError('Only qualified opportunities may receive a positive rank')
         if priority_rank and priority_rank in seen_ranks:
             raise ValueError('Assessment priority ranks must be unique')
         if priority_rank:
             seen_ranks.add(priority_rank)
+        rank_status_pairs.append((priority_rank, opportunity_status))
         fields = {}
         for key in ('supporting_evidence', 'contradicting_evidence', 'decision_implications', 'unknowns', 'evidence_refs'):
             entries = item.get(key)
             if not isinstance(entries, list) or any(not isinstance(value, str) for value in entries):
                 raise ValueError('Assessment fields require arrays of text')
             fields[key] = tuple(entries)
-        assessments.append(AlternativeAssessment(alternative_id=identifier, priority_rank=priority_rank, **fields))
+        if priority_rank:
+            if not fields['supporting_evidence'] or not fields['evidence_refs']:
+                priority_rank = 0
+                opportunity_status = 'INSUFFICIENT_EVIDENCE'
+                fields['unknowns'] = (*fields['unknowns'], 'Desclassificada: faltam evidências de apoio ou referências de fonte.')
+            elif allowed_source_refs is not None and not set(fields['evidence_refs']).issubset(allowed_source_refs):
+                priority_rank = 0
+                opportunity_status = 'INSUFFICIENT_EVIDENCE'
+                fields['unknowns'] = (*fields['unknowns'], 'Desclassificada: referência de evidência não consta no contexto fornecido.')
+        assessments.append(AlternativeAssessment(
+            alternative_id=identifier,
+            opportunity_status=opportunity_status,
+            priority_rank=priority_rank,
+            **fields,
+        ))
+    positive_ranks = sorted(item.priority_rank for item in assessments if item.priority_rank > 0)
+    if positive_ranks and positive_ranks != list(range(1, len(positive_ranks) + 1)):
+        raise ValueError('Qualified opportunity ranks must be contiguous starting at 1')
     return tuple(assessments)
+
+
+def _collect_source_refs(value: Any) -> set[str]:
+    refs: set[str] = set()
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key in {'source_refs', 'evidence_refs'} and isinstance(item, (list, tuple)):
+                refs.update(str(ref) for ref in item if isinstance(ref, str) and ref.strip())
+            else:
+                refs.update(_collect_source_refs(item))
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            refs.update(_collect_source_refs(item))
+    return refs
