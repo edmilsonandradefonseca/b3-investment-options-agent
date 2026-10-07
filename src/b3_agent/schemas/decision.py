@@ -9,6 +9,7 @@ class AlternativeAssessment:
     """Derived qualitative assessment linked to a supplied alternative or asset."""
 
     alternative_id: str
+    opportunity_status: str = "INSUFFICIENT_EVIDENCE"
     priority_rank: int = 0
     supporting_evidence: tuple[str, ...] = ()
     contradicting_evidence: tuple[str, ...] = ()
