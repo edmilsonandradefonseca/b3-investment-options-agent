@@ -43,7 +43,13 @@ try{
  });
  await page.goto((process.env.B3_UI_URL||'http://127.0.0.1:5173')+'/#/strategy-lab');
  const panel=page.getByRole('region',{name:'Pergunta e análise do Strategy Lab'});
- const submit=()=>panel.locator('form').last().evaluate(form=>form.requestSubmit());
+ const submit=async()=>{
+  const button=panel.locator('form').last().locator('button').first();
+  await button.waitFor({state:'visible'});
+  assert.equal(await button.isEnabled(),true);
+  assert.match(await button.innerText(),/Analisar pergunta ou tese|Enviar continuação/);
+  await button.evaluate(element=>element.click());
+ };
  await panel.getByLabel('Sua pergunta ou tese').fill('Avalie minha tese sobre PETR4.');
  await submit();
  await panel.getByText('Resposta de fixture: tese exige verificar premissas.',{exact:true}).waitFor();
