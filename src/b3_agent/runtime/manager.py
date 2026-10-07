@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import signal
 import socket
@@ -125,6 +126,45 @@ class RuntimeManager:
         except OSError:
             return False
 
+    def scheduler_status(self) -> dict[str, Any]:
+        """Read B3 systemd timer dates without changing units or schedules."""
+        try:
+            result = subprocess.run(
+                ["systemctl", "list-timers", "--all", "--no-pager", "--no-legend"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=4,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            return {"state": "unavailable", "timers": []}
+
+        if result.returncode != 0:
+            return {"state": "unavailable", "timers": []}
+
+        timers: list[dict[str, str | None]] = []
+        for line in result.stdout.splitlines():
+            fields = re.split(r"\s{2,}", line.strip())
+            timer_unit = next(
+                (field for field in fields if field.startswith("b3-") and field.endswith(".timer")),
+                None,
+            )
+            if timer_unit is None:
+                continue
+            service_unit = next(
+                (field for field in fields if field.startswith("b3-") and field.endswith(".service")),
+                None,
+            )
+            timers.append(
+                {
+                    "unit": timer_unit,
+                    "activates": service_unit,
+                    "next": fields[0] if fields and fields[0] != "-" else None,
+                    "last": fields[2] if len(fields) > 2 and fields[2] != "-" else None,
+                }
+            )
+        return {"state": "ok", "timers": timers}
+
     def probe_health(self) -> bool:
         return self._http_probe(self.local_health_url)
 
@@ -132,6 +172,11 @@ class RuntimeManager:
         embedding_url = os.getenv("B3_EMBEDDING_URL", "http://127.0.0.1:8093").rstrip("/")
         qdrant_url = os.getenv("B3_QDRANT_URL", "http://127.0.0.1:6333").rstrip("/")
         neo4j_uri = os.getenv("B3_NEO4J_URI", "bolt://127.0.0.1:7687")
+        openclaw_url = (
+            os.getenv("B3_OPENCLAW_GATEWAY_URL")
+            or os.getenv("OPENCLAW_GATEWAY_URL")
+            or "ws://127.0.0.1:18789"
+        )
 
         return {
             "embedding": {
@@ -148,6 +193,11 @@ class RuntimeManager:
                 "state": "ok" if self._tcp_probe(neo4j_uri) else "unavailable",
                 "ownership": "shared_external",
                 "endpoint": neo4j_uri,
+            },
+            "openclaw_gateway": {
+                "state": "ok" if self._tcp_probe(openclaw_url) else "unavailable",
+                "ownership": "shared_external",
+                "endpoint": openclaw_url,
             },
         }
 
@@ -173,6 +223,7 @@ class RuntimeManager:
             },
             "resources": self.resource_status(),
             "services": self.shared_services_status(),
+            "scheduler": self.scheduler_status(),
             "process": {
                 "running": runtime_running and orchestrator_running,
                 "runtime_pid": runtime_pid,
