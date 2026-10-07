@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any
 
@@ -170,14 +171,13 @@ def _parse_assessments(
     *,
     allowed_source_refs: set[str] | None = None,
 ) -> tuple[AlternativeAssessment, ...]:
-    if not isinstance(values, list) or len(values) > 20:
+    if not isinstance(values, list) or len(values) > 40:
         raise ValueError('Invalid alternative assessments')
     if values and not allowed_ids:
         raise ValueError('No supplied alternatives to assess')
     assessments = []
     seen = set()
     seen_ranks = set()
-    rank_status_pairs: list[tuple[int, str]] = []
     for item in values:
         if not isinstance(item, dict):
             raise ValueError('Alternative assessment must be an object')
@@ -198,7 +198,6 @@ def _parse_assessments(
             raise ValueError('Assessment priority ranks must be unique')
         if priority_rank:
             seen_ranks.add(priority_rank)
-        rank_status_pairs.append((priority_rank, opportunity_status))
         fields = {}
         for key in ('supporting_evidence', 'contradicting_evidence', 'decision_implications', 'unknowns', 'evidence_refs'):
             entries = item.get(key)
@@ -220,10 +219,15 @@ def _parse_assessments(
             priority_rank=priority_rank,
             **fields,
         ))
-    positive_ranks = sorted(item.priority_rank for item in assessments if item.priority_rank > 0)
-    if positive_ranks and positive_ranks != list(range(1, len(positive_ranks) + 1)):
-        raise ValueError('Qualified opportunity ranks must be contiguous starting at 1')
-    return tuple(assessments)
+    ranked = sorted(
+        (item for item in assessments if item.priority_rank > 0),
+        key=lambda item: item.priority_rank,
+    )
+    normalized_ranks = {
+        item.alternative_id: replace(item, priority_rank=index)
+        for index, item in enumerate(ranked, start=1)
+    }
+    return tuple(normalized_ranks.get(item.alternative_id, item) for item in assessments)
 
 
 def _collect_source_refs(value: Any) -> set[str]:
