@@ -21,6 +21,8 @@ import type {
   TransactionRequest,
   TransactionResponse,
   VersionResponse,
+  InvestorFlowResponse,
+  YieldCurveResponse,
 } from "./contracts";
 
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
@@ -162,6 +164,14 @@ export const b3Api = {
   storedResearch: (ticker: string, limit = 8) =>
     requestJson<ResearchNewsResponse>(
       `/intelligence/research-context?ticker=${encodeURIComponent(ticker.trim().toUpperCase())}&limit=${limit}`,
+    ),
+  investorFlows: () =>
+    requestJson<InvestorFlowResponse>("/market-intelligence/investor-flows", undefined, 60_000),
+  yieldCurve: (curve: "PRE" | "DIC" | "DCL" = "PRE") =>
+    requestJson<YieldCurveResponse>(
+      `/market-intelligence/yield-curves?curve=${encodeURIComponent(curve)}`,
+      undefined,
+      60_000,
     ),
   researchNews: (ticker: string, limit = 20) =>
     requestJson<ResearchNewsResponse>(
