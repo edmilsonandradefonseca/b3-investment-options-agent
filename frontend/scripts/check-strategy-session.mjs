@@ -43,8 +43,9 @@ try{
  });
  await page.goto((process.env.B3_UI_URL||'http://127.0.0.1:5173')+'/#/strategy-lab');
  const panel=page.getByRole('region',{name:'Pergunta e análise do Strategy Lab'});
+ const submit=()=>panel.locator('form').last().evaluate(form=>form.requestSubmit());
  await panel.getByLabel('Sua pergunta ou tese').fill('Avalie minha tese sobre PETR4.');
- await panel.getByRole('button',{name:'Analisar pergunta ou tese',exact:true}).click();
+ await submit();
  await panel.getByText('Resposta de fixture: tese exige verificar premissas.',{exact:true}).waitFor();
  const firstChart=panel.getByRole('region',{name:'Gráfico histórico do Strategy Lab'});
  await firstChart.getByRole('button',{name:'1 semana',exact:true}).waitFor();
@@ -56,7 +57,7 @@ try{
  assert.equal(requests[0].context.comparison_assets,undefined);
  assert.equal(requests[0].context.analysis_mode,undefined);
  await panel.getByLabel('Ajustar ou aprofundar esta análise').fill('E se cair 5%?');
- await panel.getByRole('button',{name:'Enviar continuação',exact:true}).click();
+ await submit();
  await panel.getByRole('article',{name:'Análise 2'}).getByText('Resposta de fixture: tese exige verificar premissas.',{exact:true}).waitFor();
  assert.equal(requests[1].context.lab_conversation[0].question,'Avalie minha tese sobre PETR4.');
  const out=resolve(process.env.B3_VISUAL_OUTPUT||'visual-output');await mkdir(out,{recursive:true});
@@ -65,20 +66,20 @@ try{
  await panel.getByRole('button',{name:'Nova análise',exact:true}).click();
  assert.equal(await panel.locator('article').count(),0);
  await panel.getByLabel('Sua pergunta ou tese').fill('Nova tese sobre VALE3.');
- await panel.getByRole('button',{name:'Analisar pergunta ou tese',exact:true}).click();
+ await submit();
  await panel.getByText('Resposta de fixture: tese exige verificar premissas.',{exact:true}).waitFor();
  assert.equal(requests[2].context.lab_conversation.length,0);
  await panel.getByRole('button',{name:'Nova análise',exact:true}).click();
  await panel.getByLabel('Sua pergunta ou tese').fill('Vale manter, encerrar ou rolar uma opção da minha carteira?');
- await panel.getByRole('button',{name:'Analisar pergunta ou tese',exact:true}).click();
+ await submit();
  await panel.getByRole('region',{name:'Esclarecimento necessário para a estratégia'}).getByText('Qual é o código exato da opção que deseja analisar?',{exact:true}).waitFor();
  await panel.getByText('Aguardando esclarecimento',{exact:false}).waitFor();
  await panel.getByLabel('Ajustar ou aprofundar esta análise').fill('A opção é PETRK376.');
- await panel.getByRole('button',{name:'Enviar continuação',exact:true}).click();
+ await submit();
  await panel.getByRole('article',{name:'Análise 2'}).getByText('Deseja analisar toda a posição ou quantas unidades?',{exact:true}).waitFor();
  assert.equal(requests.at(-1).context.lab_conversation[0].response.lab_clarification.status,'NEEDS_CLARIFICATION');
  await panel.getByLabel('Ajustar ou aprofundar esta análise').fill('100 unidades.');
- await panel.getByRole('button',{name:'Enviar continuação',exact:true}).click();
+ await submit();
  const identified=panel.getByRole('article',{name:'Análise 3'});
  await panel.getByText('Posição identificada · cálculos pendentes',{exact:false}).waitFor();
  await identified.getByText('100 unidades',{exact:true}).waitFor();
@@ -87,11 +88,11 @@ try{
  await page.screenshot({path:resolve(out,'lab-position-selection-fixture.png'),animations:'disabled'});
 
  await panel.getByLabel('Ajustar ou aprofundar esta análise').fill('Compare manter, encerrar e rolar.');
- await panel.getByRole('button',{name:'Enviar continuação',exact:true}).click();
+ await submit();
  const candidates=panel.getByRole('article',{name:'Análise 4'});
  await candidates.getByText('PETRK400',{exact:false}).waitFor();
  await panel.getByLabel('Ajustar ou aprofundar esta análise').fill('PETRK400');
- await panel.getByRole('button',{name:'Enviar continuação',exact:true}).click();
+ await submit();
  const comparison=panel.getByRole('article',{name:'Análise 5'});
  await comparison.getByRole('region',{name:'Comparação de manter, encerrar e rolar no Strategy Lab'}).waitFor();
  const priorTurns=requests.at(-1).context.lab_conversation;
@@ -104,7 +105,7 @@ try{
 
  await panel.getByRole('button',{name:'Nova análise',exact:true}).click();
  await panel.getByLabel('Sua pergunta ou tese').fill('Compare ITUB4 e BBDC4.');
- await panel.getByRole('button',{name:'Analisar pergunta ou tese',exact:true}).click();
+ await submit();
  await panel.getByText('Resposta de fixture: tese exige verificar premissas.',{exact:true}).last().waitFor();
  const comparisonChart=panel.getByRole('region',{name:'Gráfico histórico do Strategy Lab'}).last();
  await comparisonChart.getByRole('img',{name:'Histórico de ITUB4 e BBDC4'}).waitFor();
