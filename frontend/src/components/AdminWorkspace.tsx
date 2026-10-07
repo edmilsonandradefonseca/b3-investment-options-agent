@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { b3Api, getApiBaseUrl } from "../api/client";
+import { b3Api, getApiBaseUrl, setApiBaseUrl } from "../api/client";
 import type { CollectionUniverseResponse, RuntimeStatusResponse } from "../api/contracts";
 import { State } from "./cockpit";
 
@@ -29,6 +29,9 @@ export default function AdminWorkspace() {
   const [universeDraft, setUniverseDraft] = useState<string[]>([]);
   const [tickerDraft, setTickerDraft] = useState("");
   const [savingUniverse, setSavingUniverse] = useState(false);
+  const [apiAddress, setApiAddress] = useState(getApiBaseUrl());
+  const [savingConnection, setSavingConnection] = useState(false);
+  const [connectionMessage, setConnectionMessage] = useState("");
   const refresh = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -50,6 +53,26 @@ export default function AdminWorkspace() {
       setLoading(false);
     }
   }, []);
+
+  async function saveConnection(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSavingConnection(true);
+    setConnectionMessage("");
+    try {
+      const normalized = setApiBaseUrl(apiAddress);
+      const parsed = new URL(normalized);
+      if (!parsed.hostname) throw new Error("Informe o IP ou nome do servidor.");
+      setApiAddress(normalized);
+      const runtime = await b3Api.runtimeStatus();
+      setStatus(runtime);
+      setConnectionMessage(`Conexão validada em ${normalized} · ${stateLabel(runtime.health)}.`);
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : String(e);
+      setConnectionMessage(`Endereço salvo, mas não foi possível validar a conexão: ${reason}`);
+    } finally {
+      setSavingConnection(false);
+    }
+  }
 
   async function saveUniverse() {
     setSavingUniverse(true);
@@ -95,7 +118,14 @@ export default function AdminWorkspace() {
         <div className="metric"><span>Host configurado</span><strong>{status?.api?.host ?? "—"}</strong><small>Porta {status?.api?.port ?? portFrom(getApiBaseUrl())}</small></div>
         <div className="metric"><span>Processo</span><strong>{status?.process?.running ? "Em execução" : stateLabel(status?.runtime)}</strong><small>{status?.process?.orchestrator_pid ? `PID ${status.process.orchestrator_pid}` : "PID não informado"}</small></div>
       </div>
-      <p className="muted">Endereço configurado no desktop: <strong>{getApiBaseUrl()}</strong>. Para alterá-lo, use “Configurar servidor Ubuntu” no menu lateral.</p>
+      <form className="inline-controls" onSubmit={saveConnection}>
+        <label htmlFor="orchestrator-address">Endereço do orquestrador (IP e porta)
+          <input id="orchestrator-address" type="url" value={apiAddress} onChange={event => setApiAddress(event.target.value)} placeholder="http://192.168.1.20:8000" required />
+        </label>
+        <button type="submit" disabled={savingConnection || !apiAddress.trim()}>{savingConnection ? "Testando conexão…" : "Salvar e testar conexão"}</button>
+      </form>
+      {connectionMessage && <p role="status" aria-live="polite">{connectionMessage}</p>}
+      <p className="muted">Endereço ativo neste desktop: <strong>{getApiBaseUrl()}</strong>. A alteração fica salva neste aplicativo.</p>
     </section>
 
     <section className="panel">
