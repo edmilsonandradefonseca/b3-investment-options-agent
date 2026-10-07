@@ -61,7 +61,19 @@ class InvestmentReasoningAgent:
         alternatives = (workspace.get('strategy_comparison') or {}).get('alternatives') or []
         allowed_ids = [item['alternative_id'] for item in alternatives if isinstance(item, dict) and isinstance(item.get('alternative_id'), str)]
         if not allowed_ids:
-            allowed_ids = list((facts.get('market_analysis') or {}).get('tickers') or {})
+            screen_rows = (
+                ((workspace.get('opportunity_screen') or {}).get('rows') or [])
+                if isinstance(workspace.get('opportunity_screen'), dict)
+                else []
+            )
+            if screen_rows:
+                allowed_ids = [
+                    item.get('ticker') for item in screen_rows
+                    if isinstance(item, dict) and item.get('discovery_eligible') is True
+                    and isinstance(item.get('ticker'), str)
+                ]
+            else:
+                allowed_ids = list((facts.get('market_analysis') or {}).get('tickers') or {})
         schema = deepcopy(_DECISION_SCHEMA)
         if allowed_ids:
             schema['properties']['alternative_assessments']['items']['properties']['alternative_id']['enum'] = allowed_ids
