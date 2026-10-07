@@ -60,7 +60,7 @@ export default function AdminWorkspace() {
     setConnectionMessage("");
     let saved = false;
     try {
-      const normalized = apiAddress.trim().replace(/\\/$/, "");
+      const normalized = apiAddress.trim().replace(/\/$/, "");
       const parsed = new URL(normalized);
       if (!parsed.hostname) throw new Error("Informe o IP ou nome do servidor.");
       setApiBaseUrl(normalized);
