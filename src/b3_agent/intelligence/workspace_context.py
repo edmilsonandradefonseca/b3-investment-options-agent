@@ -21,6 +21,7 @@ from b3_agent.providers.searxng_news import SearxngNewsAdapter
 from b3_agent.repositories.macro import MacroDataRepository
 from b3_agent.research_events import ResearchEventService
 from b3_agent.strategy_live import StrategyEvidenceService
+from b3_agent.providers.b3_yield_curve import B3YieldCurveAdapter, YieldCurveProviderError
 
 
 JOAO_SCHEMA: dict[str, Any] = {
@@ -280,6 +281,7 @@ class WorkspaceIntelligenceContextService:
         joao_service: JoaoResolvePerspectiveService | None = None,
         opportunity_service: LiveOpportunityService | None = None,
         stored_research_service: StoredResearchContextService | None = None,
+        yield_curve_provider: B3YieldCurveAdapter | None = None,
     ) -> None:
         self.current_quote_provider = current_quote_provider or OplabAdapter()
         self.news_provider = news_provider or SearxngNewsAdapter(
@@ -300,6 +302,7 @@ class WorkspaceIntelligenceContextService:
         self.joao_service = joao_service
         self.opportunity_service = opportunity_service or LiveOpportunityService()
         self.stored_research_service = stored_research_service or StoredResearchContextService()
+        self.yield_curve_provider = yield_curve_provider or B3YieldCurveAdapter()
 
     def build(
         self,
@@ -313,6 +316,7 @@ class WorkspaceIntelligenceContextService:
         history_as_of: datetime | str | None = None,
         history_since: str | None = None,
         research_mode: str = "stored_first",
+        include_yield_curve: bool = False,
     ) -> WorkspaceIntelligenceContext:
         started = monotonic()
         normalized_workspace = " ".join(workspace.casefold().split())
@@ -674,6 +678,32 @@ class WorkspaceIntelligenceContextService:
             if item is not None:
                 macro[indicator] = asdict(item)
                 source_refs.append(item.source)
+
+        if include_yield_curve and normalized_workspace in {"opportunities", "market intelligence"} and history_as_of is None:
+            curves: dict[str, Any] = {}
+            for curve_code in ("PRE", "DIC"):
+                try:
+                    points = self.yield_curve_provider.get_latest(curve_code)
+                    curves[curve_code] = {
+                        "status": "AVAILABLE",
+                        "as_of": points[0].observation_timestamp.isoformat() if points else None,
+                        "unit": "percent_per_year",
+                        "source": B3YieldCurveAdapter.SOURCE,
+                        "points": [asdict(point) for point in points],
+                    }
+                    source_refs.extend(point.source for point in points)
+                except (OSError, RuntimeError, ValueError) as exc:
+                    code = getattr(exc, "code", "PROVIDER_UNAVAILABLE")
+                    curves[curve_code] = {
+                        "status": code,
+                        "as_of": None,
+                        "unit": "percent_per_year",
+                        "source": B3YieldCurveAdapter.SOURCE,
+                        "points": [],
+                        "error": str(exc),
+                    }
+                    limitations.append(f"Future yield curve {curve_code} unavailable: {exc}")
+            macro["yield_curves"] = curves
 
         workspace_result = dict(deterministic_result or {})
         if normalized_workspace == "opportunities" and normalized_tickers:
