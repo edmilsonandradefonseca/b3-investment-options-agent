@@ -70,6 +70,7 @@ export default function MarketDataCharts(){
      <LineChart values={flowValues} color="#43b7ff" zero label="Fluxo diário reportado de investidores estrangeiros"/>
      <p className="muted">Fonte: Dados de Mercado · unidade não declarada no esquema da API; valor exibido sem conversão ou símbolo monetário. O gráfico mostra o campo reportado, não uma decomposição de compras e vendas.</p>
     </>}
+   </>}
   </ChartPanel>
 
   <ChartPanel title="Curva de juros" subtitle={`B3 TaxaSwap · ${curveDescription} · ${curveData?.as_of?dateLabel(curveData.as_of):"data indisponível"}`}>
@@ -81,6 +82,7 @@ export default function MarketDataCharts(){
      <LineChart values={curveValues} color="#47d7a0" label={`Curva ${curve} em percentual ao ano por dias corridos`}/>
      <p className="muted">Fonte: B3 TaxaSwap, interpretada pelo parser do pyettj · taxa em % a.a. · eixo horizontal em dias corridos. As curvas são identificadas pelo código publicado; DIC é DI × IPCA.</p>
     </>}
+   </>}
   </ChartPanel>
  </div>;
 }
