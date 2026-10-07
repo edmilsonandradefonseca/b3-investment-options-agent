@@ -956,6 +956,7 @@ def live_analysis(ticker: str) -> dict[str, Any]:
                 "price_history": [asdict(item) for item in bounded_history],
                 "quant": asdict(quant),
                 "current_quote": asdict(current_quote) if current_quote is not None else None,
+                "current_quote_status": "AVAILABLE" if current_quote is not None else "UNAVAILABLE",
                 "history_latest": asdict(history_latest),
                 "latest": asdict(display_latest),
             },
