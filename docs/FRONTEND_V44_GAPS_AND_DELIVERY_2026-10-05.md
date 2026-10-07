@@ -269,3 +269,15 @@ O teste visual confirma que o panorama amplo não apresenta fluxo do investidor 
 - Fontes oficiais examinadas: [B3 — Participação de investidores no BDI](https://www.b3.com.br/pt_br/noticias/dados-de-participacao-de-investidores-da-b3-passa-a-ser-disponibilizado-somente-no-boletim-diario-do-mercado.htm), [B3 — Dados de mercado](https://www.b3.com.br/main.jsp?doui_processActionId=setLocaleProcessAction&locale=pt_BR&lumA=1&lumII=8A80CB81633FBF0B016340D8C48572C5&lumPageId=8A6A8E1F52A1E49F0152A25008F80769), [ANBIMA — Curvas de Juros](https://developers.anbima.com.br/pt/documentacao/precos-indices/apis-de-precos/titulos-publicos/).
 - A especificação normativa recebeu MI-07/MI-08 no adendo V1.3; nenhuma série artificial foi adicionada à interface. Próximo gate: identificar credencial ANBIMA disponível no servidor e validar downloader B3/ANBIMA com dados reais; então implementar domínio→API→gráficos no E4 e repetir o aceite visual.
 
+
+
+## Correção de fontes MI-07/MI-08 — 07/10/2026
+
+A documentação oficial do Dados de Mercado confirma o endpoint `GET /v1/investors`: histórico de fluxo por data desde 2010, sem parâmetros de consulta, com os campos `foreigners`, `institutional`, `individuals`, `financial_institutions`, `companies`, `clubs` e `other`. Todas as chamadas requerem token Bearer; a documentação prevê limites de requisição e não confirma que qualquer plano/token tenha acesso gratuito ou ilimitado.
+
+- MI-07 usa Dados de Mercado como adapter de fluxo, não o Boletim Diário/planilha B3 como caminho primário previsto anteriormente.
+- O contrato publica um valor por categoria e não descreve colunas separadas de compra e venda. A UI deve rotular o valor como fluxo/saldo reportado pelo provedor, confirmar unidade e convenção de sinal no primeiro payload autenticado e mostrar proveniência. Não calcular compras/vendas nem agregar por mês até validar a semântica.
+- A falta de `DADOSDEmercado_API_TOKEN` (nome final de configuração ainda a definir no adapter) deve aparecer como credencial ausente; HTTP 401/403/429 deve preservar o último snapshot com sua data e indicar falha/autorização/limite, sem limpar os dados exibidos.
+- MI-08 usa `pyettj` como adapter de curva B3/ANBIMA. Códigos e descrições publicados devem ser preservados: `PRE` = DI×pré, `DIC` = DI×IPCA, `DCL` = cupom limpo dólar. `DIC` não pode ser rotulada como IPCA spot. A biblioteca fornece taxas por vértice e também consultas históricas/modelagem, mas a primeira entrega deve persistir e exibir apenas observações da fonte, sem cenários calculados.
+- Fontes consultadas: [API Dados de Mercado — Investidores estrangeiros](https://api.dadosdemercado.com.br/api/docs/bolsa/investidores-estrangeiros), [Dados de Mercado — Fluxo](https://www.dadosdemercado.com.br/fluxo), [pyettj](https://github.com/rafa-rod/pyettj).
+- Este registro corrige a escolha de provedor no diagnóstico anterior. Nenhum acesso autenticado foi realizado; portanto, unidade, convenção de sinal, formato exato do payload de produção e limite associado à conta permanecem pendentes de validação.
