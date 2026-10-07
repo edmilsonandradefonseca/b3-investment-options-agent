@@ -110,9 +110,9 @@ export const b3Api = {
   health: () => requestJson<HealthResponse>("/health"),
   runtimeStatus: () => requestJson<RuntimeStatusResponse>("/runtime/status"),
   schedulerConfig: () => requestJson<SchedulerConfigResponse>("/admin/scheduler-config"),
-  saveSchedulerConfig: (start_time: string, end_time: string) => requestJson<SchedulerConfigResponse>("/admin/scheduler-config", {
+  saveSchedulerConfig: (start_time: string, end_time: string, interval_minutes: number) => requestJson<SchedulerConfigResponse>("/admin/scheduler-config", {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ start_time, end_time }),
+    body: JSON.stringify({ start_time, end_time, interval_minutes }),
   }),
   collectionUniverse: () => requestJson<CollectionUniverseResponse>("/admin/collection-universe"),
   saveCollectionUniverse: (tickers: string[]) => requestJson<CollectionUniverseResponse>("/admin/collection-universe", {
