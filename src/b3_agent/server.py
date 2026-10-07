@@ -1248,8 +1248,7 @@ def version() -> dict[str, str]:
     return {"service": "b3-orchestrator-server", "version": app.version, "opportunity_screen_policy": "B3_OBSERVED_STOCK_SCREEN_V1"}
 
 
-@app.post("/orchestrate", response_model=OrchestrateResponse)
-def orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
+def _orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
     """Translate HTTP input to the transport-agnostic ``b3_orchestrator`` contract."""
     try:
         normalized = OrchestratorRequest.from_inputs(
@@ -1452,7 +1451,67 @@ def orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
-__all__ = ["OrchestrateRequest", "OrchestrateResponse", "app"]
+def _opportunity_review_store():
+    from b3_agent.jobs.opportunity_review import OpportunityReviewStore
+    return OpportunityReviewStore(settings.data_dir)
+
+
+@app.get("/opportunities/latest")
+def latest_opportunities_review() -> dict[str, Any]:
+    return _opportunity_review_store().latest()
+
+
+@app.get("/opportunities/status")
+def opportunities_review_status() -> dict[str, Any]:
+    return _opportunity_review_store().status()
+
+
+@app.post("/orchestrate", response_model=OrchestrateResponse)
+def orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
+    workspace = str(
+        request.context.get("workspace")
+        or request.context.get("dashboard_page")
+        or ""
+    ).strip().casefold()
+    is_current_opportunities_review = (
+        workspace == "opportunities"
+        and request.context.get("analysis_mode") != "deterministic"
+        and request.context.get("as_of") is None
+    )
+    if not is_current_opportunities_review:
+        return _orchestrate(request)
+
+    store = _opportunity_review_store()
+    lock_handle = store.try_acquire()
+    if lock_handle is None:
+        raise HTTPException(
+            status_code=409,
+            detail="A revisão completa de Opportunities já está em andamento.",
+        )
+    started = store.begin()
+    try:
+        response = _orchestrate(request)
+        synthesis_status = (
+            response.result.get("derived_synthesis_status")
+            if isinstance(response.result, dict)
+            else None
+        )
+        if response.error or synthesis_status != "COMPLETED":
+            store.fail(
+                response.error or f"Síntese não concluída: {synthesis_status or 'UNKNOWN'}",
+                started,
+            )
+        else:
+            store.complete(response, started)
+        return response
+    except Exception as exc:
+        store.fail(f"{type(exc).__name__}: {exc}", started)
+        raise
+    finally:
+        store.release(lock_handle)
+
+
+__all__ = ["OrchestrateRequest", "OrchestrateResponse", "app", "orchestrate"]
 
 
 @app.get("/providers/budget/brapi")
