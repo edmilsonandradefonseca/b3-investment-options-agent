@@ -1,5 +1,6 @@
 from dataclasses import replace
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -98,7 +99,7 @@ def test_http_selection_precedes_providers_and_reads_current_snapshot(monkeypatc
     from b3_agent import server
     from b3_agent.portfolio.ingestion import BtgRendaVariavelLoader
     from types import SimpleNamespace
-    current = date.today()
+    current = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
     snapshot = replace(PORTFOLIO, as_of=current,
                        positions=(replace(POSITION, expiration_date=current+timedelta(days=30)),))
     (tmp_path/'imports').mkdir()
