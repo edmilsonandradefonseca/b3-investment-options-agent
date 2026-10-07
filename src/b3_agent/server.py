@@ -1221,7 +1221,10 @@ def market_intelligence_yield_curves(
 def market_intelligence_investor_flows() -> dict[str, Any]:
     """Return observed investor flow from the authenticated Dados de Mercado API."""
     try:
-        records = DadosDeMercadoInvestorsAdapter().get_history()
+        records = [
+            item for item in DadosDeMercadoInvestorsAdapter().get_history()
+            if item.investor_type == "FOREIGN"
+        ]
     except InvestorFlowProviderError as exc:
         raise HTTPException(
             status_code=503,
