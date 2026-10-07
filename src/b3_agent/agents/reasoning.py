@@ -187,7 +187,7 @@ def _parse_assessments(
         seen.add(identifier)
         opportunity_status = item.get('opportunity_status', 'INSUFFICIENT_EVIDENCE')
         valid_statuses = {'QUALIFIED_OPPORTUNITY', 'MONITOR', 'INSUFFICIENT_EVIDENCE', 'REJECTED_THESIS'}
-        if opportunity_status not in valid_statuses:
+        if not isinstance(opportunity_status, str) or opportunity_status not in valid_statuses:
             raise ValueError('Assessment has an unsupported opportunity status')
         priority_rank = item.get('priority_rank', 0)
         if isinstance(priority_rank, bool) or not isinstance(priority_rank, int) or not 0 <= priority_rank <= 40:
