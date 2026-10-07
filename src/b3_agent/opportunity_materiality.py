@@ -144,8 +144,8 @@ def classify_stock_materiality(row: dict[str, Any], as_of: datetime) -> dict[str
     return base
 
 
-OPPORTUNITY_RESEARCH_BUDGET_POLICY = "B3_OPPORTUNITY_RESEARCH_ENRICHMENT_V1"
-MAX_SYNCHRONOUS_RESEARCH_TICKERS = 8
+OPPORTUNITY_RESEARCH_BUDGET_POLICY = "B3_OPPORTUNITY_RESEARCH_ENRICHMENT_V2"
+MAX_SYNCHRONOUS_RESEARCH_TICKERS = 40
 
 
 def build_opportunity_research_scope(
@@ -154,11 +154,11 @@ def build_opportunity_research_scope(
     *,
     limit: int = MAX_SYNCHRONOUS_RESEARCH_TICKERS,
 ) -> dict[str, Any]:
-    """Bound optional synchronous news enrichment without truncating screening.
+    """Enrich the complete supported stock universe and disclose any overflow.
 
-    All names remain in the deterministic screen. Explicitly watched stocks and
-    material review candidates receive first priority for the slower research
-    context; the returned counts make omitted enrichment visible.
+    Explicitly watched stocks and material review candidates receive first
+    priority if the supported universe exceeds the bounded synchronous worker
+    capacity; every screened name remains visible with its coverage status.
     """
     if limit < 1:
         raise ValueError("limit must be positive")
