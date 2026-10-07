@@ -837,8 +837,8 @@ def runtime_status() -> dict[str, Any]:
     return RuntimeManager().status(health_override="ok")
 
 class SchedulerConfigRequest(BaseModel):
-    start_time: str = Field(pattern=r"^(?:[01]\\d|2[0-3]):[0-5]\\d$")
-    end_time: str = Field(pattern=r"^(?:[01]\\d|2[0-3]):[0-5]\\d$")
+    start_time: str = Field(pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+    end_time: str = Field(pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 
 
 def _scheduler_config_path() -> Path:
@@ -875,7 +875,7 @@ def save_scheduler_config(request: SchedulerConfigRequest) -> dict[str, Any]:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix(".json.tmp")
-        temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+        temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         temporary.replace(path)
         return get_scheduler_config()
     except OSError as exc:
