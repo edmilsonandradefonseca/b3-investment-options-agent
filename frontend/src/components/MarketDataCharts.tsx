@@ -1,4 +1,5 @@
 import {useEffect,useMemo,useState} from "react";
+import type {ReactNode} from "react";
 import {b3Api} from "../api/client";
 import type {InvestorFlowObservation,InvestorFlowResponse,YieldCurveResponse} from "../api/contracts";
 import {State} from "./cockpit";
@@ -29,15 +30,15 @@ function LineChart({values,color,zero=false,label}:{values:XY[];color:string;zer
  }));
  const path=points.map((point,index)=>`${index===0?"M":"L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ");
  const baseline=zero?height-pad-((0-min)/range)*(height-pad*2):null;
- return <svg role="img" aria-label={label} viewBox={`0 0 ${width} ${height}`} className="market-series-chart" preserveAspectRatio="none">
+ return <svg style={{width:"100%",height:"230px",display:"block"}} role="img" aria-label={label} viewBox={`0 0 ${width} ${height}`} className="market-series-chart" preserveAspectRatio="none">
   <line x1={pad} x2={width-pad} y1={height-pad} y2={height-pad} stroke="#294258"/>
   {baseline!==null&&<line x1={pad} x2={width-pad} y1={baseline} y2={baseline} stroke="#607b90" strokeDasharray="4 5"/>}
   <path d={path} fill="none" stroke={color} strokeWidth="3" vectorEffect="non-scaling-stroke"/>
  </svg>;
 }
 
-function ChartPanel({title,subtitle,children}:{title:string;subtitle:string;children:React.ReactNode}){
- return <section className="panel market-series-panel"><div className="section-head"><div><h3>{title}</h3><p className="muted">{subtitle}</p></div>{children}</div></section>;
+function ChartPanel({title,subtitle,children}:{title:string;subtitle:string;children:ReactNode}){
+ return <section className="panel market-series-panel"><div className="section-head"><div><h3>{title}</h3><p className="muted">{subtitle}</p></div></div>{children}</section>;
 }
 
 export default function MarketDataCharts(){
@@ -58,11 +59,11 @@ export default function MarketDataCharts(){
  const latestCurve=curveRows[0];
  const curveDescription=curve==="PRE"?"DI × prefixado":curve==="DIC"?"DI × IPCA":"Cupom limpo em dólar";
 
- return <div className="market-series-grid">
+ return <div className="market-series-grid" style={{display:"grid",gap:"1rem"}}>
   <ChartPanel title="Fluxo do investidor estrangeiro" subtitle={`Dados de Mercado · série diária · ${foreign.length} observações`}>
    <button type="button" className="ghost" disabled={flowBusy} onClick={()=>setRevision(value=>value+1)}>{flowBusy?"Atualizando…":"Atualizar"}</button>
    {flowBusy&&!flows?<State kind="loading" title="Consultando fluxo">Buscando série diária no provedor.</State>:flowError?<State kind="error" title="Fluxo indisponível">{flowError}</State>:flows?.status==="NO_DATA"||!foreign.length?<State kind="limited" title="Sem observações de fluxo">A API não retornou a categoria estrangeiros para este período.</State>:<>
-    <div className="market-series-metric"><strong>{numberLabel(latestForeign?.net_financial_value)}</strong><span>valor mais recente · {dateLabel(latestForeign?.observation_date)}</span></div>
+    <div className="market-series-metric" style={{display:"flex",flexDirection:"column",gap:".25rem",padding:".5rem 0"}}><strong>{numberLabel(latestForeign?.net_financial_value)}</strong><span>valor mais recente · {dateLabel(latestForeign?.observation_date)}</span></div>
     <LineChart values={flowValues} color="#43b7ff" zero label="Fluxo diário reportado de investidores estrangeiros"/>
     <p className="muted">Fonte: Dados de Mercado · unidade não declarada no esquema da API; valor exibido sem conversão ou símbolo monetário. O gráfico mostra o campo reportado, não uma decomposição de compras e vendas.</p>
    </>}
