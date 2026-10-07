@@ -334,8 +334,8 @@ class WorkspaceIntelligenceContextService:
         )
         if research_mode not in {"stored_first", "stored_only", "refresh"}:
             raise ValueError("research_mode must be stored_first, stored_only or refresh")
-        if len(normalized_tickers) > 20 or not 1 <= news_limit <= 20:
-            raise ValueError("workspace ticker/news limits must be between 1 and 20")
+        if len(normalized_tickers) > 40 or not 1 <= news_limit <= 20:
+            raise ValueError("workspace accepts up to 40 tickers and 1 to 20 news items per ticker")
         as_of = datetime.now(timezone.utc)
         research_as_of = history_as_of
         if isinstance(research_as_of, str):
