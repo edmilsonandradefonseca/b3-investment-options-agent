@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import { b3Api, getApiBaseUrl } from "../api/client";
 import type { CollectionUniverseResponse, RuntimeStatusResponse } from "../api/contracts";
 import { State } from "./cockpit";
@@ -32,20 +33,22 @@ export default function AdminWorkspace() {
     setLoading(true);
     setError("");
     try {
-    const [runtimeResult, universeResult] = await Promise.allSettled([
-      b3Api.runtimeStatus(),
-      b3Api.collectionUniverse(),
-    ]);
-    if (runtimeResult.status === "fulfilled") setStatus(runtimeResult.value);
-    if (universeResult.status === "fulfilled") {
-      setUniverse(universeResult.value);
-      setUniverseDraft(universeResult.value.configured_tickers);
+      const [runtimeResult, universeResult] = await Promise.allSettled([
+        b3Api.runtimeStatus(),
+        b3Api.collectionUniverse(),
+      ]);
+      if (runtimeResult.status === "fulfilled") setStatus(runtimeResult.value);
+      if (universeResult.status === "fulfilled") {
+        setUniverse(universeResult.value);
+        setUniverseDraft(universeResult.value.configured_tickers);
+      }
+      const failures = [runtimeResult, universeResult]
+        .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+        .map(result => result.reason instanceof Error ? result.reason.message : String(result.reason));
+      if (failures.length) setError(failures.join(" · "));
+    } finally {
+      setLoading(false);
     }
-    const failures = [runtimeResult, universeResult]
-      .filter((result): result is PromiseRejectedResult => result.status === "rejected")
-      .map(result => result.reason instanceof Error ? result.reason.message : String(result.reason));
-    if (failures.length) setError(failures.join(" · "));
-    finally { setLoading(false); }
   }, []);
 
   async function saveUniverse() {
@@ -62,7 +65,7 @@ export default function AdminWorkspace() {
     }
   }
 
-  function addTickers(event: React.FormEvent<HTMLFormElement>) {
+  function addTickers(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const candidates = tickerDraft.split(/[,;\\s]+/).filter(Boolean).map(value => value.toUpperCase());
     const invalid = candidates.filter(value => !/^[A-Z]{4}\\d{1,2}$/.test(value));
