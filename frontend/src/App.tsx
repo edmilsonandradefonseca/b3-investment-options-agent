@@ -232,6 +232,11 @@ export default function App(){
  async function runOpportunityScreen(){
   const assets=opportunityAssets.split(/[,;\s]+/).filter(Boolean).map(value=>value.toUpperCase());
   if(busy||opportunitySearchInFlight.current)return;
+  const activeReview=await b3Api.opportunityReviewStatus().catch(()=>null);
+  if(activeReview?.status==='RUNNING'){
+   setOpportunityRun(previous=>({...previous,status:'running',startedAt:activeReview.started_at,finishedAt:null,message:'A revisão diária já está em andamento; acompanhando a mesma execução.'}));
+   return;
+  }
   opportunitySearchInFlight.current=true;
   const reviewSequence=++opportunityReviewSequence.current;
   const reviewedSnapshotKey=portfolio?opportunitySnapshotKey(portfolio):null;
@@ -239,7 +244,14 @@ export default function App(){
   setOpportunityRun(previous=>({...previous,status:'running',startedAt,finishedAt:null,message:null}));
   try{
    const response=await run(`UC-03: analise ${assets.join(', ')} e todas as ações vigentes da carteira como universo completo. Cruze notícias e eventos datados, histórico recente de preço e volume, fundamentos disponíveis, curva futura B3 PRE e DIC, fatores de mercado e exposição da carteira; cite datas e fontes por tese e diga claramente quando um desses dados estiver indisponível. Compare evidências favoráveis e contrárias e explique por que uma tese importa agora. Depois ordene, da maior para a menor prioridade, somente as oportunidades materiais sustentadas por evidência específica, atual e verificável. Não dê rank positivo a ativo apenas por volatilidade, liquidez ou upside de alvo institucional. Separe oportunidades ranqueadas de ativos para acompanhar; se nenhuma tese passar o critério, retorne ranking vazio e explique as lacunas. Rank é prioridade de revisão, não retorno esperado nem recomendação automática de compra/venda. Considere opções possuídas apenas como exposição/cobertura; não busque cadeia de opções.`,false,{ticker:null,preservePrevious:true,context:{workspace:'Opportunities',selected_ticker:null,opportunity_assets:assets,opportunity_objective:opportunityObjective,include_portfolio_stocks:true,research_mode:researchMode,include_yield_curve:true}});
-   const finishedAt=new Date().toISOString();
+   if(!response){
+   const active=await b3Api.opportunityReviewStatus().catch(()=>null);
+   if(active?.status==='RUNNING'){
+    setOpportunityRun(previous=>({...previous,status:'running',startedAt:active.started_at,finishedAt:null,message:'A revisão já estava em andamento; acompanhando a mesma execução.'}));
+    return;
+   }
+  }
+  const finishedAt=new Date().toISOString();
    const responseResult=response?.result&&typeof response.result==='object'?response.result:{};
    const failed=!response||Boolean(response.error)||Object.keys(responseResult).length===0||!isCompletedOpportunityReview(response);
    if(!failed)setWorkspaceResults(previous=>({...previous,Opportunities:response}));
