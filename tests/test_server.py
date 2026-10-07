@@ -539,3 +539,26 @@ def test_collection_universe_admin_api_persists_and_rejects_invalid_tickers(monk
     invalid = client.post("/admin/collection-universe", json={"tickers": ["BTC"]})
     assert invalid.status_code == 422
     assert client.get("/admin/collection-universe").json()["configured_tickers"] == ["VALE3", "ITUB4"]
+
+
+def test_scheduler_config_admin_api_persists_window_and_rejects_invalid_times(monkeypatch, tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(server, "settings", SimpleNamespace(data_dir=tmp_path))
+    monkeypatch.delenv("B3_INTEL_ACTIVE_START_HOUR", raising=False)
+    monkeypatch.delenv("B3_INTEL_ACTIVE_END_HOUR", raising=False)
+
+    initial = client.get("/admin/scheduler-config")
+    assert initial.status_code == 200
+    assert initial.json()["start_time"] == "08:00"
+    assert initial.json()["end_time"] == "19:00"
+
+    saved = client.post("/admin/scheduler-config", json={"start_time": "09:30", "end_time": "17:45"})
+    assert saved.status_code == 200
+    assert saved.json()["start_time"] == "09:30"
+    assert saved.json()["end_time"] == "17:45"
+    assert saved.json()["source"] == "admin"
+
+    invalid = client.post("/admin/scheduler-config", json={"start_time": "18:00", "end_time": "09:00"})
+    assert invalid.status_code == 422
+    assert client.get("/admin/scheduler-config").json()["start_time"] == "09:30"
