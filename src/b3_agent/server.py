@@ -1498,14 +1498,14 @@ def orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
         )
         if response.error or synthesis_status != "COMPLETED":
             store.fail(
-                response.error or f"Síntese não concluída: {synthesis_status or 'UNKNOWN'}",
+                "SYNTHESIS_FAILED" if response.error else f"SYNTHESIS_NOT_COMPLETED:{synthesis_status or 'UNKNOWN'}",
                 started,
             )
         else:
             store.complete(response, started)
         return response
     except Exception as exc:
-        store.fail(f"{type(exc).__name__}: {exc}", started)
+        store.fail(type(exc).__name__, started)
         raise
     finally:
         store.release(lock_handle)
