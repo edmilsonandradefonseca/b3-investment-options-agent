@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { b3Api, getApiBaseUrl } from "../api/client";
-import type { RuntimeStatusResponse } from "../api/contracts";
+import type { CollectionUniverseResponse, RuntimeStatusResponse } from "../api/contracts";
 import { State } from "./cockpit";
 
 const labels: Record<string, string> = {
@@ -24,13 +24,57 @@ export default function AdminWorkspace() {
   const [status, setStatus] = useState<RuntimeStatusResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [universe, setUniverse] = useState<CollectionUniverseResponse | null>(null);
+  const [universeDraft, setUniverseDraft] = useState<string[]>([]);
+  const [tickerDraft, setTickerDraft] = useState("");
+  const [savingUniverse, setSavingUniverse] = useState(false);
   const refresh = useCallback(async () => {
     setLoading(true);
     setError("");
-    try { setStatus(await b3Api.runtimeStatus()); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    try {
+    const [runtimeResult, universeResult] = await Promise.allSettled([
+      b3Api.runtimeStatus(),
+      b3Api.collectionUniverse(),
+    ]);
+    if (runtimeResult.status === "fulfilled") setStatus(runtimeResult.value);
+    if (universeResult.status === "fulfilled") {
+      setUniverse(universeResult.value);
+      setUniverseDraft(universeResult.value.configured_tickers);
+    }
+    const failures = [runtimeResult, universeResult]
+      .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+      .map(result => result.reason instanceof Error ? result.reason.message : String(result.reason));
+    if (failures.length) setError(failures.join(" · "));
     finally { setLoading(false); }
   }, []);
+
+  async function saveUniverse() {
+    setSavingUniverse(true);
+    setError("");
+    try {
+      const result = await b3Api.saveCollectionUniverse(universeDraft);
+      setUniverse(result);
+      setUniverseDraft(result.configured_tickers);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingUniverse(false);
+    }
+  }
+
+  function addTickers(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const candidates = tickerDraft.split(/[,;\\s]+/).filter(Boolean).map(value => value.toUpperCase());
+    const invalid = candidates.filter(value => !/^[A-Z]{4}\\d{1,2}$/.test(value));
+    if (invalid.length) {
+      setError(`Ticker inválido: ${invalid.join(", ")}. Use símbolos B3, por exemplo PETR4.`);
+      return;
+    }
+    setError("");
+    setUniverseDraft(current => Array.from(new Set([...current, ...candidates])));
+    setTickerDraft("");
+  }
+
   useEffect(() => { void refresh(); }, [refresh]);
 
   const services = Object.entries(status?.services ?? {});
@@ -62,6 +106,18 @@ export default function AdminWorkspace() {
         })}
       </tbody></table></div> : <State kind={status ? "limited" : "loading"} title={status ? "Serviços não informados" : "Consultando serviços"}>{status ? "O backend conectado não retornou a lista de serviços." : "Lendo o estado operacional do runtime."}</State>}
       {resources.length > 0 && <p className="muted">Recursos locais: {resources.map(([name, value]) => `${name}: ${stateLabel(value)}`).join(" · ")}</p>}
+    </section>
+
+    <section className="panel">
+      <h2>Ações monitoradas pelo scheduler</h2>
+      <p className="muted">As ações da carteira são incluídas automaticamente. Esta lista adicional alimenta as próximas coletas CVM, notícias e histórico.</p>
+      <form className="inline-controls" onSubmit={addTickers}>
+        <label>Adicionar tickers B3<input value={tickerDraft} onChange={event => setTickerDraft(event.target.value)} placeholder="VALE3, ITUB4" aria-label="Adicionar tickers B3"/></label>
+        <button type="submit" disabled={!tickerDraft.trim()}>Adicionar</button>
+      </form>
+      {universeDraft.length ? <div className="ticker-list">{universeDraft.map(ticker => <span className="badge" key={ticker}>{ticker}<button className="ghost" type="button" aria-label={`Remover ${ticker}`} onClick={() => setUniverseDraft(current => current.filter(value => value !== ticker))}>×</button></span>)}</div> : <State title="Nenhum ativo adicional configurado">Os ativos da carteira continuam incluídos nas coletas.</State>}
+      <div className="section-head"><small className="muted">Fonte: {universe?.source ?? "não carregada"}{universe?.updated_at ? ` · Atualizado em ${universe.updated_at}` : ""}</small><button onClick={saveUniverse} disabled={savingUniverse || !universe}>{savingUniverse ? "Salvando…" : "Salvar universo"}</button></div>
+      <small className="muted">A mudança vale nas próximas execuções; não interrompe uma coleta em andamento. Universo efetivo: {universe?.effective_tickers.join(", ") || "sem tickers"}</small>
     </section>
 
     <section className="panel">
