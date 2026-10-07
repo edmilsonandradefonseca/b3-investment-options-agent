@@ -254,3 +254,20 @@ export type CurrentOptionsResponse = {
   count: number;
   options: CurrentOptionRow[];
 };
+
+
+export type RuntimeStatusResponse = {
+  runtime: string;
+  runtime_root: string;
+  health: string;
+  api: { host: string; port: number; local_health_url: string };
+  resources: Record<string, string>;
+  services: Record<string, { state: string; ownership?: string; endpoint?: string }>;
+  process: {
+    running: boolean;
+    runtime_pid?: number | null;
+    runtime_pid_running?: boolean;
+    orchestrator_pid?: number | null;
+    orchestrator_pid_running?: boolean;
+  };
+};
