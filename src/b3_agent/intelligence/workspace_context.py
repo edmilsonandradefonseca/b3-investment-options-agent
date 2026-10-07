@@ -691,7 +691,10 @@ class WorkspaceIntelligenceContextService:
                         "source": B3YieldCurveAdapter.SOURCE,
                         "points": [asdict(point) for point in points],
                     }
-                    source_refs.extend(point.source for point in points)
+                    source_refs.extend(
+                        point.source_record_id or point.source
+                        for point in points
+                    )
                 except (OSError, RuntimeError, ValueError) as exc:
                     code = getattr(exc, "code", "PROVIDER_UNAVAILABLE")
                     curves[curve_code] = {
