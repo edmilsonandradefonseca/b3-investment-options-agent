@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - feature/react-functional-v43-integration
     paths:
       - "frontend/**"
       - ".github/workflows/windows-app.yml"
