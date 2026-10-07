@@ -462,6 +462,7 @@ def test_live_analysis_returns_pit_history_and_backend_indicators(monkeypatch) -
     assert body["market"]["price_history"][-1]["source_record_id"] == fetched.source_record_id
     assert body["market"]["history_latest"]["source_record_id"] == fetched.source_record_id
     assert body["market"]["current_quote"]["source_record_id"] == "petr4:current-quote"
+    assert body["market"]["current_quote_status"] == "AVAILABLE"
     assert body["market"]["current_quote"]["close"] == 62
     assert body["market"]["latest"]["source_record_id"] == "petr4:current-quote"
     assert body["market"]["quant"]["data_points"] == 41
