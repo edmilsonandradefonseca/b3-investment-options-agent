@@ -15,6 +15,7 @@ from typing import Any
 from time import monotonic
 from b3_agent.intelligence.personal_history import PersonalHistoryService
 from b3_agent.intelligence.decision_history import build_decision_history
+from b3_agent.intelligence.collection_universe import CollectionUniverseStore
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
@@ -834,6 +835,29 @@ def health() -> dict[str, Any]:
 def runtime_status() -> dict[str, Any]:
     """Expose the operational runtime state through the Orchestrator."""
     return RuntimeManager().status(health_override="ok")
+
+class CollectionUniverseRequest(BaseModel):
+    tickers: list[str] = Field(default_factory=list, max_length=500)
+
+
+@app.get("/admin/collection-universe")
+def get_collection_universe() -> dict[str, Any]:
+    try:
+        return CollectionUniverseStore(settings.data_dir).snapshot()
+    except (ValueError, OSError) as exc:
+        raise HTTPException(status_code=503, detail=f"collection universe unavailable: {exc}") from exc
+
+
+@app.post("/admin/collection-universe")
+def save_collection_universe(request: CollectionUniverseRequest) -> dict[str, Any]:
+    store = CollectionUniverseStore(settings.data_dir)
+    try:
+        store.save(request.tickers)
+        return store.snapshot()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=503, detail=f"collection universe unavailable: {exc}") from exc
 
 
 @app.get("/market/current/{ticker}")
