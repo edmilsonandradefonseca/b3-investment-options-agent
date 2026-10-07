@@ -8,7 +8,7 @@ import type {
   PortfolioSnapshot,
   BrokerageBatchImportResponse,
   BrokerageNoteImportResponse,
-  HealthResponse,
+  HealthResponse,\n  RuntimeStatusResponse,
   FundamentalsResponse,
   LiveAnalysisResponse,
   OrchestrateRequest,
@@ -104,7 +104,7 @@ async function upload<T>(path: string, file: File): Promise<T> {
 
 export const b3Api = {
   personalHistory: (ticker: string, since = "") => requestJson<Record<string, unknown>>(`/history/context?${new URLSearchParams({...(ticker.trim()?{ticker:ticker.trim().toUpperCase()}:{}),...(since?{since}:{})})}`),
-  health: () => requestJson<HealthResponse>("/health"),
+  health: () => requestJson<HealthResponse>("/health"),\n  runtimeStatus: () => requestJson<RuntimeStatusResponse>("/runtime/status"),
   portfolio: () => requestJson<PortfolioSnapshot>("/portfolio/current"),
   optionLedger: () => requestJson<BrokerageLedger>("/options/ledger"),
   pilotAnalysis: (ticker: string) => requestJson<PilotAnalysis>(`/intelligence/pilot/${encodeURIComponent(ticker.trim().toUpperCase())}`),
