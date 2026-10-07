@@ -272,3 +272,11 @@ export type RuntimeStatusResponse = {
     orchestrator_pid_running?: boolean;
   };
 };
+
+export type CollectionUniverseResponse = {
+  configured_tickers: string[];
+  portfolio_tickers: string[];
+  effective_tickers: string[];
+  updated_at: string | null;
+  source: "admin" | "environment" | "default";
+};
