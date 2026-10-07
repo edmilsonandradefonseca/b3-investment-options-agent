@@ -289,3 +289,47 @@ export type CollectionUniverseResponse = {
   updated_at: string | null;
   source: "admin" | "environment" | "default";
 };
+
+
+export type InvestorFlowObservation = {
+  investor_type: string;
+  market_segment: string;
+  net_financial_value: number | null;
+  observation_date: string | null;
+  observation_timestamp: string;
+  source: string;
+  source_record_id: string | null;
+  quality_status: string;
+  quality_flags: string[];
+};
+
+export type InvestorFlowResponse = {
+  status: "OK" | "NO_DATA";
+  source: string;
+  as_of: string;
+  unit: "NOT_DECLARED_BY_PROVIDER";
+  observations: InvestorFlowObservation[];
+};
+
+export type YieldCurveObservation = {
+  curve_code: string;
+  curve_description: string;
+  days_calendar: number;
+  days_business: number;
+  rate_decimal: number;
+  rate_percent_per_year: number;
+  vertex: string;
+  observation_timestamp: string;
+  source_record_id: string | null;
+  quality_status: string;
+};
+
+export type YieldCurveResponse = {
+  status: "OK" | "NO_DATA";
+  source: string;
+  curve: string;
+  curve_description: string;
+  as_of: string | null;
+  unit: "percent_per_year";
+  observations: YieldCurveObservation[];
+};
