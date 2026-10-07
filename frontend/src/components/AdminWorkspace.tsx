@@ -58,17 +58,22 @@ export default function AdminWorkspace() {
     event.preventDefault();
     setSavingConnection(true);
     setConnectionMessage("");
+    let saved = false;
     try {
-      const normalized = setApiBaseUrl(apiAddress);
+      const normalized = apiAddress.trim().replace(/\\/$/, "");
       const parsed = new URL(normalized);
       if (!parsed.hostname) throw new Error("Informe o IP ou nome do servidor.");
+      setApiBaseUrl(normalized);
+      saved = true;
       setApiAddress(normalized);
       const runtime = await b3Api.runtimeStatus();
       setStatus(runtime);
       setConnectionMessage(`Conexão validada em ${normalized} · ${stateLabel(runtime.health)}.`);
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
-      setConnectionMessage(`Endereço salvo, mas não foi possível validar a conexão: ${reason}`);
+      setConnectionMessage(saved
+        ? `Endereço salvo, mas não foi possível validar a conexão: ${reason}`
+        : `Endereço não salvo: ${reason}`);
     } finally {
       setSavingConnection(false);
     }
