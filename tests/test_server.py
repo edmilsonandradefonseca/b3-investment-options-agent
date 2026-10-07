@@ -515,3 +515,27 @@ def test_current_fundamentals_rejects_invalid_b3_symbol() -> None:
     response = client.get("/fundamentals/WWEGE3")
 
     assert response.status_code == 400
+
+
+def test_collection_universe_admin_api_persists_and_rejects_invalid_tickers(monkeypatch, tmp_path: Path) -> None:
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(server, "settings", SimpleNamespace(data_dir=tmp_path))
+
+    initial = client.get("/admin/collection-universe")
+    assert initial.status_code == 200
+    assert initial.json()["configured_tickers"] == []
+    assert initial.json()["effective_tickers"] == []
+
+    saved = client.post(
+        "/admin/collection-universe",
+        json={"tickers": ["vale3", "ITUB4", "VALE3"]},
+    )
+    assert saved.status_code == 200
+    assert saved.json()["configured_tickers"] == ["VALE3", "ITUB4"]
+    assert saved.json()["effective_tickers"] == ["VALE3", "ITUB4"]
+    assert saved.json()["source"] == "admin"
+
+    invalid = client.post("/admin/collection-universe", json={"tickers": ["BTC"]})
+    assert invalid.status_code == 422
+    assert client.get("/admin/collection-universe").json()["configured_tickers"] == ["VALE3", "ITUB4"]
