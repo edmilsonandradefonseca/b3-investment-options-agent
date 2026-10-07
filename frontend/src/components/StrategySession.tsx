@@ -2,6 +2,7 @@ import {useRef, useState} from 'react';
 import {b3Api} from '../api/client';
 import type {OrchestrateResponse} from '../api/contracts';
 import AnalysisOutput from './AnalysisOutput';
+import StrategyHistoryChart from './StrategyHistoryChart';
 
 type Turn = {question:string; response:OrchestrateResponse|null; error?:string; at:string; portfolioRevision:string|null};
 const examples = ['Tenho R$ 10 mil. Comprar ITUB4 ou BBDC4?', 'Acredito que PETR4 pode cair. Quais evidências sustentam ou contradizem essa tese?', 'Vale manter, encerrar ou rolar uma opção da minha carteira?'];
@@ -59,6 +60,7 @@ export default function StrategySession({researchMode='stored_first',portfolioRe
    <h3>Análise do agente B3</h3>
    {turn.error&&<p role="alert">{turn.error}</p>}
    {turn.response?<AnalysisOutput data={turn.response}/>:!turn.error&&<p role="status">Avaliando sua pergunta com os dados e evidências disponíveis…</p>}
+   <StrategyHistoryChart question={turn.question}/>
   </article>)}
   <form onSubmit={e=>{e.preventDefault();void analyze()}}>
    <label htmlFor="strategy-thesis">{turns.length?'Ajustar ou aprofundar esta análise':'Sua pergunta ou tese'}</label>
