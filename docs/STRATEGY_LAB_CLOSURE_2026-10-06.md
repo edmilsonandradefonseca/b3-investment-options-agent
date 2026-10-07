@@ -118,3 +118,16 @@ A comparação completa de CALL coberta no caminho de serviço ficou **bloqueada
 CI [37516704532](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37516704532) passou no SHA `9c7a7721248be589bc025542f80e610847b1396f`: 1.022 testes Python, build e renderização React aprovados.
 
 **Estado do Lab:** comparação de ações, posição/rolagem e ação × PUT com cenários explícitos têm aceite ativo; cobertura livre de CALL está reconciliada e suas regressões estão verdes; CALL coberta ainda aguarda histórico/preço do subjacente para comparar pela rota ativa. Permanecem também a reconciliação integral de carteira/caixa/obrigações e a matriz de regressões finais (snapshot alterado, respostas fora de ordem, falha/retry e Nova análise). Não declarar o Lab completo.
+
+
+## Fechamento do Strategy Lab — 07/10/2026
+
+O aceite final da matriz executável foi concluído na revisão `e657a945f8df18369f35d52b570da86aa90aab59`:
+
+- Runner ativo [37550727964 — SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37550727964): revisão/processo confirmados; posição atual, quantidade e rolagem aprovadas; ação × PUT e cenários explícitos aprovados; cobertura de CALL reconciliada e comparação com CALL do BTG atual passou em `ACTIVE_LAB_CALL_COVERAGE_FROM_CURRENT_BTG=PASS`. Nenhuma ordem enviada.
+- Walkthrough visual [37550727944 — SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37550727944): navegação real, comparação do Lab e cockpit em 1920/1440/1366 sem erros de página.
+- CI [37550733471 — SUCCESS](https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37550733471): testes e build aprovados na mesma revisão.
+
+A comparação real de CALL usa cotação atual admissível do subjacente BTG e evidência de histórico no serviço ativo; o caso anterior `BLOCKED_DATA` não foi contado como aprovação. Custos não disponíveis continuam UNKNOWN, cenários permanecem hipóteses e o aceite não envia nem autoriza ordem. O Strategy Lab fica fechado para a matriz desta entrega; não implica certificar todos os custos ou dados indisponíveis da carteira.
+
+A próxima frente é Market Intelligence. O gate ativo `scripts/validate_lab_market_active.py` foi ampliado para verificar em PETR4 cotação BRL positiva com fonte e timestamp recente (limite de 24h), histórico com pelo menos 60 observações e cauda recente, retorno de 1M calculável, targets/dividendos com status explícito e proveniência de eventos. O resultado ativo dessa revisão ainda está pendente; cobertura de notícias continua limitada ao escopo registrado pelo serviço.
