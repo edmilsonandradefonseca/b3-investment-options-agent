@@ -831,6 +831,7 @@ def health() -> dict[str, Any]:
             "qdrant_collection": "b3_evidence_768_hybrid",
             "oplab_token_configured": bool(os.getenv("OPLAB_API_TOKEN")),
             "brapi_token_configured": bool(os.getenv("BRAPI_TOKEN")),
+            "dadosdemercado_token_configured": bool(os.getenv("DADOSDE_MERCADO_API_TOKEN")),
         },
     }
 
