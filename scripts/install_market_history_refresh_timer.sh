@@ -47,6 +47,7 @@ sudo -n tee /etc/systemd/system/b3-market-history-refresh.timer >/dev/null <<'EO
 Description=Run B3 official OHLCV refresh after the market closes
 
 [Timer]
+OnBootSec=2min
 OnCalendar=Mon..Fri *-*-* 19:30:00 America/Sao_Paulo
 Persistent=true
 AccuracySec=1min
