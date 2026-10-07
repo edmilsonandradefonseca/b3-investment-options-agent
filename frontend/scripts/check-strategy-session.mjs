@@ -53,6 +53,14 @@ try{
   await button.click();
  };
  await panel.getByLabel('Sua pergunta ou tese').fill('Avalie minha tese sobre PETR4.');
+ console.log('STRATEGY_PAGE_DEBUG', JSON.stringify({
+  url: page.url(),
+  regionCount: await panel.count(),
+  textareas: await page.locator('textarea').evaluateAll(items => items.map(item => ({id:item.id,value:item.value,visible:!!(item.offsetWidth||item.offsetHeight)}))),
+  labels: await page.locator('label').allTextContents(),
+  body: (await page.locator('body').innerText()).slice(0,2500),
+  pageErrors: errors,
+ }));
  await submit();
  await panel.getByText('Resposta de fixture: tese exige verificar premissas.',{exact:true}).waitFor();
  const firstChart=panel.getByRole('region',{name:'Gráfico histórico do Strategy Lab'});
