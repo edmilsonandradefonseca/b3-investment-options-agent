@@ -123,7 +123,7 @@ for ticker, contract, capacity, expected_rejection in candidates:
             option_ids=(None, contract.option_id),
             amount=10_000.0,
             portfolio=portfolio,
-            as_of=as_of,
+            # Omit a fixed cutoff: the live service freezes it after it fetches the current quote and option chain.
         )
     except RuntimeError as exc:
         message = str(exc)
@@ -166,8 +166,12 @@ for ticker, contract, capacity, expected_rejection in candidates:
 
     observed_at = quote_time(current_quote["observation_timestamp"])
     available_at = quote_time(current_quote["available_timestamp"])
-    assert observed_at <= as_of and available_at <= as_of, "Underlying quote must be point-in-time admissible"
-    assert observed_at.astimezone(ZoneInfo("America/Sao_Paulo")).date() == as_of.astimezone(
+    comparison_as_of = result["as_of"]
+    if isinstance(comparison_as_of, str):
+        comparison_as_of = datetime.fromisoformat(comparison_as_of.replace("Z", "+00:00"))
+    assert isinstance(comparison_as_of, datetime) and comparison_as_of.tzinfo is not None
+    assert observed_at <= comparison_as_of and available_at <= comparison_as_of, "Underlying quote must be point-in-time admissible"
+    assert observed_at.astimezone(ZoneInfo("America/Sao_Paulo")).date() == comparison_as_of.astimezone(
         ZoneInfo("America/Sao_Paulo")
     ).date(), "Underlying quote must represent the current B3 session"
     print("ACTIVE_LAB_CALL_UNDERLYING_CURRENT_QUOTE=PASS", flush=True)
@@ -191,5 +195,5 @@ if not accepted:
     print(f"ACTIVE_LAB_CALL_BLOCK_REASON={reason}", flush=True)
     if provider_failures:
         print("ACTIVE_LAB_CALL_PROVIDER_FAILURE_TYPES=" + ",".join(sorted(provider_failures)), flush=True)
-    raise SystemExit(0)
+    raise SystemExit(1)
 print("ACTIVE_LAB_CALL_COVERAGE_FROM_CURRENT_BTG=PASS", flush=True)
