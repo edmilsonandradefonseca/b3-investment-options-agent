@@ -23,6 +23,8 @@ import type {
   VersionResponse,
   InvestorFlowResponse,
   YieldCurveResponse,
+  OpportunityReviewStatus,
+  OpportunityReviewLatest,
 } from "./contracts";
 
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
@@ -130,12 +132,16 @@ export const b3Api = {
     body: JSON.stringify({ available_capital, minimum_reserve }),
   }),
   version: () => requestJson<VersionResponse>("/version"),
-  orchestrate: (request: OrchestrateRequest) =>
+  orchestrate: (request: OrchestrateRequest, timeoutMs = 195_000) =>
     requestJson<OrchestrateResponse>("/orchestrate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
-    }, 195_000),
+    }, timeoutMs),
+  opportunityReviewStatus: () =>
+    requestJson<OpportunityReviewStatus>("/opportunities/status"),
+  latestOpportunityReview: () =>
+    requestJson<OpportunityReviewLatest>("/opportunities/latest"),
   listTransactions: (limit = 100) =>
     requestJson<TransactionResponse[]>(`/transactions?limit=${encodeURIComponent(limit)}`),
   addTransaction: (request: TransactionRequest) =>
