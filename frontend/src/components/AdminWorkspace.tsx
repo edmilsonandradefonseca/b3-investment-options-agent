@@ -67,8 +67,8 @@ export default function AdminWorkspace() {
 
   function addTickers(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const candidates = tickerDraft.split(/[,;\\s]+/).filter(Boolean).map(value => value.toUpperCase());
-    const invalid = candidates.filter(value => !/^[A-Z]{4}\\d{1,2}$/.test(value));
+    const candidates = tickerDraft.split(/[,;\s]+/).filter(Boolean).map(value => value.toUpperCase());
+    const invalid = candidates.filter(value => !/^[A-Z]{4}\d{1,2}$/.test(value));
     if (invalid.length) {
       setError(`Ticker inválido: ${invalid.join(", ")}. Use símbolos B3, por exemplo PETR4.`);
       return;
