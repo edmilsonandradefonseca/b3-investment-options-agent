@@ -47,6 +47,12 @@ try{
   const form=panel.locator('form').last();
   const button=form.locator('button').first();
   await expect(form.locator('textarea')).toHaveValue(/\S/);
+  console.log('STRATEGY_FORM_DEBUG', JSON.stringify({
+   forms: await panel.locator('form').count(),
+   textareas: await panel.locator('textarea').count(),
+   buttons: await panel.locator('button').count(),
+   selectedForm: await form.evaluate(element => element.outerHTML),
+  }));
   await expect(button).toBeVisible();
   await expect(button).toBeEnabled();
   assert.match(await button.innerText(),/Analisar pergunta ou tese|Enviar continuação/);
