@@ -10,6 +10,7 @@ import type {
   BrokerageNoteImportResponse,
   HealthResponse,
   RuntimeStatusResponse,
+  SchedulerConfigResponse,
   CollectionUniverseResponse,
   FundamentalsResponse,
   LiveAnalysisResponse,
