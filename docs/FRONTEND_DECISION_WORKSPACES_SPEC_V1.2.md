@@ -136,3 +136,21 @@ Casos: abertura/refresh sem chain, zero oportunidades fundamentado, falha parcia
 Cada aceite registra commit código, build frontend, processo/versão API, request sanitizado, campos entregues, tempo por estágio e evidência visual 1440×900 e 1180×720. Fixture prova contrato; runner Ubuntu prova apenas o processo testado; preview Ubuntu não prova instalação Windows. Não declarar pronto com base só em build.
 
 Plano e achados vivos: FRONTEND_V44_GAPS_AND_DELIVERY_2026-10-05.md. Especificação define esperado; esse registro define observado, correção e aceite.
+
+
+## Adendo normativo V1.3 — fluxo estrangeiro e curva de juros (07/10/2026)
+
+Este adendo complementa o fluxo M1 e acrescenta requisitos aprovados para o panorama Market Intelligence. Não substitui os demais contratos da V1.2.
+
+### Panorama — gráficos macrofinanceiros
+
+- **MI-07 — Fluxo do investidor estrangeiro:** exibir gráfico temporal de compras, vendas e saldo líquido por período, com seletor diário/mensal quando a cobertura permitir. O saldo deve ser calculado como compras menos vendas apenas dentro da mesma data, mercado/segmento e escopo publicado. Mostrar valor, unidade, data de observação, fonte e atraso de divulgação. A série diária do Boletim Diário B3 tem defasagem de dois dias úteis e histórico consultável limitado; séries mensais/anuais devem permanecer identificadas como agregadas, sem interpolar dias ausentes. Não chamar participação percentual de fluxo financeiro.
+- **MI-08 — Curva soberana de juros:** exibir os vértices de prazo em dias úteis para curva prefixada e curva real IPCA, com data de referência, taxa em % a.a. e fonte. Permitir comparar a curva mais recente com uma data anterior disponível. Exibir inflação implícita somente se fornecida pela fonte. Não tratar Selic/CDI à vista como curva a termo nem interpolar vértices faltantes.
+- Os dois gráficos pertencem ao panorama amplo e devem aparecer ao atualizar Market Intelligence. Cada painel informa estado de carregamento, data/fonte, cobertura e erro localizado. Se a fonte ou credencial não estiver disponível, mostrar a causa específica e preservar os últimos dados válidos com data; nunca preencher com fixture ou valores estimados.
+- Origem primária prevista: B3, Boletim Diário do Mercado / planilha Dados de Mercado para participação e movimentação de investidores; ANBIMA, API Curvas de Juros para vértices soberanos prefixados, IPCA e inflação implícita. A ativação da API ANBIMA depende de credenciais autorizadas no servidor.
+
+| ID | Entrega e aceite |
+|---|---|
+| MI-07 | Série de fluxo estrangeiro com compras, vendas e saldo, frequência/escopo explícitos, histórico disponível, fonte e atraso; os períodos usados no saldo são reconciliáveis. |
+| MI-08 | Curva prefixada e curva real IPCA por vértice, com taxa/unidade/data/fonte e comparação temporal; acesso indisponível é sinalizado, sem substituição por Selic pontual. |
+
