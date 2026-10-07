@@ -44,11 +44,14 @@ try{
  await page.goto((process.env.B3_UI_URL||'http://127.0.0.1:5173')+'/#/strategy-lab');
  const panel=page.getByRole('region',{name:'Pergunta e análise do Strategy Lab'});
  const submit=async()=>{
+  await page.waitForFunction(()=>{
+   const input=document.querySelector('#strategy-thesis');
+   const button=input?.closest('form')?.querySelector('button');
+   return Boolean(input?.value.trim()&&button&&!button.disabled);
+  });
   const button=panel.locator('form').last().locator('button').first();
-  await button.waitFor({state:'visible'});
-  assert.equal(await button.isEnabled(),true);
   assert.match(await button.innerText(),/Analisar pergunta ou tese|Enviar continuação/);
-  await button.evaluate(element=>element.click());
+  await button.click();
  };
  await panel.getByLabel('Sua pergunta ou tese').fill('Avalie minha tese sobre PETR4.');
  await submit();
