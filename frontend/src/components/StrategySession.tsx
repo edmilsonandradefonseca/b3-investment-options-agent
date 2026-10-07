@@ -60,7 +60,7 @@ export default function StrategySession({researchMode='stored_first',portfolioRe
    <h3>Análise do agente B3</h3>
    {turn.error&&<p role="alert">{turn.error}</p>}
    {turn.response?<AnalysisOutput data={turn.response}/>:!turn.error&&<p role="status">Avaliando sua pergunta com os dados e evidências disponíveis…</p>}
-   <StrategyHistoryChart question={turn.question}/>
+   {(turn.response || turn.error) && <StrategyHistoryChart question={turn.question}/>} 
   </article>)}
   <form onSubmit={e=>{e.preventDefault();void analyze()}}>
    <label htmlFor="strategy-thesis">{turns.length?'Ajustar ou aprofundar esta análise':'Sua pergunta ou tese'}</label>

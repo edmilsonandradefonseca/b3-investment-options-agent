@@ -47,6 +47,7 @@ export default function StrategyHistoryChart({ question }: { question: string })
         setSeries(loaded);
         setError(failures.length ? 'Histórico indisponível para: ' + failures.join(', ') : '');
       })
+      .catch(() => { if (!cancelled) setError('A consulta do histórico falhou.'); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [tickers.join('|')]);

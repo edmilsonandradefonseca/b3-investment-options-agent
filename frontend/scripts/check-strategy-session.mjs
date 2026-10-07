@@ -13,6 +13,13 @@ try{
   const req=route.request();
   if(req.method()==='OPTIONS')return route.fulfill({status:204,headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'content-type'}});
   const body=req.postDataJSON();
+  if(req.url().includes('/analysis/live/')){
+   const ticker=decodeURIComponent(req.url().split('/analysis/live/')[1].split('?')[0]);
+   const base=ticker==='ITUB4'?30:ticker==='BBDC4'?20:10;
+   const price_history=[0,1,2].map((offset)=>({ticker,observation_timestamp:['2026-10-01T12:00:00+00:00','2026-10-05T12:00:00+00:00','2026-10-07T12:00:00+00:00'][offset],available_timestamp:'2026-10-07T12:01:00+00:00',source:'fixture:history',source_record_id:ticker+':'+offset,open:base+offset,high:base+offset+1,low:base+offset-1,close:base+offset,adjusted_close:null,volume:1000,currency:'BRL'}));
+   const latest=price_history.at(-1);
+   return route.fulfill({json:{ticker,as_of:'2026-10-07T12:01:00+00:00',source_refs:['fixture:history'],market:{history_count:price_history.length,price_history,current_quote:null,current_quote_status:'UNAVAILABLE',history_latest:latest,latest},options:{contract_count:0,quote_count:0,contracts:[],quotes:[],analysis:{puts:[],calls:[],source_refs:[],quality_status:'WARNING',assumptions:null}}},headers:{'Access-Control-Allow-Origin':'*'}});
+  }
   if(req.url().endsWith('/orchestrate')&&body?.context?.workspace==='Strategy Lab'){
    requests.push(body);
    if(body.task==='Vale manter, encerrar ou rolar uma opção da minha carteira?')return route.fulfill({json:{status:'NEEDS_CLARIFICATION',result:{lab_clarification:{status:'NEEDS_CLARIFICATION',question:'Qual é o código exato da opção que deseja analisar?',reason:'Informe o contrato.'},derived_synthesis_status:'NOT_REQUESTED'},sources:[],audit:[],error:null},headers:{'Access-Control-Allow-Origin':'*'}});
@@ -39,6 +46,12 @@ try{
  await panel.getByLabel('Sua pergunta ou tese').fill('Avalie minha tese sobre PETR4.');
  await panel.getByRole('button',{name:'Analisar pergunta ou tese',exact:true}).click();
  await panel.getByText('Resposta de fixture: tese exige verificar premissas.',{exact:true}).waitFor();
+ const firstChart=panel.getByRole('region',{name:'Gráfico histórico do Strategy Lab'});
+ await firstChart.getByRole('button',{name:'1 semana',exact:true}).waitFor();
+ await firstChart.getByRole('img',{name:'Histórico de PETR4'}).waitFor();
+ const oneYear=firstChart.getByRole('button',{name:'1 ano',exact:true});
+ await oneYear.click();
+ assert.equal(await oneYear.getAttribute('aria-pressed'),'true');
  assert.equal(requests.length,1);assert.equal(requests[0].ticker,null);
  assert.equal(requests[0].context.comparison_assets,undefined);
  assert.equal(requests[0].context.analysis_mode,undefined);
@@ -88,6 +101,14 @@ try{
  await comparison.getByText('Fluxos incrementais brutos; não representam lucro ou retorno esperado',{exact:true}).waitFor();
  assert.equal(await comparison.getByText('UNKNOWN · histórico de abertura/custos',{exact:false}).count(),3);
  await page.screenshot({path:resolve(out,'lab-management-comparison-fixture.png'),animations:'disabled'});
+
+ await panel.getByRole('button',{name:'Nova análise',exact:true}).click();
+ await panel.getByLabel('Sua pergunta ou tese').fill('Compare ITUB4 e BBDC4.');
+ await panel.getByRole('button',{name:'Analisar pergunta ou tese',exact:true}).click();
+ await panel.getByText('Resposta de fixture: tese exige verificar premissas.',{exact:true}).last().waitFor();
+ const comparisonChart=panel.getByRole('region',{name:'Gráfico histórico do Strategy Lab'}).last();
+ await comparisonChart.getByRole('img',{name:'Histórico de ITUB4 e BBDC4'}).waitFor();
+ assert.equal(await comparisonChart.locator('.recharts-line-curve').count(),2);
  assert.deepEqual(errors,[]);
  console.log('PASS LAB-01/02/03/04/05/06/07: clarification, current position, exact roll choice, three alternatives and provenance (fixtures).');
 }finally{await browser.close();}
