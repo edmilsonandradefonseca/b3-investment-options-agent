@@ -839,6 +839,7 @@ def runtime_status() -> dict[str, Any]:
 class SchedulerConfigRequest(BaseModel):
     start_time: str = Field(pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
     end_time: str = Field(pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+    interval_minutes: int = Field(default=15, ge=15, le=60, multiple_of=15)
 
 
 def _scheduler_config_path() -> Path:
@@ -853,14 +854,17 @@ def get_scheduler_config() -> dict[str, Any]:
             payload = json.loads(path.read_text(encoding="utf-8"))
             start_time = str(payload.get("start_time", "08:00"))
             end_time = str(payload.get("end_time", "19:00"))
+            interval_minutes = int(payload.get("interval_minutes", 15))
             source = "admin"
         else:
             start_time = f"{int(os.getenv('B3_INTEL_ACTIVE_START_HOUR', '8')):02d}:00"
             end_time = f"{int(os.getenv('B3_INTEL_ACTIVE_END_HOUR', '19')):02d}:00"
+            interval_minutes = 15
             source = "environment"
         return {"start_time": start_time, "end_time": end_time,
                 "timezone": os.getenv("B3_AGENT_TIMEZONE", "America/Sao_Paulo"),
-                "weekdays": ["Mon", "Tue", "Wed", "Thu", "Fri"], "source": source}
+                "weekdays": ["Mon", "Tue", "Wed", "Thu", "Fri"],
+                "interval_minutes": interval_minutes, "source": source}
     except (OSError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=503, detail=f"scheduler configuration unavailable: {exc}") from exc
 
@@ -871,7 +875,8 @@ def save_scheduler_config(request: SchedulerConfigRequest) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail="start_time must be earlier than end_time")
     path = _scheduler_config_path()
     payload = {"schema_version": 1, "start_time": request.start_time,
-               "end_time": request.end_time, "updated_at": datetime.now(timezone.utc).isoformat()}
+               "end_time": request.end_time, "interval_minutes": request.interval_minutes,
+               "updated_at": datetime.now(timezone.utc).isoformat()}
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix(".json.tmp")
