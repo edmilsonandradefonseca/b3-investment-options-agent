@@ -1,10 +1,9 @@
 import {useState} from 'react';
-import type {OrchestrateResponse} from '../api/contracts';
-import type {PortfolioSnapshot} from '../api/contracts';
+import type {OrchestrateResponse,PortfolioSnapshot} from '../api/contracts';
 import AnalysisOutput from './AnalysisOutput';
 import {obj,rows,num,text,date,Metric,State,Source} from './cockpit';
 
-export default function MarketContext({tab,data,busy,portfolio}:{tab,data,busy,portfolio}:{tab:string;data:OrchestrateResponse|null;busy:boolean;portfolio:PortfolioSnapshot|null}){
+export default function MarketContext({tab,data,busy,portfolio}:{tab:string;data:OrchestrateResponse|null;busy:boolean;portfolio:PortfolioSnapshot|null}){
  const [query,setQuery]=useState(''),[since,setSince]=useState('');
  const context=obj(obj(data?.result.workspace_intelligence).market_context),macro=obj(context.macro);
  const events=rows(context.market_overview_research).filter(e=>(!query||[e.headline,e.title,e.summary,e.source].join(' ').toLowerCase().includes(query.toLowerCase()))&&(!since||String(e.published_at??e.available_timestamp??'')>=since));
