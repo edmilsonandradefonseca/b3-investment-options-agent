@@ -28,7 +28,11 @@ export default function AdminWorkspace() {
   const [universe, setUniverse] = useState<CollectionUniverseResponse | null>(null);
   const [universeDraft, setUniverseDraft] = useState<string[]>([]);
   const [tickerDraft, setTickerDraft] = useState("");
-  const [savingUniverse, setSavingUniverse] = useState(false);\n  const [scheduler, setScheduler] = useState<SchedulerConfigResponse | null>(null);\n  const [scheduleStart, setScheduleStart] = useState("08:00");\n  const [scheduleEnd, setScheduleEnd] = useState("19:00");\n  const [savingSchedule, setSavingSchedule] = useState(false);
+  const [savingUniverse, setSavingUniverse] = useState(false);
+  const [scheduler, setScheduler] = useState<SchedulerConfigResponse | null>(null);
+  const [scheduleStart, setScheduleStart] = useState("08:00");
+  const [scheduleEnd, setScheduleEnd] = useState("19:00");
+  const [savingSchedule, setSavingSchedule] = useState(false);
   const [apiAddress, setApiAddress] = useState(getApiBaseUrl());
   const [savingConnection, setSavingConnection] = useState(false);
   const [connectionMessage, setConnectionMessage] = useState("");
