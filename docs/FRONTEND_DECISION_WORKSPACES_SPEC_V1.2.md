@@ -154,3 +154,21 @@ Este adendo complementa o fluxo M1 e acrescenta requisitos aprovados para o pano
 | MI-07 | Série diária de fluxo estrangeiro retornada por Dados de Mercado, com campo/fonte/data/unidade/sinal validados, categorias corretamente rotuladas e agregações somente quando reconciliáveis; ausência de token ou erro da API aparece como estado específico. |
 | MI-08 | Curva prefixada e curva real IPCA por vértice, com taxa/unidade/data/fonte e comparação temporal; acesso indisponível é sinalizado, sem substituição por Selic pontual. |
 
+
+
+## Adendo normativo V1.4 — qualificação e revisão diária de Opportunities (07/10/2026)
+
+Este adendo complementa UC-03 e os adendos de Market Intelligence. A revisão de Opportunities é uma tarefa de pesquisa completa, executada em segundo plano, e não um ranking instantâneo de métricas isoladas.
+
+- **OPP-08 — Revisão diária completa:** executar em dias úteis às 12:00, fuso `America/Sao_Paulo`, sobre ações candidatas e ações identificadas no snapshot vigente. O processo pode levar vários minutos: não reduzir silenciosamente o universo para caber em uma chamada síncrona. Mostrar estado e etapa atuais, universo processado, ativos pendentes e cobertura de pesquisa. A execução manual inicia ou acompanha a revisão completa, sem duplicar a mesma revisão do dia/snapshot.
+- **OPP-09 — Qualificação por ativo:** o agente B3 deve concluir para cada ação uma destas situações: oportunidade qualificada, acompanhar, evidência insuficiente ou tese rejeitada. Avaliar notícias/eventos datados, histórico recente de preço e volume, fundamentos disponíveis, vértices B3 PRE/DIC, cenário de mercado e exposição da carteira. Distinguir fato, interpretação e ausência de cobertura; explicar por que agora, contrapontos, impacto na carteira e condição de revisão.
+- **OPP-10 — Ranking de teses:** ordenar somente as oportunidades qualificadas, por prioridade de revisão material. Cada posição exige evidência de apoio e referências presentes no contexto fornecido. Volatilidade, proxy de liquidez ou upside de alvo institucional isolados não qualificam uma oportunidade. Itens de acompanhamento não aparecem no ranking; evidência incompleta fica explícita. Se nenhuma tese se qualificar, exibir ranking vazio com as classificações e lacunas por ativo. Falha de pesquisa/síntese nunca equivale a nenhum ativo qualificado.
+- **OPP-11 — Refresh e cache:** manter a última revisão concluída com sua data e snapshot enquanto a nova execução processa. O refresh pode levar vários minutos e deve informar progresso; falha não substitui o resultado anterior. A atualização diária só é considerada concluída após a síntese e reconciliação do ranking com evidências e fontes.
+
+| ID | Entrega e aceite |
+|---|---|
+| OPP-08 | Timer em `America/Sao_Paulo` executa a revisão completa em dias úteis ao meio-dia; sem concorrência para a mesma chave diária/snapshot. |
+| OPP-09 | Cada ativo da população recebe classificação explícita, fontes/datas e razão localizada; curva futura ausente permanece UNKNOWN. |
+| OPP-10 | Apenas teses com evidência específica, atual e referenciada recebem rank positivo; ranking vazio válido informa cobertura e justificativas. |
+| OPP-11 | Estado de processamento, etapa, progresso, início/fim e última revisão bem-sucedida sobrevivem à navegação e a falhas temporárias. |
+
