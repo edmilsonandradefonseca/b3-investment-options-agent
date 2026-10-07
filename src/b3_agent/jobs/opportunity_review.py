@@ -3,7 +3,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
@@ -88,7 +88,7 @@ class OpportunityReviewStore:
         return state
 
     def status(self) -> dict[str, Any]:
-        return self._read(self.status_path) or {
+        state = self._read(self.status_path) or {
             "status": "NOT_STARTED",
             "run_id": None,
             "started_at": None,
@@ -97,6 +97,28 @@ class OpportunityReviewStore:
             "result_available": self.result_path.is_file(),
             "error": None,
         }
+        if state.get("status") == "RUNNING":
+            try:
+                started_at = datetime.fromisoformat(str(state["started_at"]).replace("Z", "+00:00"))
+                if started_at.tzinfo is None:
+                    started_at = started_at.replace(tzinfo=timezone.utc)
+                if datetime.now(timezone.utc) - started_at.astimezone(timezone.utc) > timedelta(hours=2):
+                    state.update({
+                        "status": "FAILED",
+                        "finished_at": datetime.now(timezone.utc).isoformat(),
+                        "result_available": self.result_path.is_file(),
+                        "error": "RUN_EXCEEDED_2H",
+                    })
+                    self._write(self.status_path, state)
+            except (KeyError, TypeError, ValueError):
+                state.update({
+                    "status": "FAILED",
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                    "result_available": self.result_path.is_file(),
+                    "error": "INVALID_RUN_STATUS",
+                })
+                self._write(self.status_path, state)
+        return state
 
     def latest(self) -> dict[str, Any]:
         return self._read(self.result_path) or {
