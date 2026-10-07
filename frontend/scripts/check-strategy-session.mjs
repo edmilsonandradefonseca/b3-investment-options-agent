@@ -1,5 +1,5 @@
 // LAB-01/02/06, WS-05: browser contract test with explicit fixtures, not live acceptance.
-import {chromium} from '@playwright/test';
+import {chromium,expect} from '@playwright/test';
 import assert from 'node:assert/strict';
 import {mkdir} from 'node:fs/promises';
 import {resolve} from 'node:path';
@@ -44,12 +44,11 @@ try{
  await page.goto((process.env.B3_UI_URL||'http://127.0.0.1:5173')+'/#/strategy-lab');
  const panel=page.getByRole('region',{name:'Pergunta e análise do Strategy Lab'});
  const submit=async()=>{
-  await page.waitForFunction(()=>{
-   const input=document.querySelector('#strategy-thesis');
-   const button=input?.closest('form')?.querySelector('button');
-   return Boolean(input?.value.trim()&&button&&!button.disabled);
-  });
-  const button=panel.locator('form').last().locator('button').first();
+  const form=panel.locator('form').last();
+  const button=form.locator('button').first();
+  await expect(form.locator('textarea')).toHaveValue(/\\S/);
+  await expect(button).toBeVisible();
+  await expect(button).toBeEnabled();
   assert.match(await button.innerText(),/Analisar pergunta ou tese|Enviar continuação/);
   await button.click();
  };
