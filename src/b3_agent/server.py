@@ -235,6 +235,10 @@ def _workspace_intelligence_response(
         ),
         include_joao=not deterministic_only,
         research_mode=research_mode,
+        include_yield_curve=(
+            request.context.get("include_yield_curve") is True
+            and request.context.get("as_of") is None
+        ),
         **({"history_as_of": request.context["as_of"]} if request.context.get("as_of") is not None else {}),
         **({"history_since": request.context["history_since"]} if request.context.get("history_since") is not None else {}),
         include_joao_perspective=(not deterministic_only and os.getenv("B3_JOAO_SYNC_PERSPECTIVE", "true").lower() == "true"),
