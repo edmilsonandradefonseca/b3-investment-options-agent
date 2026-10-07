@@ -7,7 +7,7 @@ import json
 import os
 import re
 import sqlite3
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from uuid import uuid4
@@ -48,6 +48,10 @@ from b3_agent.providers.searxng_news import SearxngNewsAdapter
 from b3_agent.providers.dadosdemercado_investors import (
     DadosDeMercadoInvestorsAdapter,
     InvestorFlowProviderError,
+)
+from b3_agent.providers.b3_yield_curve import (
+    B3YieldCurveAdapter,
+    YieldCurveProviderError,
 )
 from b3_agent.research_events import ResearchEventService
 from b3_agent.runtime import RuntimeManager
@@ -1182,6 +1186,35 @@ def intelligence_local_ticker(ticker: str) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="invalid B3 ticker")
     return local_ticker_intelligence(normalized)
 
+
+
+@app.get("/market-intelligence/yield-curves")
+def market_intelligence_yield_curves(
+    curve: str = "PRE",
+    as_of: date | None = None,
+) -> dict[str, Any]:
+    """Return B3 TaxaSwap curve vertices normalized by the pyettj parser."""
+    try:
+        records = B3YieldCurveAdapter().get_latest(curve, as_of=as_of)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except YieldCurveProviderError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"{exc.code}: {exc}",
+        ) from exc
+    return {
+        "status": "OK" if records else "NO_DATA",
+        "source": "b3_taxaswap_pyettj",
+        "curve": records[0].curve_code if records else curve.upper(),
+        "curve_description": records[0].curve_description if records else curve.upper(),
+        "as_of": records[0].observation_timestamp.date().isoformat() if records else None,
+        "unit": "percent_per_year",
+        "observations": [
+            {**asdict(record), "rate_percent_per_year": record.rate_decimal * 100}
+            for record in records
+        ],
+    }
 
 
 @app.get("/market-intelligence/investor-flows")
