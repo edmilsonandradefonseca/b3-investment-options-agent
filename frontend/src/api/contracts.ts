@@ -276,6 +276,7 @@ export type RuntimeStatusResponse = {
 export type SchedulerConfigResponse = {
   start_time: string;
   end_time: string;
+  interval_minutes: 15 | 30 | 60;
   timezone: string;
   weekdays: string[];
   source: "admin" | "environment";
