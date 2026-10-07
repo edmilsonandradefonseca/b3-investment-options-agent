@@ -1,0 +1,68 @@
+from __future__ import annotations
+
+from datetime import date
+
+import pandas as pd
+import pytest
+
+import pyettj.ettj as pyettj_ettj
+from b3_agent.providers.b3_yield_curve import (
+    B3YieldCurveAdapter,
+    YieldCurveProviderError,
+)
+
+
+class FakeResponse:
+    content = b"verified-download"
+
+    def __init__(self):
+        self.raised = False
+
+    def raise_for_status(self):
+        self.raised = True
+
+
+def test_curve_adapter_keeps_tls_verification_and_normalizes_pyettj_rows(monkeypatch):
+    calls = {}
+
+    monkeypatch.setattr(pyettj_ettj, "_montar_url", lambda value: "https://b3.test/taxaswap")
+    monkeypatch.setattr(pyettj_ettj, "_extrair_txt", lambda raw, label: "parsed")
+    monkeypatch.setattr(
+        pyettj_ettj,
+        "_parsear_txt",
+        lambda text, curves, ref: pd.DataFrame(
+            [
+                {
+                    "refdate": pd.Timestamp(ref),
+                    "curva": "PRE",
+                    "descricao": "DIxPRE",
+                    "dias_corridos": 252,
+                    "dias_uteis": 174,
+                    "taxa": 0.1465,
+                    "vertice": "F",
+                }
+            ]
+        ),
+    )
+    monkeypatch.setattr(pyettj_ettj, "_validar_output", lambda frame, curves, label: None)
+
+    def http_get(url, **kwargs):
+        calls.update(url=url, **kwargs)
+        return FakeResponse()
+
+    rows = B3YieldCurveAdapter(http_get=http_get).get_latest(
+        "PRE", as_of=date(2026, 9, 24)
+    )
+
+    assert calls["verify"] is True
+    assert calls["url"] == "https://b3.test/taxaswap"
+    assert rows[0].curve_code == "PRE"
+    assert rows[0].curve_description == "DIxPRE"
+    assert rows[0].days_calendar == 252
+    assert rows[0].rate_decimal == pytest.approx(0.1465)
+
+
+def test_curve_adapter_rejects_unknown_curve_before_network_call():
+    adapter = B3YieldCurveAdapter(http_get=lambda *args, **kwargs: pytest.fail("network called"))
+    with pytest.raises(ValueError, match="unsupported yield curve"):
+        adapter.get_latest("IPCA")
