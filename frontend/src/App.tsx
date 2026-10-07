@@ -92,7 +92,14 @@ export default function App(){
  const [scenarioHorizon,setScenarioHorizon]=useState(''),[scenarioShocks,setScenarioShocks]=useState('-10, 0, 10'),[scenarioObjective,setScenarioObjective]=useState('COMPARE_ONLY');
  const [optionA,setOptionA]=useState(''),[optionB,setOptionB]=useState(''),[optionRowsA,setOptionRowsA]=useState<CurrentOptionRow[]>([]),[optionRowsB,setOptionRowsB]=useState<CurrentOptionRow[]>([]);
  const [putChainExpiry,setPutChainExpiry]=useState(''),[putCandidateIds,setPutCandidateIds]=useState<string[]>([]);
- async function load(){setBusy(true);try{await b3Api.health();connectionRef.current=true;setOnline(true);const [p,c,t,l]=await Promise.allSettled([b3Api.portfolio(),b3Api.capital(),b3Api.listTransactions(500),b3Api.optionLedger()]);if(p.status==='fulfilled'){setPortfolio(p.value);void b3Api.orchestrate({task:'UC-02 snapshot de opções',context:{workspace:'Options',dashboard_page:'Options',use_cases:['UC-02'],analysis_mode:'deterministic'}}).then(r=>setWorkspaceResults(v=>({...v,Options:r}))).catch(()=>{});void b3Api.orchestrate({task:'UC-01 portfolio snapshot',context:{workspace:'Portfolio',dashboard_page:'Portfolio',use_cases:['UC-01'],analysis_mode:'deterministic'}}).then(r=>setWorkspaceResults(v=>({...v,Portfolio:r}))).catch(()=>{})}if(c.status==='fulfilled'){setCapital(c.value);setAvailable(String(c.value.available_capital??''));setReserve(String(c.value.minimum_reserve??''));}if(t.status==='fulfilled')setTx(t.value);if(l.status==='fulfilled'){setBrokerage(l.value.operations);setLedgerAvailable(true)}else setLedgerAvailable(false);setNotice([p,c,t].some(x=>x.status==='rejected')?'Alguns dados não estão disponíveis nesta versão do backend.':'');}catch(e){connectionRef.current=false;setOnline(false);setNotice(`Backend indisponível: ${err(e)}`)}finally{setBusy(false)}}
+ async function load(){setBusy(true);try{await b3Api.health();connectionRef.current=true;setOnline(true);const [p,c,t,l,latestReview,reviewStatus]=await Promise.allSettled([b3Api.portfolio(),b3Api.capital(),b3Api.listTransactions(500),b3Api.optionLedger(),b3Api.latestOpportunityReview(),b3Api.opportunityReviewStatus()]);if(p.status==='fulfilled'){setPortfolio(p.value);void b3Api.orchestrate({task:'UC-02 snapshot de opções',context:{workspace:'Options',dashboard_page:'Options',use_cases:['UC-02'],analysis_mode:'deterministic'}}).then(r=>setWorkspaceResults(v=>({...v,Options:r}))).catch(()=>{});void b3Api.orchestrate({task:'UC-01 portfolio snapshot',context:{workspace:'Portfolio',dashboard_page:'Portfolio',use_cases:['UC-01'],analysis_mode:'deterministic'}}).then(r=>setWorkspaceResults(v=>({...v,Portfolio:r}))).catch(()=>{})}if(c.status==='fulfilled'){setCapital(c.value);setAvailable(String(c.value.available_capital??''));setReserve(String(c.value.minimum_reserve??''));}if(t.status==='fulfilled')setTx(t.value);if(l.status==='fulfilled'){setBrokerage(l.value.operations);setLedgerAvailable(true)}else setLedgerAvailable(false);
+  const savedReview=latestReview.status==='fulfilled'?latestReview.value.response:null;
+  if(savedReview?.result)setWorkspaceResults(previous=>({...previous,Opportunities:savedReview}));
+  if(reviewStatus.status==='fulfilled'){
+   const state:OpportunityReviewStatus=reviewStatus.value;
+   setOpportunityRun({status:state.status==='RUNNING'?'running':state.status==='COMPLETED'?'complete':state.status==='FAILED'?'error':'idle',startedAt:state.started_at,finishedAt:state.finished_at,sources:savedReview?.sources??[],message:state.status==='FAILED'?`A revisão diária falhou: ${state.error||'erro não informado'}. O último resultado válido foi preservado.`:null});
+  }
+  setNotice([p,c,t].some(x=>x.status==='rejected')?'Alguns dados não estão disponíveis nesta versão do backend.':'');}catch(e){connectionRef.current=false;setOnline(false);setNotice(`Backend indisponível: ${err(e)}`)}finally{setBusy(false)}}
  useEffect(()=>{void load()},[]);
  useEffect(()=>{
   const timer=window.setInterval(()=>{
@@ -192,7 +199,7 @@ export default function App(){
     if(!current())return null;
       if(deterministicResult.result&&typeof deterministicResult.result==='object')setAnalysis({...deterministicResult,result:{...deterministicResult.result,derived_synthesis_status:'PENDING'}});
     }
-    const r=await b3Api.orchestrate({task,ticker:requestTicker,context});
+    const r=await b3Api.orchestrate({task,ticker:requestTicker,context},page==='Opportunities'?45*60*1000:195_000);
     if(!current())return null;
     const hasResult=!!r.result&&typeof r.result==='object'&&!Array.isArray(r.result);
     const opportunityIncomplete=!conversation&&page==='Opportunities'&&!isCompletedOpportunityReview(r);
@@ -250,36 +257,26 @@ export default function App(){
   }
  }
  useEffect(()=>{
-  if(!online||!portfolio||busy||opportunitySearchInFlight.current)return;
-  const snapshotKey=opportunitySnapshotKey(portfolio);
-  if(opportunityAutoReviews.current.has(snapshotKey))return;
-  opportunityAutoReviews.current.add(snapshotKey);
-  opportunitySearchInFlight.current=true;
-  const reviewSequence=++opportunityReviewSequence.current;
-  const startedAt=new Date().toISOString();
-  setOpportunityRun(previous=>({...previous,status:'running',startedAt,finishedAt:null,message:null}));
-  const assets=opportunityAssets.split(/[,;\s]+/).filter(Boolean).map(value=>value.toUpperCase());
-  const task=`UC-03: revise ${assets.join(', ')} e todas as ações vigentes da carteira para identificar teses materiais que merecem atenção agora. Considere opções já possuídas somente como exposição e cobertura; não busque cadeia de opções. Explique por que cada tese importa, evidências favoráveis e contrárias, impacto conhecido na carteira e o que mudaria a leitura. Separar oportunidade de ação de item para acompanhar; não transforme risco ou liquidez observados em previsão de retorno nem em recomendação automática.`;
-  void b3Api.orchestrate({task,ticker:null,context:{workspace:'Opportunities',selected_ticker:null,opportunity_assets:assets,opportunity_objective:opportunityObjective,include_portfolio_stocks:true,research_mode:researchMode,include_yield_curve:true}})
-   .then(response=>{
-    if(reviewSequence!==opportunityReviewSequence.current)return;
-    const result=response?.result&&typeof response.result==='object'?response.result:{};
-    const failed=!response||Boolean(response.error)||Object.keys(result).length===0||!isCompletedOpportunityReview(response);
-    const finishedAt=new Date().toISOString();
-    if(!failed)setWorkspaceResults(previous=>({...previous,Opportunities:response}));
-    const sourceRefs=result.source_refs;
-    const sources=Array.from(new Set(response?[...(response.sources??[]),...(Array.isArray(sourceRefs)?sourceRefs:[])]:[])).filter(Boolean);
-    setOpportunityRun(previous=>({...previous,status:failed?'error':'complete',finishedAt,sources,message:failed?'A revisão automática não concluiu normalmente. A análise anterior foi preservada; confira as lacunas e tente novamente.':null}));
-   })
-   .catch(error=>{
-    if(reviewSequence!==opportunityReviewSequence.current)return;
-    setOpportunityRun(previous=>({...previous,status:'error',finishedAt:new Date().toISOString(),message:`A revisão automática falhou: ${err(error)}. A análise anterior foi preservada.`}));
-   })
-   .finally(()=>{
-    opportunitySearchInFlight.current=false;
-    setOpportunityRun(previous=>({...previous}));
-   });
- },[online,portfolio,busy,opportunityRun,opportunityAssets,opportunityObjective,researchMode]);
+  if(page!=='Opportunities'||opportunityRun.status!=='running')return;
+  let cancelled=false;
+  const poll=async()=>{
+   try{
+    const state=await b3Api.opportunityReviewStatus();
+    if(cancelled||state.status==='RUNNING'||state.status==='NOT_STARTED')return;
+    if(state.status==='COMPLETED'){
+     const latest=await b3Api.latestOpportunityReview();
+     if(cancelled)return;
+     if(latest.response?.result)setWorkspaceResults(previous=>({...previous,Opportunities:latest.response}));
+     setOpportunityRun(previous=>({...previous,status:'complete',startedAt:state.started_at,finishedAt:state.finished_at,sources:latest.response?.sources??previous.sources,message:null}));
+    }else if(state.status==='FAILED'){
+     setOpportunityRun(previous=>({...previous,status:'error',startedAt:state.started_at,finishedAt:state.finished_at,message:`A revisão falhou: ${state.error||'erro não informado'}. O último resultado válido foi preservado.`}));
+    }
+   }catch{/* Keep showing the last known status during a temporary API interruption. */}
+  };
+  const timer=window.setInterval(()=>{void poll()},5000);
+  void poll();
+  return()=>{cancelled=true;window.clearInterval(timer)};
+ },[page,opportunityRun.status]);
  function openInStrategyLab(response:OrchestrateResponse|null=null){
   ++inspectionSequence.current;
   navigate('Strategy Lab');setBusy(false);setNotice('');
