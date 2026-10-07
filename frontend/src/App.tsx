@@ -41,6 +41,10 @@ function eventUrl(event:Record<string,unknown>):string{
  const value=eventText(event,'url','source_ref','source_url');
  return value.startsWith('https://')||value.startsWith('http://')?value:'';
 }
+function isGreeting(task:string){
+ const normalized=task.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+ return /^(oi|ola|bom dia|boa tarde|boa noite|e ai)$/.test(normalized);
+}
 function isOperationalStatusQuestion(task:string){
  const normalized=task.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
  return /^(vc |voce |copilot |sistema )?(esta|ta) (on|online|conectado|funcionando)$/.test(normalized)
@@ -126,6 +130,18 @@ export default function App(){
   conversation=false,
   options?:{ticker?:string|null;context?:Record<string,unknown>;preservePrevious?:boolean}
  ):Promise<OrchestrateResponse|null>{
+  if(conversation && isGreeting(task)){
+    const greeting:OrchestrateResponse={
+      status:'ONLINE',
+      result:{summary:'Olá! Estou aqui. Posso ajudar com sua carteira, opções, oportunidades, Strategy Lab ou inteligência de mercado.'},
+      sources:[],
+      audit:[],
+      error:null,
+    };
+    setQuestion('');
+    setChat(v=>[...v,{q:task,r:greeting}]);
+    return greeting;
+  }
   if(!conversation){++inspectionSequence.current;if(!options?.preservePrevious)setAnalysis(null);setNotice('')}
   const sequence=inspectionSequence.current;
   const current=()=>conversation||inspectionSequence.current===sequence;
