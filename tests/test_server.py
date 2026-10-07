@@ -553,10 +553,11 @@ def test_scheduler_config_admin_api_persists_window_and_rejects_invalid_times(mo
     assert initial.json()["start_time"] == "08:00"
     assert initial.json()["end_time"] == "19:00"
 
-    saved = client.post("/admin/scheduler-config", json={"start_time": "09:30", "end_time": "17:45"})
+    saved = client.post("/admin/scheduler-config", json={"start_time": "09:30", "end_time": "17:45", "interval_minutes": 30})
     assert saved.status_code == 200
     assert saved.json()["start_time"] == "09:30"
     assert saved.json()["end_time"] == "17:45"
+    assert saved.json()["interval_minutes"] == 30
     assert saved.json()["source"] == "admin"
 
     invalid = client.post("/admin/scheduler-config", json={"start_time": "18:00", "end_time": "09:00"})
