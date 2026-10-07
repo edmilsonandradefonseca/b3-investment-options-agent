@@ -7,6 +7,7 @@ const labels: Record<string, string> = {
   embedding: "Embeddings",
   qdrant: "Qdrant",
   neo4j: "Neo4j",
+  openclaw_gateway: "OpenClaw Gateway",
 };
 const stateLabel = (value: unknown) => {
   if (value === "ok" || value === "running") return "Operacional";
@@ -65,8 +66,11 @@ export default function AdminWorkspace() {
 
     <section className="panel">
       <h2>Agendamentos e OpenClaw</h2>
-      <div className="state-banner limited"><strong>Configuração de agendamentos ainda não disponível pela API.</strong><span>O backend atual instala timers systemd com horários definidos nos scripts. A tela ainda não pode editar ativos monitorados, frequência ou horário com efeito no scheduler.</span></div>
-      <div className="state-banner limited"><strong>Status do OpenClaw não reportado.</strong><span>A rota operacional atual não expõe o estado do Gateway nem suas portas; esses dados não serão inferidos a partir de outros serviços.</span></div>
+      {status?.scheduler?.state === "ok" && status.scheduler.timers.length > 0 ? <div className="table-wrap"><table><thead><tr><th>Timer</th><th>Próxima execução</th><th>Última execução</th><th>Serviço</th></tr></thead><tbody>
+        {status.scheduler.timers.map(timer => <tr key={timer.unit}><td>{timer.unit}</td><td>{timer.next ?? "Não agendada"}</td><td>{timer.last ?? "Sem execução registrada"}</td><td>{timer.activates ?? "—"}</td></tr>)}
+      </tbody></table></div> : <State kind={status?.scheduler?.state === "ok" ? "limited" : "loading"} title={status?.scheduler?.state === "ok" ? "Nenhum timer B3 encontrado" : "Status do scheduler indisponível"}>{status?.scheduler?.state === "ok" ? "O systemd não retornou timers com prefixo b3-." : "A API ainda não conseguiu consultar os timers do systemd."}</State>}
+      {!status?.services?.openclaw_gateway && <State kind="limited" title="OpenClaw não reportado">A API conectada não retornou status do Gateway.</State>}
+      <div className="state-banner limited"><strong>Edição dos agendamentos ainda não disponível.</strong><span>Os horários e ativos monitorados ainda são definidos nos serviços systemd e nos jobs. A tela exibe os disparos reais, mas não altera o scheduler.</span></div>
     </section>
     {error && <div className="state-banner error" role="alert"><strong>Não foi possível carregar o status</strong><span>{error}</span></div>}
   </div>;
