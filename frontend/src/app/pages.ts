@@ -7,6 +7,7 @@ export type PageId =
   | "Market Intelligence"
   | "History & Learning"
   | "Risk & Stress"
+  | "Admin"
   | "Copilot";
 
 export type PageTab = {
@@ -146,6 +147,15 @@ export const PAGE_DEFINITIONS: PageDefinition[] = [
     useCases: ["UC-11"],
     prompt: "UC-11 Risk, Scenario & Stress Intelligence: apresente cenários canônicos disponíveis, assumptions, impacto P&L da carteira e posições, option/assignment exposure, capital requirement, concentração, liquidez, sensitivities e validation status.",
     description: "UC-11 · Stress determinístico e sensitivities.",
+  },
+  {
+    id: "Admin",
+    route: "admin",
+    icon: "⚙",
+    subtitle: "Conexão e serviços",
+    useCases: [],
+    prompt: "Mostre somente o status operacional reportado pelo backend B3, com fontes e horário quando disponíveis.",
+    description: "Diagnóstico do backbone, serviços e conectividade.",
   },
   {
     id: "Copilot",
