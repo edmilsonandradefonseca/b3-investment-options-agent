@@ -46,7 +46,7 @@ try{
  const submit=async()=>{
   const form=panel.locator('form').last();
   const button=form.locator('button').first();
-  await expect(form.locator('textarea')).toHaveValue(/\\S/);
+  await expect(form.locator('textarea')).toHaveValue(/\S/);
   await expect(button).toBeVisible();
   await expect(button).toBeEnabled();
   assert.match(await button.innerText(),/Analisar pergunta ou tese|Enviar continuação/);
