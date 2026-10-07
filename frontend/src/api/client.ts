@@ -108,6 +108,11 @@ export const b3Api = {
   personalHistory: (ticker: string, since = "") => requestJson<Record<string, unknown>>(`/history/context?${new URLSearchParams({...(ticker.trim()?{ticker:ticker.trim().toUpperCase()}:{}),...(since?{since}:{})})}`),
   health: () => requestJson<HealthResponse>("/health"),
   runtimeStatus: () => requestJson<RuntimeStatusResponse>("/runtime/status"),
+  schedulerConfig: () => requestJson<SchedulerConfigResponse>("/admin/scheduler-config"),
+  saveSchedulerConfig: (start_time: string, end_time: string) => requestJson<SchedulerConfigResponse>("/admin/scheduler-config", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ start_time, end_time }),
+  }),
   collectionUniverse: () => requestJson<CollectionUniverseResponse>("/admin/collection-universe"),
   saveCollectionUniverse: (tickers: string[]) => requestJson<CollectionUniverseResponse>("/admin/collection-universe", {
     method: "POST", headers: { "Content-Type": "application/json" },
