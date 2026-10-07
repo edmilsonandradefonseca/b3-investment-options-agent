@@ -192,7 +192,7 @@ export default function AdminWorkspace() {
         <label>Fim das coletas<input type="time" value={scheduleEnd} onChange={event => setScheduleEnd(event.target.value)} required /></label>
         <button type="submit" disabled={savingSchedule || !scheduler || scheduleStart >= scheduleEnd}>{savingSchedule ? "Salvando…" : "Salvar janela"}</button>
       </form>
-      <p className="muted">Ativo de segunda a sexta, no fuso ${scheduler?.timezone ?? "America/Sao_Paulo"}. O scheduler verifica a janela a cada 15 minutos; fora dela, a coleta contínua é ignorada. Configuração: {scheduler?.source === "admin" ? "personalizada" : "padrão do servidor"}.</p>
+      <p className="muted">Ativo de segunda a sexta, no fuso {scheduler?.timezone ?? "America/Sao_Paulo"}. O scheduler verifica a janela a cada 15 minutos; fora dela, a coleta contínua é ignorada. Configuração: {scheduler?.source === "admin" ? "personalizada" : "padrão do servidor"}.</p>
     </section>
     {error && <div className="state-banner error" role="alert"><strong>Não foi possível carregar o status</strong><span>{error}</span></div>}
   </div>;
