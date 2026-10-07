@@ -43,7 +43,7 @@ export default function AdminWorkspace() {
       if (runtimeResult.status === "fulfilled") setStatus(runtimeResult.value);
       if (universeResult.status === "fulfilled") {
         setUniverse(universeResult.value);
-        setUniverseDraft(universeResult.value.configured_tickers);
+        setUniverseDraft(Array.isArray(universeResult.value.configured_tickers) ? universeResult.value.configured_tickers : []);
       }
       const failures = [runtimeResult, universeResult]
         .filter((result): result is PromiseRejectedResult => result.status === "rejected")
@@ -85,7 +85,7 @@ export default function AdminWorkspace() {
     try {
       const result = await b3Api.saveCollectionUniverse(universeDraft);
       setUniverse(result);
-      setUniverseDraft(result.configured_tickers);
+      setUniverseDraft(Array.isArray(result.configured_tickers) ? result.configured_tickers : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -155,7 +155,7 @@ export default function AdminWorkspace() {
       </form>
       {universeDraft.length ? <div className="ticker-list">{universeDraft.map(ticker => <span className="badge" key={ticker}>{ticker}<button className="ghost" type="button" aria-label={`Remover ${ticker}`} onClick={() => setUniverseDraft(current => current.filter(value => value !== ticker))}>×</button></span>)}</div> : <State title="Nenhum ativo adicional configurado">Os ativos da carteira continuam incluídos nas coletas.</State>}
       <div className="section-head"><small className="muted">Fonte: {universe?.source ?? "não carregada"}{universe?.updated_at ? ` · Atualizado em ${universe.updated_at}` : ""}</small><button onClick={saveUniverse} disabled={savingUniverse || !universe}>{savingUniverse ? "Salvando…" : "Salvar universo"}</button></div>
-      <small className="muted">A mudança vale nas próximas execuções; não interrompe uma coleta em andamento. Universo efetivo: {universe?.effective_tickers.join(", ") || "sem tickers"}</small>
+      <small className="muted">A mudança vale nas próximas execuções; não interrompe uma coleta em andamento. Universo efetivo: {(Array.isArray(universe?.effective_tickers) ? universe.effective_tickers : []).join(", ") || "sem tickers"}</small>
     </section>
 
     <section className="panel">
