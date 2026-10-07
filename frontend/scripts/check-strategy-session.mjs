@@ -44,18 +44,11 @@ try{
  await page.goto((process.env.B3_UI_URL||'http://127.0.0.1:5173')+'/#/strategy-lab');
  const panel=page.getByRole('region',{name:'Pergunta e análise do Strategy Lab'});
  const submit=async()=>{
-  const form=panel.locator('form').last();
-  const button=form.locator('button').first();
-  await expect(form.locator('textarea')).toHaveValue(/\S/);
-  console.log('STRATEGY_FORM_DEBUG', JSON.stringify({
-   forms: await panel.locator('form').count(),
-   textareas: await panel.locator('textarea').count(),
-   buttons: await panel.locator('button').count(),
-   selectedForm: await form.evaluate(element => element.outerHTML),
-  }));
+  const input=panel.getByLabel(/Sua pergunta ou tese|Ajustar ou aprofundar esta análise/);
+  const button=panel.getByRole('button',{name:/Analisar pergunta ou tese|Enviar continuação/}).last();
+  await expect(input).toHaveValue(/\S/);
   await expect(button).toBeVisible();
   await expect(button).toBeEnabled();
-  assert.match(await button.innerText(),/Analisar pergunta ou tese|Enviar continuação/);
   await button.click();
  };
  await panel.getByLabel('Sua pergunta ou tese').fill('Avalie minha tese sobre PETR4.');
