@@ -16,15 +16,16 @@ _DECISION_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
     "properties": {
         "alternative_assessments": {
-            "type": "array", "maxItems": 20,
+            "type": "array", "maxItems": 40,
             "items": {"type": "object", "additionalProperties": False,
                 "properties": {
                     "alternative_id": {"type": "string"},
+                    "priority_rank": {"type": "integer", "minimum": 0, "maximum": 40},
                     **{key: {"type": "array", "items": {"type": "string"}} for key in (
                         "supporting_evidence", "contradicting_evidence", "decision_implications", "unknowns", "evidence_refs"
                     )},
                 },
-                "required": ["alternative_id", "supporting_evidence", "contradicting_evidence", "decision_implications", "unknowns", "evidence_refs"],
+                "required": ["alternative_id", "priority_rank", "supporting_evidence", "contradicting_evidence", "decision_implications", "unknowns", "evidence_refs"],
             },
         },
         "action": {"type": "string"},
@@ -83,6 +84,16 @@ class InvestmentReasoningAgent:
                 "UNKNOWN assignment/expiry/roll statistics must remain unknown; personal frequency is not market probability. "
                 "When no specialist synthesis is supplied, synthesize supporting and contradicting evidence directly, "
                 "including risks, prior executions, limitations and explicit alternatives for PUT, CALL or stock. "
+                "For Opportunities, assess the complete supplied stock universe using current dated news/events, "
+                "the supplied share-price history and observed risk, available fundamentals, B3 PRE/DIC future-yield "
+                "curve vertices, portfolio exposure and source dates. Explain when each factor is unavailable; "
+                "do not infer causal effects from co-movement or treat a missing factor as neutral. "
+                "In each alternative_assessments item, priority_rank is 1..N only for a specific, material, "
+                "currently evidenced stock opportunity whose supporting evidence outweighs its contradictions; "
+                "rank those items by urgency/materiality, not by volatility, liquidity, target upside alone, or "
+                "ticker order. Set priority_rank=0 for monitor-only, incomplete, contradicted or unsupported theses. "
+                "Use contiguous ranks starting at 1, and use no positive rank when no thesis qualifies. "
+                "A priority rank means review priority, never a BUY recommendation or expected-return forecast. "
                 "Answer in Portuguese with a decision-specific thesis, not a generic market overview. "
                 "In rationale compare every supplied alternative, its strongest supporting and contradicting evidence, "
                 "and explain which supplied metric or missing dependency prevents a conclusion. "
@@ -138,6 +149,7 @@ def _parse_assessments(values: Any, allowed_ids: list[str]) -> tuple[Alternative
         raise ValueError('No supplied alternatives to assess')
     assessments = []
     seen = set()
+    seen_ranks = set()
     for item in values:
         if not isinstance(item, dict):
             raise ValueError('Alternative assessment must be an object')
@@ -145,11 +157,18 @@ def _parse_assessments(values: Any, allowed_ids: list[str]) -> tuple[Alternative
         if not isinstance(identifier, str) or not identifier.strip() or identifier in seen or (allowed_ids and identifier not in allowed_ids):
             raise ValueError('Assessment must link to a unique supplied alternative')
         seen.add(identifier)
+        priority_rank = item.get('priority_rank', 0)
+        if isinstance(priority_rank, bool) or not isinstance(priority_rank, int) or not 0 <= priority_rank <= 40:
+            raise ValueError('Assessment priority rank must be an integer from 0 to 40')
+        if priority_rank and priority_rank in seen_ranks:
+            raise ValueError('Assessment priority ranks must be unique')
+        if priority_rank:
+            seen_ranks.add(priority_rank)
         fields = {}
         for key in ('supporting_evidence', 'contradicting_evidence', 'decision_implications', 'unknowns', 'evidence_refs'):
             entries = item.get(key)
             if not isinstance(entries, list) or any(not isinstance(value, str) for value in entries):
                 raise ValueError('Assessment fields require arrays of text')
             fields[key] = tuple(entries)
-        assessments.append(AlternativeAssessment(alternative_id=identifier, **fields))
+        assessments.append(AlternativeAssessment(alternative_id=identifier, priority_rank=priority_rank, **fields))
     return tuple(assessments)
