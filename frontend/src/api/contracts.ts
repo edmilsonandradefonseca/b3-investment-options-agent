@@ -263,6 +263,7 @@ export type RuntimeStatusResponse = {
   api: { host: string; port: number; local_health_url: string };
   resources: Record<string, string>;
   services: Record<string, { state: string; ownership?: string; endpoint?: string }>;
+  scheduler?: { state: string; timers: Array<{ unit: string; activates: string | null; next: string | null; last: string | null }> };
   process: {
     running: boolean;
     runtime_pid?: number | null;
