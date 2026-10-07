@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { b3Api, getApiBaseUrl, setApiBaseUrl } from "../api/client";
-import type { CollectionUniverseResponse, RuntimeStatusResponse } from "../api/contracts";
+import type { CollectionUniverseResponse, RuntimeStatusResponse, SchedulerConfigResponse } from "../api/contracts";
 import { State } from "./cockpit";
 
 const labels: Record<string, string> = {
@@ -28,7 +28,7 @@ export default function AdminWorkspace() {
   const [universe, setUniverse] = useState<CollectionUniverseResponse | null>(null);
   const [universeDraft, setUniverseDraft] = useState<string[]>([]);
   const [tickerDraft, setTickerDraft] = useState("");
-  const [savingUniverse, setSavingUniverse] = useState(false);
+  const [savingUniverse, setSavingUniverse] = useState(false);\n  const [scheduler, setScheduler] = useState<SchedulerConfigResponse | null>(null);\n  const [scheduleStart, setScheduleStart] = useState("08:00");\n  const [scheduleEnd, setScheduleEnd] = useState("19:00");\n  const [savingSchedule, setSavingSchedule] = useState(false);
   const [apiAddress, setApiAddress] = useState(getApiBaseUrl());
   const [savingConnection, setSavingConnection] = useState(false);
   const [connectionMessage, setConnectionMessage] = useState("");
@@ -36,16 +36,22 @@ export default function AdminWorkspace() {
     setLoading(true);
     setError("");
     try {
-      const [runtimeResult, universeResult] = await Promise.allSettled([
+      const [runtimeResult, universeResult, scheduleResult] = await Promise.allSettled([
         b3Api.runtimeStatus(),
         b3Api.collectionUniverse(),
+        b3Api.schedulerConfig(),
       ]);
       if (runtimeResult.status === "fulfilled") setStatus(runtimeResult.value);
       if (universeResult.status === "fulfilled") {
         setUniverse(universeResult.value);
         setUniverseDraft(Array.isArray(universeResult.value.configured_tickers) ? universeResult.value.configured_tickers : []);
       }
-      const failures = [runtimeResult, universeResult]
+      if (scheduleResult.status === "fulfilled") {
+        setScheduler(scheduleResult.value);
+        setScheduleStart(scheduleResult.value.start_time);
+        setScheduleEnd(scheduleResult.value.end_time);
+      }
+      const failures = [runtimeResult, universeResult, scheduleResult]
         .filter((result): result is PromiseRejectedResult => result.status === "rejected")
         .map(result => result.reason instanceof Error ? result.reason.message : String(result.reason));
       if (failures.length) setError(failures.join(" · "));
@@ -90,6 +96,23 @@ export default function AdminWorkspace() {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSavingUniverse(false);
+    }
+  }
+
+  async function saveSchedule(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSavingSchedule(true);
+    setError("");
+    try {
+      const saved = await b3Api.saveSchedulerConfig(scheduleStart, scheduleEnd);
+      setScheduler(saved);
+      setScheduleStart(saved.start_time);
+      setScheduleEnd(saved.end_time);
+      setStatus(await b3Api.runtimeStatus());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingSchedule(false);
     }
   }
 
@@ -164,7 +187,12 @@ export default function AdminWorkspace() {
         {status.scheduler.timers.map(timer => <tr key={timer.unit}><td>{timer.unit}</td><td>{timer.next ?? "Não agendada"}</td><td>{timer.last ?? "Sem execução registrada"}</td><td>{timer.activates ?? "—"}</td></tr>)}
       </tbody></table></div> : <State kind={status?.scheduler?.state === "ok" ? "limited" : "loading"} title={status?.scheduler?.state === "ok" ? "Nenhum timer B3 encontrado" : "Status do scheduler indisponível"}>{status?.scheduler?.state === "ok" ? "O systemd não retornou timers com prefixo b3-." : "A API ainda não conseguiu consultar os timers do systemd."}</State>}
       {!status?.services?.openclaw_gateway && <State kind="limited" title="OpenClaw não reportado">A API conectada não retornou status do Gateway.</State>}
-      <div className="state-banner limited"><strong>Edição dos agendamentos ainda não disponível.</strong><span>Os horários e ativos monitorados ainda são definidos nos serviços systemd e nos jobs. A tela exibe os disparos reais, mas não altera o scheduler.</span></div>
+      <form className="inline-controls scheduler-controls" onSubmit={saveSchedule}>
+        <label>Início das coletas<input type="time" value={scheduleStart} onChange={event => setScheduleStart(event.target.value)} required /></label>
+        <label>Fim das coletas<input type="time" value={scheduleEnd} onChange={event => setScheduleEnd(event.target.value)} required /></label>
+        <button type="submit" disabled={savingSchedule || !scheduler || scheduleStart >= scheduleEnd}>{savingSchedule ? "Salvando…" : "Salvar janela"}</button>
+      </form>
+      <p className="muted">Ativo de segunda a sexta, no fuso ${scheduler?.timezone ?? "America/Sao_Paulo"}. O scheduler verifica a janela a cada 15 minutos; fora dela, a coleta contínua é ignorada. Configuração: {scheduler?.source === "admin" ? "personalizada" : "padrão do servidor"}.</p>
     </section>
     {error && <div className="state-banner error" role="alert"><strong>Não foi possível carregar o status</strong><span>{error}</span></div>}
   </div>;
