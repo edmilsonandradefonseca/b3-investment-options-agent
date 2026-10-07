@@ -836,6 +836,52 @@ def runtime_status() -> dict[str, Any]:
     """Expose the operational runtime state through the Orchestrator."""
     return RuntimeManager().status(health_override="ok")
 
+class SchedulerConfigRequest(BaseModel):
+    start_time: str = Field(pattern=r"^(?:[01]\\d|2[0-3]):[0-5]\\d$")
+    end_time: str = Field(pattern=r"^(?:[01]\\d|2[0-3]):[0-5]\\d$")
+
+
+def _scheduler_config_path() -> Path:
+    return settings.data_dir / "structured" / "collection_schedule.json"
+
+
+@app.get("/admin/scheduler-config")
+def get_scheduler_config() -> dict[str, Any]:
+    path = _scheduler_config_path()
+    try:
+        if path.exists():
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            start_time = str(payload.get("start_time", "08:00"))
+            end_time = str(payload.get("end_time", "19:00"))
+            source = "admin"
+        else:
+            start_time = f"{int(os.getenv('B3_INTEL_ACTIVE_START_HOUR', '8')):02d}:00"
+            end_time = f"{int(os.getenv('B3_INTEL_ACTIVE_END_HOUR', '19')):02d}:00"
+            source = "environment"
+        return {"start_time": start_time, "end_time": end_time,
+                "timezone": os.getenv("B3_AGENT_TIMEZONE", "America/Sao_Paulo"),
+                "weekdays": ["Mon", "Tue", "Wed", "Thu", "Fri"], "source": source}
+    except (OSError, ValueError, TypeError) as exc:
+        raise HTTPException(status_code=503, detail=f"scheduler configuration unavailable: {exc}") from exc
+
+
+@app.post("/admin/scheduler-config")
+def save_scheduler_config(request: SchedulerConfigRequest) -> dict[str, Any]:
+    if request.start_time >= request.end_time:
+        raise HTTPException(status_code=422, detail="start_time must be earlier than end_time")
+    path = _scheduler_config_path()
+    payload = {"schema_version": 1, "start_time": request.start_time,
+               "end_time": request.end_time, "updated_at": datetime.now(timezone.utc).isoformat()}
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\\n", encoding="utf-8")
+        temporary.replace(path)
+        return get_scheduler_config()
+    except OSError as exc:
+        raise HTTPException(status_code=503, detail=f"scheduler configuration unavailable: {exc}") from exc
+
+
 class CollectionUniverseRequest(BaseModel):
     tickers: list[str] = Field(default_factory=list, max_length=500)
 
