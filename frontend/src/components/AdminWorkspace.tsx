@@ -33,6 +33,7 @@ export default function AdminWorkspace() {
   const [scheduleStart, setScheduleStart] = useState("08:00");
   const [scheduleEnd, setScheduleEnd] = useState("19:00");
   const [savingSchedule, setSavingSchedule] = useState(false);
+  const [scheduleInterval, setScheduleInterval] = useState(15);
   const [apiAddress, setApiAddress] = useState(getApiBaseUrl());
   const [savingConnection, setSavingConnection] = useState(false);
   const [connectionMessage, setConnectionMessage] = useState("");
@@ -54,6 +55,7 @@ export default function AdminWorkspace() {
         setScheduler(scheduleResult.value);
         setScheduleStart(scheduleResult.value.start_time);
         setScheduleEnd(scheduleResult.value.end_time);
+        setScheduleInterval(scheduleResult.value.interval_minutes);
       }
       const failures = [runtimeResult, universeResult, scheduleResult]
         .filter((result): result is PromiseRejectedResult => result.status === "rejected")
@@ -108,10 +110,11 @@ export default function AdminWorkspace() {
     setSavingSchedule(true);
     setError("");
     try {
-      const saved = await b3Api.saveSchedulerConfig(scheduleStart, scheduleEnd);
+      const saved = await b3Api.saveSchedulerConfig(scheduleStart, scheduleEnd, scheduleInterval);
       setScheduler(saved);
       setScheduleStart(saved.start_time);
       setScheduleEnd(saved.end_time);
+      setScheduleInterval(saved.interval_minutes);
       setStatus(await b3Api.runtimeStatus());
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -194,9 +197,10 @@ export default function AdminWorkspace() {
       <form className="inline-controls scheduler-controls" onSubmit={saveSchedule}>
         <label>Início das coletas<input type="time" value={scheduleStart} onChange={event => setScheduleStart(event.target.value)} required /></label>
         <label>Fim das coletas<input type="time" value={scheduleEnd} onChange={event => setScheduleEnd(event.target.value)} required /></label>
+        <label>Frequência<select value={scheduleInterval} onChange={event => setScheduleInterval(Number(event.target.value) as 15 | 30 | 60)}><option value={15}>A cada 15 minutos</option><option value={30}>A cada 30 minutos</option><option value={60}>A cada 60 minutos</option></select></label>
         <button type="submit" disabled={savingSchedule || !scheduler || scheduleStart >= scheduleEnd}>{savingSchedule ? "Salvando…" : "Salvar janela"}</button>
       </form>
-      <p className="muted">Ativo de segunda a sexta, no fuso {scheduler?.timezone ?? "America/Sao_Paulo"}. O scheduler verifica a janela a cada 15 minutos; fora dela, a coleta contínua é ignorada. Configuração: {scheduler?.source === "admin" ? "personalizada" : "padrão do servidor"}.</p>
+      <p className="muted">Ativo de segunda a sexta, no fuso {scheduler?.timezone ?? "America/Sao_Paulo"}. A coleta contínua respeita a janela e roda a cada {scheduleInterval} minutos. Configuração: {scheduler?.source === "admin" ? "personalizada" : "padrão do servidor"}.</p>
     </section>
     {error && <div className="state-banner error" role="alert"><strong>Não foi possível carregar o status</strong><span>{error}</span></div>}
   </div>;
