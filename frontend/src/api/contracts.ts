@@ -41,6 +41,22 @@ export type OrchestrateResponse = {
   error: string | null;
 };
 
+export type OpportunityReviewStatus = {
+  status: "NOT_STARTED" | "RUNNING" | "COMPLETED" | "FAILED";
+  run_id: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  last_successful_at: string | null;
+  result_available: boolean;
+  error: string | null;
+};
+
+export type OpportunityReviewLatest = {
+  status: "AVAILABLE" | "NOT_AVAILABLE";
+  generated_at: string | null;
+  response: OrchestrateResponse | null;
+};
+
 export type TransactionRequest = {
   action: string;
   instrument_type: string;
