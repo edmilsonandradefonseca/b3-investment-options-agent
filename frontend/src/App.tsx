@@ -58,7 +58,7 @@ function isCompletedOpportunityReview(response:OrchestrateResponse|null|undefine
  return typeof screen.policy_version==='string'&&typeof scope.policy_version==='string'&&typeof narrative==='string';
 }
 export default function App(){
- const inspectionSequence=useRef(0), expectedHash=useRef<string|null>(null), opportunitySearchInFlight=useRef(false), opportunityAutoReviews=useRef(new Set<string>()), opportunityReviewSequence=useRef(0);
+ const inspectionSequence=useRef(0), expectedHash=useRef<string|null>(null), opportunitySearchInFlight=useRef(false), opportunityAutoReviews=useRef(new Set<string>()), opportunityReviewSequence=useRef(0), connectionRef=useRef(false);
  const [copilotOpen,setCopilotOpen]=useState(true),[sidebarCollapsed,setSidebarCollapsed]=useState(false),[marketTab,setMarketTab]=useState('regime');
  const [researchMode,setResearchMode]=useState("stored_first");
  const [opportunityRun,setOpportunityRun]=useState<OpportunityRunState>({status:'idle',startedAt:null,finishedAt:null,sources:[],message:null});
@@ -87,8 +87,18 @@ export default function App(){
  const [scenarioHorizon,setScenarioHorizon]=useState(''),[scenarioShocks,setScenarioShocks]=useState('-10, 0, 10'),[scenarioObjective,setScenarioObjective]=useState('COMPARE_ONLY');
  const [optionA,setOptionA]=useState(''),[optionB,setOptionB]=useState(''),[optionRowsA,setOptionRowsA]=useState<CurrentOptionRow[]>([]),[optionRowsB,setOptionRowsB]=useState<CurrentOptionRow[]>([]);
  const [putChainExpiry,setPutChainExpiry]=useState(''),[putCandidateIds,setPutCandidateIds]=useState<string[]>([]);
- async function load(){setBusy(true);try{await b3Api.health();setOnline(true);const [p,c,t,l]=await Promise.allSettled([b3Api.portfolio(),b3Api.capital(),b3Api.listTransactions(500),b3Api.optionLedger()]);if(p.status==='fulfilled'){setPortfolio(p.value);void b3Api.orchestrate({task:'UC-02 snapshot de opções',context:{workspace:'Options',dashboard_page:'Options',use_cases:['UC-02'],analysis_mode:'deterministic'}}).then(r=>setWorkspaceResults(v=>({...v,Options:r}))).catch(()=>{});void b3Api.orchestrate({task:'UC-01 portfolio snapshot',context:{workspace:'Portfolio',dashboard_page:'Portfolio',use_cases:['UC-01'],analysis_mode:'deterministic'}}).then(r=>setWorkspaceResults(v=>({...v,Portfolio:r}))).catch(()=>{})}if(c.status==='fulfilled'){setCapital(c.value);setAvailable(String(c.value.available_capital??''));setReserve(String(c.value.minimum_reserve??''));}if(t.status==='fulfilled')setTx(t.value);if(l.status==='fulfilled'){setBrokerage(l.value.operations);setLedgerAvailable(true)}else setLedgerAvailable(false);setNotice([p,c,t].some(x=>x.status==='rejected')?'Alguns dados não estão disponíveis nesta versão do backend.':'');}catch(e){setOnline(false);setNotice(`Backend indisponível: ${err(e)}`)}finally{setBusy(false)}}
+ async function load(){setBusy(true);try{await b3Api.health();connectionRef.current=true;setOnline(true);const [p,c,t,l]=await Promise.allSettled([b3Api.portfolio(),b3Api.capital(),b3Api.listTransactions(500),b3Api.optionLedger()]);if(p.status==='fulfilled'){setPortfolio(p.value);void b3Api.orchestrate({task:'UC-02 snapshot de opções',context:{workspace:'Options',dashboard_page:'Options',use_cases:['UC-02'],analysis_mode:'deterministic'}}).then(r=>setWorkspaceResults(v=>({...v,Options:r}))).catch(()=>{});void b3Api.orchestrate({task:'UC-01 portfolio snapshot',context:{workspace:'Portfolio',dashboard_page:'Portfolio',use_cases:['UC-01'],analysis_mode:'deterministic'}}).then(r=>setWorkspaceResults(v=>({...v,Portfolio:r}))).catch(()=>{})}if(c.status==='fulfilled'){setCapital(c.value);setAvailable(String(c.value.available_capital??''));setReserve(String(c.value.minimum_reserve??''));}if(t.status==='fulfilled')setTx(t.value);if(l.status==='fulfilled'){setBrokerage(l.value.operations);setLedgerAvailable(true)}else setLedgerAvailable(false);setNotice([p,c,t].some(x=>x.status==='rejected')?'Alguns dados não estão disponíveis nesta versão do backend.':'');}catch(e){connectionRef.current=false;setOnline(false);setNotice(`Backend indisponível: ${err(e)}`)}finally{setBusy(false)}}
  useEffect(()=>{void load()},[]);
+ useEffect(()=>{
+  const timer=window.setInterval(()=>{
+   void b3Api.health().then(()=>{
+    const reconnected=!connectionRef.current;
+    connectionRef.current=true;setOnline(true);
+    if(reconnected)void load();
+   }).catch(()=>{connectionRef.current=false;setOnline(false)});
+  },15_000);
+  return()=>window.clearInterval(timer);
+ },[]);
  useEffect(()=>{
   let cancelled=false;
   const symbol=left.trim().toUpperCase();
