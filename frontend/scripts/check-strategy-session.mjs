@@ -44,8 +44,9 @@ try{
  await page.goto((process.env.B3_UI_URL||'http://127.0.0.1:5173')+'/#/strategy-lab');
  const panel=page.getByRole('region',{name:'Pergunta e análise do Strategy Lab'});
  const submit=async()=>{
-  const input=panel.getByLabel(/Sua pergunta ou tese|Ajustar ou aprofundar esta análise/);
-  const button=panel.getByRole('button',{name:/Analisar pergunta ou tese|Enviar continuação/}).last();
+  const input=page.locator('#strategy-thesis');
+  const button=page.getByRole('button',{name:/Analisar pergunta ou tese|Enviar continuação/}).last();
+  console.log('STRATEGY_FIELDS_AFTER_FILL', JSON.stringify(await page.locator('textarea').evaluateAll(items => items.map(item => ({id:item.id,value:item.value,label:item.labels?.[0]?.textContent,visible:!!(item.offsetWidth||item.offsetHeight)})))));
   await expect(input).toHaveValue(/\S/);
   await expect(button).toBeVisible();
   await expect(button).toBeEnabled();
