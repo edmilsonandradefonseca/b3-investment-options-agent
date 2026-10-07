@@ -252,11 +252,11 @@ def test_opportunity_context_budget_never_truncates_deterministic_screen():
         'material_candidates':[{'ticker':'ABCD20'},{'ticker':'ABCD21'},{'ticker':'ABCD22'}],
         'portfolio_stock_universe':stocks,
     },stocks)
-    assert scope['policy_version']=='B3_OPPORTUNITY_RESEARCH_ENRICHMENT_V1'
-    assert scope['status']=='PARTIAL'
+    assert scope['policy_version']=='B3_OPPORTUNITY_RESEARCH_ENRICHMENT_V2'
+    assert scope['status']=='COMPLETE'
     assert scope['screened_stock_count']==25
-    assert scope['contextual_research_count']==8
-    assert scope['deterministic_only_count']==17
+    assert scope['contextual_research_count']==25
+    assert scope['deterministic_only_count']==0
     assert scope['option_underlying_context_count']==5
     assert scope['context_tickers'][:5]==['ABCD1','ABCD2','ABCD20','ABCD21','ABCD22']
 
