@@ -20,7 +20,7 @@ start, end = hour(sys.argv[2]), hour(sys.argv[3])
 try:
     payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
     candidate_start, candidate_end = payload["start_time"], payload["end_time"]
-    valid = all(re.fullmatch(r"(?:[01]\\d|2[0-3]):[0-5]\\d", value) for value in (candidate_start, candidate_end))
+    valid = all(re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value) for value in (candidate_start, candidate_end))
     if valid and candidate_start < candidate_end:
         start, end = candidate_start, candidate_end
 except (OSError, ValueError, KeyError, TypeError):
