@@ -43,6 +43,9 @@ export default function OpportunityExplorer({data,onCompare,onSelect}:{data:Orch
     context:{workspace:'Opportunities',dashboard_page:'Opportunities',selected_ticker:normalized,opportunity_assets:[normalized],opportunity_detail_ticker:normalized,opportunity_objective:'COMPARE_ONLY',include_portfolio_stocks:true,detail_request:true},
    });
    if(response.error)throw new Error(response.error);
+   const responseResult=obj(response.result),responseProposal=obj(responseResult.decision_proposal??responseResult.proposal);
+   const responseSubject=text(responseProposal.subject_id);
+   if(responseSubject!==normalized)throw new Error(`O backend não vinculou a síntese a ${normalized}; resultado recebido para ${responseSubject}. A conclusão não foi exibida.`);
    setDetailAnalyses(previous=>({...previous,[normalized]:response}));
   }catch(error){
    if(requestId===detailRequest.current)setDetailError(error instanceof Error?error.message:String(error));
