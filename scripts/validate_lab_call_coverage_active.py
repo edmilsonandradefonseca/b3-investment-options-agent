@@ -140,7 +140,11 @@ for ticker, contract, capacity, expected_rejection in candidates:
             print("ACTIVE_LAB_CALL_REJECTS_REUSED_COVERAGE=PASS", flush=True)
             accepted = True
             break
-        if "current OPLAB price is required for covered CALL" in message:
+        if (
+            "current OPLAB price is required for covered CALL" in message
+            or "requires an admissible current underlying quote" in message
+            or "quote is invalid or outside the common as_of cutoff (PIT)" in message
+        ):
             data_blockers.add("UNDERLYING_SPOT")
             continue
         raise
