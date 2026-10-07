@@ -24,8 +24,9 @@ function LineChart({values,color,zero=false,label}:{values:XY[];color:string;zer
  const ys=values.map(point=>point.y);
  const min=Math.min(...ys,zero?0:Infinity),max=Math.max(...ys,zero?0:-Infinity);
  const range=max-min||1;
- const points=values.map((point,index)=>({
-  x:pad+(index/(values.length-1))*(width-pad*2),
+ const minX=values[0].x,maxX=values[values.length-1].x,xRange=maxX-minX||1;
+ const points=values.map(point=>({
+  x:pad+((point.x-minX)/xRange)*(width-pad*2),
   y:height-pad-((point.y-min)/range)*(height-pad*2),
  }));
  const path=points.map((point,index)=>`${index===0?"M":"L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ");
