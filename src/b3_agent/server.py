@@ -918,7 +918,7 @@ def live_analysis(ticker: str) -> dict[str, Any]:
     """Return normalized live market/options analytics for one B3 underlying."""
     try:
         snapshot = LiveProviderService(history_days=395).load(
-            ticker, include_current_quote=False, include_options=False
+            ticker, include_current_quote=True, include_options=False
         )
         # OPLAB history becomes available to this response when acquisition completes.
         # Use that response-time cutoff so ingestion-time availability is not
