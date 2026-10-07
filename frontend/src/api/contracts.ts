@@ -273,6 +273,14 @@ export type RuntimeStatusResponse = {
   };
 };
 
+export type SchedulerConfigResponse = {
+  start_time: string;
+  end_time: string;
+  timezone: string;
+  weekdays: string[];
+  source: "admin" | "environment";
+};
+
 export type CollectionUniverseResponse = {
   configured_tickers: string[];
   portfolio_tickers: string[];
