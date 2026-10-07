@@ -255,3 +255,17 @@ Próximo: concluir aceite Ubuntu do candidato com CI verde e snapshot sem conte�
 - Limite desta evidência: o processo HTTP ativo ainda retornou HTTP 400 na busca completa por limite legado da união carteira/candidatos. Para testar a apresentação de estados, a validação usou fixture claramente marcada sem dados financeiros. Isso confirma a preservação/atualização da UI, mas não constitui aceite financeiro end-to-end.
 - Checkpoint técnico mais recente do backend permanece runner `37383862634` PASS em ASGI candidato, SHA `70de1d9`; a etapa de restart do serviço ativo foi SKIPPED. A necessidade agora é executar o navegador contra o backend candidato isolado ou ativar por procedimento autorizado e revalidar; OPP continua PARTIAL.
 - Commit funcional `bb10d4e`; teste final `7623348`. PR #66 permanece aberto/draft na branch `feature/react-functional-v43-integration`.
+
+
+## Gap confirmado durante teste do usuário — panorama Market Intelligence, 07/10/2026
+
+O teste visual confirma que o panorama amplo não apresenta fluxo do investidor estrangeiro nem curva de juros. Não são falhas de desenho do gráfico: essas séries não chegam à API/UI.
+
+- **Fluxo:** existe somente `schemas/flow.py` com um registro genérico. Não há provider/repositório/rota de consulta/UI consumindo a série. `workspace_context.py` coleta research textual, não série estruturada de saldo comprador/vendedor.
+- **Curva:** `BcbSgsAdapter` e `MacroDataRepository` armazenam observações pontuais de SELIC/CDI/IPCA; não há curva por vértice/modelo de estrutura a termo, API ou gráfico.
+- A interface de contexto atual admite macro e research parcial e sinaliza que regime/fatores amplos não foram fornecidos. Assim, ausência no gráfico reflete lacuna real do E4, não uma opção escondida da tela.
+- **MI-07 / E4-fluxo — OPEN:** ingestão da participação/movimentação de investidores B3, normalização por data, mercado/segmento e categoria, série diária e agregação mensal; renderizar compras/vendas/saldo com atraso/fonte/cobertura. A B3 informa que a tabela de participação fica no Boletim Diário, com dados D+2 e histórico diário limitado, além de agregados mensais/anuais na planilha Dados de Mercado.
+- **MI-08 / E4-curva — OPEN/BLOCKED ON CREDENTIAL:** integrar API de Curvas de Juros ANBIMA, persistir vértices com data/unidade/proveniência e renderizar curva prefixada/IPCA comparável. A documentação pública define o endpoint e campos; credencial autorizada de produção ainda precisa existir no runtime.
+- Fontes oficiais examinadas: [B3 — Participação de investidores no BDI](https://www.b3.com.br/pt_br/noticias/dados-de-participacao-de-investidores-da-b3-passa-a-ser-disponibilizado-somente-no-boletim-diario-do-mercado.htm), [B3 — Dados de mercado](https://www.b3.com.br/main.jsp?doui_processActionId=setLocaleProcessAction&locale=pt_BR&lumA=1&lumII=8A80CB81633FBF0B016340D8C48572C5&lumPageId=8A6A8E1F52A1E49F0152A25008F80769), [ANBIMA — Curvas de Juros](https://developers.anbima.com.br/pt/documentacao/precos-indices/apis-de-precos/titulos-publicos/).
+- A especificação normativa recebeu MI-07/MI-08 no adendo V1.3; nenhuma série artificial foi adicionada à interface. Próximo gate: identificar credencial ANBIMA disponível no servidor e validar downloader B3/ANBIMA com dados reais; então implementar domínio→API→gráficos no E4 e repetir o aceite visual.
+
