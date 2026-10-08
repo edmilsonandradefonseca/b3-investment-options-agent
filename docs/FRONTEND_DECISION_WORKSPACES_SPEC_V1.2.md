@@ -172,3 +172,11 @@ Este adendo complementa UC-03 e os adendos de Market Intelligence. A revisão de
 | OPP-10 | Apenas teses com evidência específica, atual e referenciada recebem rank positivo; ranking vazio válido informa cobertura e justificativas. |
 | OPP-11 | Estado de processamento, etapa, progresso, início/fim e última revisão bem-sucedida sobrevivem à navegação e a falhas temporárias. |
 
+
+### OPP-12 — Gráfico de risco observado e volume financeiro
+
+- Eixo X: volatilidade anualizada calculada sobre 60 retornos, fator √252, em %. Eixo Y: aproximação de volume financeiro médio sobre as últimas 20 observações (fechamento × quantidade), em R$ milhões/dia. Não afirmar spread, profundidade, retorno esperado ou recomendação a partir dessas medidas.
+- Tooltip identifica ticker, valores originais e data da cotação. Seletor acessível permite inspeção sem mouse; fontes e datas específicas aparecem no detalhe selecionado. Data geral da análise permanece separada da data de cotação.
+- Escala horizontal comprimida por log(1 + volatilidade) disponível por padrão, com marcas em percentuais originais e opção linear. Nunca excluir ou truncar extremos silenciosamente. Valores acima de 100% anualizados são listados como pontos que exigem verificação, sem concluir erro de dados.
+- Inspeção de ponto ou seleção de ticker usa exclusivamente a resposta já carregada e não chama `/orchestrate`. Não confundir inspeção com abertura de análise individual.
+- Aceite: build React passa; pontos extremos e zero permanecem visíveis; tooltip/seletor mostram a identidade; rótulos e metodologia legíveis; mudança de escala/seleção não gera nova requisição de análise.
