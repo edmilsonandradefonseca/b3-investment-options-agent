@@ -43,6 +43,7 @@ class CollectionUniverseStore:
             values = self.normalize_tickers(payload["tickers"])
             return {
                 "tickers": values,
+                "excluded_tickers": self.normalize_tickers(payload.get("excluded_tickers", [])),
                 "updated_at": payload.get("updated_at"),
                 "source": "admin",
             }
@@ -54,14 +55,17 @@ class CollectionUniverseStore:
         ]
         return {
             "tickers": self.normalize_tickers(legacy),
+            "excluded_tickers": [],
             "updated_at": None,
             "source": "environment" if legacy else "default",
         }
 
-    def save(self, values: list[str] | tuple[str, ...]) -> dict[str, Any]:
+    def save(self, values: list[str] | tuple[str, ...], *, excluded_tickers: list[str] | tuple[str, ...] | None = None) -> dict[str, Any]:
         tickers = self.normalize_tickers(values)
+        exclusions = self.normalize_tickers(excluded_tickers) if excluded_tickers is not None else self.configured()["excluded_tickers"]
         payload = {
             "schema_version": 1,
+            "excluded_tickers": exclusions,
             "tickers": tickers,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -102,7 +106,9 @@ class CollectionUniverseStore:
         for ticker in configured["tickers"]:
             if ticker not in effective:
                 effective.append(ticker)
+        effective = [ticker for ticker in effective if ticker not in configured["excluded_tickers"]]
         return {
+            "excluded_tickers": configured["excluded_tickers"],
             "configured_tickers": configured["tickers"],
             "portfolio_tickers": portfolio_tickers,
             "effective_tickers": effective,
