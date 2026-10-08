@@ -18,7 +18,7 @@ jobs:
       - name: Validate stock-only collection and update idle production checkout
         shell: bash
         run: |
-          /opt/b3-investment-options-agent/.venv/bin/python -m pytest tests/test_collection_universe.py tests/test_instrument_identity.py -q
+          /opt/b3-investment-options-agent/.venv/bin/python -m pytest tests/test_collection_universe.py tests/test_instrument_identity.py tests/test_opportunity_screen.py -q
           if systemctl is-active --quiet b3-opportunities-daily.service; then
             echo 'Production update skipped: review is still active'
             exit 1
@@ -73,6 +73,32 @@ jobs:
               "evidence": {k: result.get(k) for k in fields if k in result},
           }, ensure_ascii=False, default=str)[:22000])
           PY
+      - name: Inspect actual OpenClaw model metadata and reload idle HTTP service
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path.home() / ".openclaw" / "agents" / "b3-investment" / "sessions"
+          files = sorted(root.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)[:4]
+          for path in files:
+              metadata = []
+              for line in path.read_text(errors="replace").splitlines():
+                  try:
+                      item = json.loads(line)
+                  except ValueError:
+                      continue
+                  msg = item.get("message") or {}
+                  if item.get("type") == "model_change" or msg.get("role") == "assistant":
+                      metadata.append({k: item.get(k) for k in ("type", "timestamp", "provider", "modelId")})
+                      metadata[-1].update({k: msg.get(k) for k in ("provider", "model", "stopReason") if msg.get(k) is not None})
+              print("OPENCLAW_SESSION_METADATA", path.name, json.dumps(metadata[-4:]))
+          PY
+          if sudo -n systemctl restart b3-runtime.service; then
+            echo HTTP_RESTART_SUCCEEDED
+          else
+            echo HTTP_RESTART_REQUIRES_INTERACTIVE_SUDO
+          fi
       - name: Read-only Ubuntu connectivity and service status
         shell: bash
         run: |
