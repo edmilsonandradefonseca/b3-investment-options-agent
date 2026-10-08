@@ -41,7 +41,7 @@ class StockOpportunityScreenService:
         self.dividend_service = dividend_service
 
     def build(self, tickers, *, objective='COMPARE_ONLY', include_portfolio=False,
-              as_of=None, portfolio=None, economic_inputs=None):
+              as_of=None, portfolio=None, economic_inputs=None, authoritative_universe=False):
         if objective not in OBJECTIVES:
             raise ValueError('Unsupported opportunity objective')
         inputs = economic_inputs or {}
@@ -108,6 +108,8 @@ class StockOpportunityScreenService:
             universe.extend(portfolio_stock_tickers)
             universe.extend(portfolio_option_underlying_tickers)
             universe = list(dict.fromkeys(universe))
+        if authoritative_universe:
+            universe = list(candidates)
         if not universe:
             raise ValueError('Select at least one candidate asset or include a non-empty equity portfolio')
         if set(costs)-set(universe): raise ValueError('Entry cost asset mismatch')
