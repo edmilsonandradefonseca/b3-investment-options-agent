@@ -272,3 +272,15 @@ def test_research_scope_tolerates_missing_requested_universe():
     assert scope["screened_stock_count"] == 1
     assert scope["option_underlying_context_count"] == 0
     assert scope["context_tickers"] == ["ITUB4"]
+
+
+def test_authoritative_review_does_not_reintroduce_excluded_holdings():
+    portfolio = PortfolioContext(as_of=date(2026,10,2), positions=(
+        Position(position_id="excluded", ticker="AXIA7", instrument_type="STOCK", quantity=100),
+        Position(position_id="kept", ticker="ITUB4", instrument_type="STOCK", quantity=100),
+    ))
+    screen, provider = service({"ITUB4": history("ITUB4")})
+    result = screen.build(["ITUB4"], include_portfolio=True, portfolio=portfolio,
+                          authoritative_universe=True)
+    assert result["opportunity_screen"]["requested_universe"] == ["ITUB4"]
+    assert set(result["asset_evidence"]) == {"ITUB4"}
