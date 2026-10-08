@@ -82,11 +82,9 @@ class CollectionUniverseStore:
         values: list[str] = []
         resolver = InstrumentIdentityResolver()
         for position in portfolio.positions:
-            value = (
-                position.underlying_ticker
-                if position.instrument_type == "OPTION" and position.underlying_ticker
-                else position.ticker
-            )
+            if position.instrument_type != "STOCK":
+                continue
+            value = position.ticker
             ticker = resolver.resolve(str(value))
             if not _TICKER_RE.fullmatch(ticker):
                 logging.getLogger(__name__).warning(
