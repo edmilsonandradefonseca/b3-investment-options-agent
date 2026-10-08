@@ -72,3 +72,24 @@ def test_portfolio_assets_remain_in_effective_collection_universe(tmp_path, monk
     snapshot = store.snapshot()
     assert snapshot["portfolio_tickers"] == ["PETR4"]
     assert snapshot["effective_tickers"] == ["PETR4", "VALE3"]
+
+
+def test_options_never_expand_stock_collection_universe(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    positions = [
+        SimpleNamespace(ticker="PETR4", instrument_type="STOCK", underlying_ticker=None),
+        SimpleNamespace(ticker="BBDCJ213", instrument_type="OPTION", underlying_ticker="BRADPN"),
+        SimpleNamespace(ticker="VALEV650", instrument_type="OPTION", underlying_ticker="VALEON"),
+        SimpleNamespace(ticker="PETRJ360", instrument_type="OPTION", underlying_ticker="PETRPN"),
+    ]
+    monkeypatch.setattr(
+        "b3_agent.intelligence.collection_universe.load_active_snapshots",
+        lambda _: {"portfolio_context": SimpleNamespace(positions=positions)},
+    )
+    store = CollectionUniverseStore(tmp_path)
+    store.save(["ITUB4", "PETR4"])
+    assert store.effective_tickers() == ("PETR4", "ITUB4")
+    assert len(positions) == 4
+    assert positions[1].underlying_ticker == "BRADPN"
+    store.save(["BBDC4"])
+    assert store.effective_tickers() == ("PETR4", "BBDC4")
