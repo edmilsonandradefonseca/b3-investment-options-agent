@@ -30,6 +30,30 @@ jobs:
           git -C /opt/b3-investment-options-agent merge --ff-only "$GITHUB_SHA_CANDIDATE"
         env:
           GITHUB_SHA_CANDIDATE: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Inspect current stock universe and saved review coverage
+        shell: bash
+        run: |
+          cd /opt/b3-investment-options-agent
+          PYTHONPATH=src .venv/bin/python - <<'PY'
+          import json
+          from b3_agent.config import settings
+          from b3_agent.intelligence.collection_universe import CollectionUniverseStore
+          from b3_agent.jobs.opportunity_review import OpportunityReviewStore
+          universe = CollectionUniverseStore(settings.data_dir).snapshot()
+          print("UNIVERSE", json.dumps(universe))
+          latest = OpportunityReviewStore(settings.data_dir).latest()
+          response = latest.get("response") or {}
+          result = response.get("result") or {}
+          proposal = result.get("decision_proposal") or {}
+          print("REVIEW", json.dumps({
+              "generated_at": latest.get("generated_at"),
+              "status": response.get("status"),
+              "synthesis_status": result.get("derived_synthesis_status"),
+              "result_keys": sorted(result),
+              "scope": result.get("opportunity_research_scope"),
+              "assessment_count": len(proposal.get("alternative_assessments") or []),
+          }, default=str))
+          PY
       - name: Read-only Ubuntu connectivity and service status
         shell: bash
         run: |
