@@ -190,6 +190,10 @@ def _dispatch_opportunity_screen(request: OrchestratorRequest) -> OrchestratorRe
         return None
     from b3_agent.opportunity_screen import StockOpportunityScreenService
     assets = request.context['opportunity_assets']
+    authoritative_universe = request.context.get('as_of') is None and request.context.get('analysis_mode') != 'deterministic'
+    if authoritative_universe:
+        from b3_agent.intelligence.collection_universe import CollectionUniverseStore
+        assets = list(CollectionUniverseStore(settings.data_dir).effective_tickers())
     include = request.context.get('include_portfolio_stocks', False)
     if not isinstance(assets, (list, tuple)) or any(not isinstance(item, str) for item in assets) or not isinstance(include, bool):
         raise ValueError('opportunity_assets must be a list of symbols and include_portfolio_stocks a boolean')
@@ -197,7 +201,8 @@ def _dispatch_opportunity_screen(request: OrchestratorRequest) -> OrchestratorRe
     result = StockOpportunityScreenService().build(assets,
         objective=request.context.get('opportunity_objective', 'COMPARE_ONLY'),
         include_portfolio=include, as_of=request.context.get('as_of'),
-        economic_inputs=request.context.get('opportunity_economic_inputs'))
+        economic_inputs=request.context.get('opportunity_economic_inputs'),
+        authoritative_universe=authoritative_universe)
     result['workspace_intelligence'] = {'workspace':'Opportunities', 'as_of':result['as_of'],
         'tickers':result['opportunity_screen']['requested_universe'], 'limitations':result['limitations'], 'derived_intelligence':{}}
     result['derived_synthesis_status'] = 'NOT_REQUESTED'
