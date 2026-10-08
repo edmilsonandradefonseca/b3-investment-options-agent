@@ -30,29 +30,6 @@ jobs:
           git -C /opt/b3-investment-options-agent merge --ff-only "$GITHUB_SHA_CANDIDATE"
         env:
           GITHUB_SHA_CANDIDATE: ${{ github.event.pull_request.head.sha || github.sha }}
-      - name: Apply requested monitored equities and exclusions
-        shell: bash
-        run: |
-          cd /opt/b3-investment-options-agent
-          PYTHONPATH=src .venv/bin/python - <<'PY'
-          import shutil
-          from datetime import datetime, timezone
-          from b3_agent.config import settings
-          from b3_agent.intelligence.collection_universe import CollectionUniverseStore
-          store = CollectionUniverseStore(settings.data_dir)
-          if store.path.exists():
-              backup = store.path.with_name(store.path.name + ".backup-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S"))
-              shutil.copy2(store.path, backup)
-          prior = store.configured()
-          requested = ["VALE3", "AXIA3", "SBSP3", "RDOR3", "EMBJ3", "CURY3", "ENEV3", "MOTV3", "PRIO3", "BPAC11", "ROXO34"]
-          excluded = list(dict.fromkeys(prior["excluded_tickers"] + ["AXIA17", "AXIA7"]))
-          values = list(dict.fromkeys(prior["tickers"] + requested))
-          store.save([t for t in values if t not in excluded], excluded_tickers=excluded)
-          effective = store.effective_tickers()
-          assert all(t in effective for t in requested)
-          assert "AXIA17" not in effective and "AXIA7" not in effective
-          print("REQUESTED_UNIVERSE_APPLIED", len(effective))
-          PY
       - name: Inspect current stock universe and saved review coverage
         shell: bash
         run: |
