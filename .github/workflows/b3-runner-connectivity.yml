@@ -54,6 +54,25 @@ jobs:
               "assessment_count": len(proposal.get("alternative_assessments") or []),
           }, default=str))
           PY
+      - name: Audit senior participation in latest HTTP review
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, urllib.request
+          with urllib.request.urlopen("http://127.0.0.1:8000/opportunities/latest", timeout=20) as handle:
+              latest = json.load(handle)
+          response = latest.get("response") or {}
+          result = response.get("result") or {}
+          fields = ("derived_synthesis_status", "telemetry", "stage_telemetry", "decision_proposal", "opportunity_research_scope", "summary", "routing", "route", "llm_enabled")
+          print("SENIOR_AUDIT", json.dumps({
+              "generated_at": latest.get("generated_at"),
+              "response_status": response.get("status"),
+              "error": response.get("error"),
+              "audit": response.get("audit"),
+              "result_keys": sorted(result),
+              "evidence": {k: result.get(k) for k in fields if k in result},
+          }, ensure_ascii=False, default=str)[:22000])
+          PY
       - name: Read-only Ubuntu connectivity and service status
         shell: bash
         run: |
