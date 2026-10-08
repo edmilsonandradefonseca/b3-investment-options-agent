@@ -16,7 +16,7 @@ import OptionsWorkspace from './OptionsWorkspace';
 import AnalysisOutput from './components/AnalysisOutput';
 import StrategySession from './components/StrategySession';
 import PersonalHistory from './components/PersonalHistory';
-import type { CapitalProfile, PortfolioSnapshot, BrokerageOperation, PilotAnalysis, OrchestrateResponse, TransactionResponse, LiveAnalysisResponse, ResearchNewsResponse, FundamentalsResponse, CurrentOptionRow } from './api/contracts';
+import type { CapitalProfile, PortfolioSnapshot, BrokerageOperation, PilotAnalysis, OrchestrateResponse, TransactionResponse, LiveAnalysisResponse, ResearchNewsResponse, FundamentalsResponse, CurrentOptionRow, OpportunityReviewStatus } from './api/contracts';
 
 type Page = 'Overview'|'Portfolio'|'Options'|'Opportunities'|'Strategy Lab'|'Market Intelligence'|'History & Learning'|'Risk & Stress'|'Admin';
 type OpportunityRunState = {status:'idle'|'running'|'complete'|'error';startedAt:string|null;finishedAt:string|null;sources:string[];message:string|null};
