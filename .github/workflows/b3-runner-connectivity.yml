@@ -10,8 +10,26 @@ jobs:
   diagnose:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, Linux, X64]
-    timeout-minutes: 3
+    timeout-minutes: 8
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Validate stock-only collection and update idle production checkout
+        shell: bash
+        run: |
+          /opt/b3-investment-options-agent/.venv/bin/python -m pytest tests/test_collection_universe.py tests/test_instrument_identity.py -q
+          if systemctl is-active --quiet b3-opportunities-daily.service; then
+            echo 'Production update skipped: review is still active'
+            exit 1
+          fi
+          git -C /opt/b3-investment-options-agent diff --quiet
+          git -C /opt/b3-investment-options-agent diff --cached --quiet
+          test "$(git -C /opt/b3-investment-options-agent branch --show-current)" = feature/react-functional-v43-integration
+          git -C /opt/b3-investment-options-agent fetch origin feature/react-functional-v43-integration
+          git -C /opt/b3-investment-options-agent merge --ff-only "$GITHUB_SHA_CANDIDATE"
+        env:
+          GITHUB_SHA_CANDIDATE: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Read-only Ubuntu connectivity and service status
         shell: bash
         run: |
