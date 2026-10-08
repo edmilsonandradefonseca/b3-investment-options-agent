@@ -93,3 +93,18 @@ def test_options_never_expand_stock_collection_universe(tmp_path, monkeypatch):
     assert positions[1].underlying_ticker == "BRADPN"
     store.save(["BBDC4"])
     assert store.effective_tickers() == ("PETR4", "BBDC4")
+
+
+def test_explicit_exclusions_override_holdings_and_survive_watchlist_save(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    positions = [SimpleNamespace(ticker=t, instrument_type="STOCK") for t in ("AXIA17", "AXIA7", "CURY3")]
+    monkeypatch.setattr(
+        "b3_agent.intelligence.collection_universe.load_active_snapshots",
+        lambda _: {"portfolio_context": SimpleNamespace(positions=positions)},
+    )
+    store = CollectionUniverseStore(tmp_path)
+    store.save(["VALE3", "CURY3", "AXIA17"], excluded_tickers=["AXIA17", "AXIA7"])
+    assert store.effective_tickers() == ("CURY3", "VALE3")
+    store.save(["SBSP3"])
+    assert store.effective_tickers() == ("CURY3", "SBSP3")
+    assert len(positions) == 3
