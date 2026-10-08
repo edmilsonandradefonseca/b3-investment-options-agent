@@ -1,0 +1,31 @@
+name: B3 Ubuntu runner connectivity
+on:
+  pull_request:
+    branches: ['**']
+    paths: ['.github/workflows/b3-runner-connectivity.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 3
+    steps:
+      - name: Read-only Ubuntu connectivity and service status
+        shell: bash
+        run: |
+          hostname
+          date --iso-8601=seconds
+          git -C /opt/b3-investment-options-agent rev-parse HEAD
+          systemctl show b3-runtime.service b3-opportunities-daily.service b3-opportunities-daily.timer --property=Id,ActiveState,SubState,Result,ExecMainStatus
+          systemctl --user show openclaw-gateway.service --property=Id,ActiveState,SubState,Result
+          python3 - <<'PY'
+          import socket
+          for port in (8000, 18789):
+              try:
+                  with socket.create_connection(("127.0.0.1", port), timeout=3):
+                      print(f"port {port}: reachable")
+              except OSError as exc:
+                  print(f"port {port}: {type(exc).__name__}")
+          PY
