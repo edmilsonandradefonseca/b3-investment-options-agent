@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from datetime import datetime, timezone
@@ -8,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from b3_agent.portfolio.snapshot import load_active_snapshots
+from b3_agent.portfolio.instrument_identity import InstrumentIdentityResolver
 
 
 _TICKER_RE = re.compile(r"^[A-Z]{4}[0-9]{1,2}$")
@@ -78,13 +80,19 @@ class CollectionUniverseStore:
         if portfolio is None:
             return []
         values: list[str] = []
+        resolver = InstrumentIdentityResolver()
         for position in portfolio.positions:
             value = (
                 position.underlying_ticker
                 if position.instrument_type == "OPTION" and position.underlying_ticker
                 else position.ticker
             )
-            ticker = str(value).strip().upper()
+            ticker = resolver.resolve(str(value))
+            if not _TICKER_RE.fullmatch(ticker):
+                logging.getLogger(__name__).warning(
+                    "Unresolved portfolio identity excluded from collection universe: %s", value
+                )
+                continue
             if ticker and ticker not in values:
                 values.append(ticker)
         return values
