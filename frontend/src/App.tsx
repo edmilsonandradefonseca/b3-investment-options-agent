@@ -199,7 +199,7 @@ export default function App(){
     if(!current())return null;
       if(deterministicResult.result&&typeof deterministicResult.result==='object')setAnalysis({...deterministicResult,result:{...deterministicResult.result,derived_synthesis_status:'PENDING'}});
     }
-    const r=await b3Api.orchestrate({task,ticker:requestTicker,context},page==='Opportunities'?45*60*1000:195_000);
+    const r=await b3Api.orchestrate({task,ticker:requestTicker,context},page==='Opportunities'?90*60*1000:195_000);
     if(!current())return null;
     const hasResult=!!r.result&&typeof r.result==='object'&&!Array.isArray(r.result);
     const opportunityIncomplete=!conversation&&page==='Opportunities'&&!isCompletedOpportunityReview(r);
@@ -245,13 +245,13 @@ export default function App(){
   try{
    const response=await run(`UC-03: analise ${assets.join(', ')} e todas as ações vigentes da carteira como universo completo. Cruze notícias e eventos datados, histórico recente de preço e volume, fundamentos disponíveis, curva futura B3 PRE e DIC, fatores de mercado e exposição da carteira; cite datas e fontes por tese e diga claramente quando um desses dados estiver indisponível. Compare evidências favoráveis e contrárias e explique por que uma tese importa agora. Depois ordene, da maior para a menor prioridade, somente as oportunidades materiais sustentadas por evidência específica, atual e verificável. Não dê rank positivo a ativo apenas por volatilidade, liquidez ou upside de alvo institucional. Separe oportunidades ranqueadas de ativos para acompanhar; se nenhuma tese passar o critério, retorne ranking vazio e explique as lacunas. Rank é prioridade de revisão, não retorno esperado nem recomendação automática de compra/venda. Considere opções possuídas apenas como exposição/cobertura; não busque cadeia de opções.`,false,{ticker:null,preservePrevious:true,context:{workspace:'Opportunities',selected_ticker:null,opportunity_assets:assets,opportunity_objective:opportunityObjective,include_portfolio_stocks:true,research_mode:researchMode,include_yield_curve:true}});
    if(!response){
-   const active=await b3Api.opportunityReviewStatus().catch(()=>null);
-   if(active?.status==='RUNNING'){
-    setOpportunityRun(previous=>({...previous,status:'running',startedAt:active.started_at,finishedAt:null,message:'A revisão já estava em andamento; acompanhando a mesma execução.'}));
-    return;
+    const active=await b3Api.opportunityReviewStatus().catch(()=>null);
+    if(active?.status==='RUNNING'){
+     setOpportunityRun(previous=>({...previous,status:'running',startedAt:active.started_at,finishedAt:null,message:'A revisão já estava em andamento; acompanhando a mesma execução.'}));
+     return;
+    }
    }
-  }
-  const finishedAt=new Date().toISOString();
+   const finishedAt=new Date().toISOString();
    const responseResult=response?.result&&typeof response.result==='object'?response.result:{};
    const failed=!response||Boolean(response.error)||Object.keys(responseResult).length===0||!isCompletedOpportunityReview(response);
    if(!failed)setWorkspaceResults(previous=>({...previous,Opportunities:response}));
