@@ -1,0 +1,19 @@
+name: B3 Market provider diagnosis and repair
+on:
+  push:
+    branches: [feature/react-functional-v43-integration]
+    paths: [.github/workflows/b3-market-provider-repair.yml, scripts/diagnose_market_providers.py]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: b3-market-provider-repair
+  cancel-in-progress: false
+jobs:
+  diagnose:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Diagnose providers without exposing credentials
+        run: /opt/b3-investment-options-agent/.venv/bin/python scripts/diagnose_market_providers.py
