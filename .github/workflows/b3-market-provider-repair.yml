@@ -33,24 +33,23 @@ jobs:
         run: |
           /opt/b3-investment-options-agent/.venv/bin/python -m pip install --no-deps -e /opt/b3-investment-options-agent
           /opt/b3-investment-options-agent/.venv/bin/python -c "from pathlib import Path; import b3_agent.providers.b3_yield_curve as provider; print('RUNTIME_PROVIDER_PATH=' + provider.__file__); assert Path(provider.__file__).resolve() == Path('/opt/b3-investment-options-agent/src/b3_agent/providers/b3_yield_curve.py')"
-      - name: Restart runtime to load correction
-        id: restart
+      - name: Restart runtime through systemd without interactive authentication
         continue-on-error: true
+        run: systemctl --no-ask-password restart b3-runtime.service
+      - name: Verify active process loaded installed provider
         run: |
-          previous_pid="$(systemctl show b3-runtime.service --property=MainPID --value)"
-          sudo -n systemctl restart b3-runtime.service
-          if [ "$(systemctl show b3-runtime.service --property=MainPID --value)" = "$previous_pid" ]; then
-            echo SUDO_RESTART_DID_NOT_CHANGE_PROCESS
-            systemctl --no-ask-password restart b3-runtime.service
-          fi
-          current_pid="$(systemctl show b3-runtime.service --property=MainPID --value)"
-          test "$current_pid" != "$previous_pid"
-          echo RUNTIME_NEW_PROCESS_VERIFIED=PASS
-          for attempt in {1..20}; do
-            if curl -fsS --max-time 2 http://127.0.0.1:8000/health >/dev/null; then exit 0; fi
-            sleep 2
-          done
-          exit 1
+          /opt/b3-investment-options-agent/.venv/bin/python - <<'PYCODE'
+          import os, subprocess
+          from pathlib import Path
+          pid=int(subprocess.check_output(['systemctl','show','b3-runtime.service','--property=MainPID','--value'],text=True))
+          boot=next(int(line.split()[1]) for line in Path('/proc/stat').read_text().splitlines() if line.startswith('btime '))
+          fields=Path(f'/proc/{pid}/stat').read_text().rsplit(')',1)[1].split()
+          started=boot+int(fields[19])/os.sysconf('SC_CLK_TCK')
+          installed=Path('/opt/b3-investment-options-agent/src/b3_agent/providers/b3_yield_curve.py').stat().st_mtime
+          print('PROCESS_START_EPOCH=',started,'PROVIDER_INSTALL_EPOCH=',installed,flush=True)
+          assert started >= installed, 'ACTIVE_PROCESS_PREDATES_CORRECTION: authenticated restart required'
+          print('ACTIVE_PROCESS_AFTER_PROVIDER_INSTALL=PASS')
+          PYCODE
       - name: Diagnose providers without exposing credentials
         if: always()
         run: /opt/b3-investment-options-agent/.venv/bin/python scripts/diagnose_market_providers.py --require-curve
