@@ -57,6 +57,23 @@ try:
 except PermissionError:
     print(json.dumps({'active_process_environment_readable':False}))
 
+print(json.dumps({'listener':subprocess.check_output(['ss','-ltnp','sport = :8000'],text=True).strip()}))
+for item in Path('/proc').iterdir():
+    if not item.name.isdecimal():
+        continue
+    try:
+        args=(item/'cmdline').read_bytes().split(b'\0')
+        if not any(arg == b'b3_agent.server:app' or arg == b'b3_agent.runtime.service' for arg in args):
+            continue
+        values={}
+        for field in (item/'environ').read_bytes().split(b'\0'):
+            key,sep,value=field.partition(b'=')
+            if key in (b'PYTHONPATH', b'B3_AGENT_PROJECT_ROOT'):
+                values[key.decode()]=value.decode()
+        print(json.dumps({'runtime_process':item.name,'executable':args[0].decode(),'cwd':str((item/'cwd').resolve()),'paths':values}))
+    except (OSError,PermissionError):
+        pass
+
 if '--require-curve' in sys.argv:
     assert active_curve_ok, 'ACTIVE_CURVE_HTTP_FAILED: provider correction is not certified on active API'
     print('ACTIVE_CURVE_HTTP=PASS')
