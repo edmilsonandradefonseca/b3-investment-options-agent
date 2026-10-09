@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from dataclasses import asdict
 from typing import Any
+from time import monotonic
 
 from langgraph.graph import END, START, StateGraph
 
@@ -19,6 +21,7 @@ from b3_agent.knowledge.memory import ObsidianMemoryManager
 from b3_agent.knowledge.retrieval import ObsidianRetriever
 from b3_agent.schemas.feature_snapshot import FeatureSnapshot
 from b3_agent.schemas.market_regime import MarketRegime
+from b3_agent.intelligence.decision_history import build_decision_history
 
 from .contracts import B3State
 from .experience_workflow import ExperienceContextService
@@ -33,6 +36,8 @@ def build_workflow(
     memory_manager: ObsidianMemoryManager | None = None,
     knowledge_context_builder: KnowledgeContextBuilder | None = None,
     experience_context_service: ExperienceContextService | None = None,
+    personal_history_service=None,
+    single_synthesis: bool = False,
     market_agent: MarketAnalysisAgent | None = None,
     portfolio_agent: PortfolioAnalysisAgent | None = None,
     options_agent: OptionsAnalysisAgent | None = None,
@@ -69,21 +74,63 @@ def build_workflow(
             "deterministic_context": deterministic,
         }
 
-    def experience_context(state: B3State) -> dict[str, Any]:
-        if experience_context_service is None:
+    def personal_history_context(state: B3State) -> dict[str, Any]:
+        if personal_history_service is None:
             return {}
+        built = personal_history_service.build(
+            ticker=state.get("ticker"), as_of=state.get("as_of"),
+            since=state.get("history_since"),
+        )
+        deterministic = state.get("deterministic_context", {})
+        candidate_result = dict(deterministic.get("workspace_result", {}))
+        if "opportunity_set" in deterministic and "opportunity_set" not in candidate_result:
+            candidate_result["opportunity_set"] = deterministic["opportunity_set"]
+        decision_history = build_decision_history(
+            personal_history_service, result=candidate_result,
+            tickers=(state["ticker"],) if state.get("ticker") else (),
+            as_of=state.get("as_of"), since=state.get("history_since"),
+        )
+        return {"personal_history": built, "decision_history": decision_history, "deterministic_context": {
+            **deterministic, "personal_history": built, "decision_history": decision_history,
+        }}
+
+    def measured(name, action, agent=None):
+        def call(state):
+            started = monotonic()
+            result = action(state)
+            detail = getattr(getattr(agent, "llm", None), "last_telemetry", {})
+            return {**result, "stage_telemetry": {name: {"latency_ms": (monotonic()-started)*1000, **detail}}}
+        return call
+
+    def experience_context(state: B3State) -> dict[str, Any]:
+        unavailable = {
+            "experience_retrieval": None, "experience_assessment": None,
+            "active_learnings": [], "historical_experiences": [],
+        }
+        if experience_context_service is None:
+            return {**unavailable, "canonical_experience_context": {
+                "status": "CANONICAL_LOADER_NOT_CONFIGURED", "learnings": [],
+                "assessment": None, "retrieval": None,
+            }}
 
         snapshot = state.get("feature_snapshot")
         regime = state.get("market_regime")
         if not isinstance(snapshot, FeatureSnapshot) or not isinstance(
             regime, MarketRegime
         ):
-            return {}
+            return {**unavailable, "canonical_experience_context": {
+                "status": "TYPED_SNAPSHOT_AND_REGIME_REQUIRED", "learnings": [],
+                "assessment": None, "retrieval": None,
+            }}
 
         as_of = state.get("as_of")
         effective_as_of = (
             as_of if isinstance(as_of, datetime) else snapshot.as_of
         )
+        if isinstance(as_of, str):
+            effective_as_of = datetime.fromisoformat(as_of.replace("Z", "+00:00"))
+        elif as_of is not None and not isinstance(as_of, datetime):
+            raise ValueError("experience as_of requires a timezone-aware timestamp")
         if effective_as_of.tzinfo is None:
             raise ValueError("as_of must be timezone-aware")
 
@@ -96,6 +143,7 @@ def build_workflow(
             top_k=10,
         )
         return {
+            "canonical_experience_context": built.as_payload(),
             "experience_retrieval": built.retrieval,
             "experience_assessment": built.assessment,
             "active_learnings": list(built.learnings),
@@ -158,6 +206,9 @@ def build_workflow(
 
     def _agent_context(state: B3State) -> AgentContext:
         keys = (
+            "personal_history",
+            "decision_history",
+            "canonical_experience_context",
             "portfolio_context",
             "options_transactions",
             "signals",
@@ -189,7 +240,14 @@ def build_workflow(
             request=state["user_question"],
             deterministic_context=facts,
             retrieved_evidence=tuple(state.get("evidence", [])),
-            derived_intelligence=dict(state.get("derived_intelligence", {})),
+            derived_intelligence={
+                **dict(state.get("derived_intelligence", {})),
+                **({"lab_conversation": {
+                    "status": "HISTORICAL_CONVERSATION_NOT_CURRENT_FACTS",
+                    "turns": state["lab_conversation"],
+                }} if state.get("lab_conversation") else {}),
+                **({"response_guidance": state["response_guidance"]} if state.get("response_guidance") else {}),
+            },
         )
 
     def market_analysis(state: B3State) -> dict[str, Any]:
@@ -229,6 +287,7 @@ def build_workflow(
     def reason(state: B3State) -> dict[str, Any]:
         proposal = reasoning_agent.decide(_agent_context(state))
         proposal_dict = {
+            "alternative_assessments": [asdict(item) for item in getattr(proposal, "alternative_assessments", ())],
             "action": proposal.action,
             "subject_id": proposal.subject_id,
             "thesis": proposal.thesis,
@@ -325,31 +384,33 @@ def build_workflow(
     graph = StateGraph(B3State)
     graph.add_node("retrieve", retrieve)
     graph.add_node("deterministic_context", deterministic_context)
-    if experience_context_service is not None:
-        graph.add_node("experience_context", experience_context)
-    graph.add_node("knowledge_context", knowledge_context)
-    graph.add_node("market_analysis", market_analysis)
-    graph.add_node("portfolio_analysis", portfolio_analysis)
-    graph.add_node("options_analysis", options_analysis)
-    graph.add_node("reason", reason)
+    graph.add_node("experience_context", measured("experience_context", experience_context))
+    graph.add_node("knowledge_context", measured("knowledge_context", knowledge_context))
+    graph.add_node("personal_history", measured("personal_history", personal_history_context))
+    graph.add_node("market_analysis", measured("market_analysis", market_analysis, market_agent))
+    graph.add_node("portfolio_analysis", measured("portfolio_analysis", portfolio_analysis, portfolio_agent))
+    graph.add_node("options_analysis", measured("options_analysis", options_analysis, options_agent))
+    graph.add_node("reason", measured("reason", reason, reasoning_agent))
     graph.add_node("validate", validate)
 
     if memory_manager is not None:
         graph.add_node("persist_legacy_memory", persist_legacy_memory)
     if synthesis_agent is not None:
-        graph.add_node("synthesis", synthesis)
+        graph.add_node("synthesis", measured("synthesis", synthesis, synthesis_agent))
 
     graph.add_edge(START, "retrieve")
     graph.add_edge("retrieve", "deterministic_context")
-    if experience_context_service is not None:
-        graph.add_edge("deterministic_context", "experience_context")
-        graph.add_edge("experience_context", "knowledge_context")
-    else:
-        graph.add_edge("deterministic_context", "knowledge_context")
+    graph.add_edge("deterministic_context", "personal_history")
+    graph.add_edge("personal_history", "experience_context")
+    graph.add_edge("experience_context", "knowledge_context")
 
-    graph.add_edge("knowledge_context", "market_analysis")
-    graph.add_edge("knowledge_context", "portfolio_analysis")
-    graph.add_edge("knowledge_context", "options_analysis")
+    def senior_route(state):
+        if single_synthesis and state.get("workspace_intelligence"):
+            return ["reason"]
+        return ["market_analysis", "portfolio_analysis", "options_analysis"]
+
+    graph.add_conditional_edges("knowledge_context", senior_route,
+        {name: name for name in ("reason", "market_analysis", "portfolio_analysis", "options_analysis")})
 
     if synthesis_agent is not None:
         graph.add_edge("market_analysis", "synthesis")

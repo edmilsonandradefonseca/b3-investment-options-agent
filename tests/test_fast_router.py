@@ -77,3 +77,102 @@ def test_complex_intent_wins_over_dashboard_metadata():
 def test_estado_atual_da_carteira_routes_without_dashboard_metadata():
     d = FastRouter().route("Resuma o estado atual da carteira")
     assert d.target == RouteTarget.PORTFOLIO_ENGINE
+
+
+def test_structured_strategy_lab_stock_comparison_routes_deterministically():
+    d = FastRouter().route(
+        "UC-04: compare Comprar ação em VALE3 e Comprar ação em WEGE3",
+        metadata={
+            "workspace": "Strategy Lab",
+            "comparison_assets": ["VALE3", "WEGE3"],
+            "strategy_a": "Comprar ação",
+            "strategy_b": "Comprar ação",
+        },
+    )
+    assert d.target == RouteTarget.STRATEGY_ENGINE
+    assert d.use_case == "UC-04"
+    assert d.match == MatchClass.MATCH_EXACT
+
+
+def test_structured_strategy_lab_sell_put_without_contract_still_escalates():
+    d = FastRouter().route(
+        "UC-04: compare Comprar ação em VALE3 e Vender PUT em WEGE3",
+        metadata={
+            "workspace": "Strategy Lab",
+            "comparison_assets": ["VALE3", "WEGE3"],
+            "strategy_a": "Comprar ação",
+            "strategy_b": "Vender PUT",
+        },
+    )
+    assert d.target == RouteTarget.OPENCLAW
+
+
+def test_structured_strategy_lab_sell_put_with_contract_routes_deterministically():
+    d = FastRouter().route(
+        "UC-04: compare Comprar ação em VALE3 e Vender PUT WEGEV500 em WEGE3",
+        metadata={
+            "workspace": "Strategy Lab",
+            "comparison_assets": ["VALE3", "WEGE3"],
+            "strategy_a": "Comprar ação",
+            "strategy_b": "Vender PUT",
+            "option_b": "WEGEV500",
+        },
+    )
+    assert d.target == RouteTarget.STRATEGY_ENGINE
+    assert d.use_case == "UC-04"
+
+
+def test_structured_strategy_lab_covered_call_with_contract_routes_deterministically():
+    d = FastRouter().route(
+        "UC-04: compare Manter WEGE3 e Vender CALL coberta WEGEJ550 em WEGE3",
+        metadata={
+            "workspace": "Strategy Lab",
+            "comparison_assets": ["WEGE3", "WEGE3"],
+            "strategy_a": "Manter",
+            "strategy_b": "Vender CALL coberta",
+            "option_b": "WEGEJ550",
+        },
+    )
+    assert d.target == RouteTarget.STRATEGY_ENGINE
+    assert d.use_case == "UC-04"
+
+
+def test_structured_strategy_lab_covered_call_without_contract_escalates():
+    d = FastRouter().route(
+        "UC-04: compare Manter WEGE3 e Vender CALL coberta em WEGE3",
+        metadata={
+            "workspace": "Strategy Lab",
+            "comparison_assets": ["WEGE3", "WEGE3"],
+            "strategy_a": "Manter",
+            "strategy_b": "Vender CALL coberta",
+        },
+    )
+    assert d.target == RouteTarget.OPENCLAW
+
+
+def test_structured_strategy_lab_stock_reduction_routes_deterministically():
+    d = FastRouter().route(
+        "UC-04: compare Manter WEGE3 e Vender/reduzir ação WEGE3",
+        metadata={
+            "workspace": "Strategy Lab",
+            "comparison_assets": ["WEGE3", "WEGE3"],
+            "strategy_a": "Manter",
+            "strategy_b": "Vender/reduzir ação",
+            "comparison_amount": 2000,
+        },
+    )
+    assert d.target == RouteTarget.STRATEGY_ENGINE
+    assert d.use_case == "UC-04"
+
+
+def test_structured_stock_reduction_without_amount_escalates():
+    d = FastRouter().route(
+        "UC-04: compare Manter WEGE3 e Vender/reduzir ação WEGE3",
+        metadata={
+            "workspace": "Strategy Lab",
+            "comparison_assets": ["WEGE3", "WEGE3"],
+            "strategy_a": "Manter",
+            "strategy_b": "Vender/reduzir ação",
+        },
+    )
+    assert d.target == RouteTarget.OPENCLAW

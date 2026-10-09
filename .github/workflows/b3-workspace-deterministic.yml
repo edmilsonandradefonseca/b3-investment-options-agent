@@ -1,0 +1,247 @@
+name: B3 deterministic workspace differential (Ubuntu)
+
+on:
+  push:
+    branches:
+      - feature/react-functional-v43-integration
+    paths:
+      - .github/workflows/b3-workspace-deterministic.yml
+      - scripts/validate_workspace_deterministic_outputs.py
+      - scripts/validate_progressive_workspace_real.py
+      - src/b3_agent/agents/**
+      - src/b3_agent/opportunity_screen.py
+      - src/b3_agent/opportunity_materiality.py
+      - src/b3_agent/stock_opportunity_service.py
+      - tests/test_opportunity_screen.py
+      - tests/test_stock_opportunity_service.py
+      - scripts/validate_stock_screen_real.py
+      - scripts/validate_put_pair_real.py
+      - docs/research/institution_targets_reviewed.json
+      - src/b3_agent/jobs/primary_targets.py
+      - src/b3_agent/jobs/dividend_refresh.py
+      - src/b3_agent/stored_dividends.py
+      - scripts/validate_async_economic_real.py
+      - scripts/run_nightly_intelligence.py
+      - src/b3_agent/intelligence/local_evidence_analysis.py
+      - src/b3_agent/jobs/local_evidence_analyst.py
+      - src/b3_agent/jobs/institution_target_discovery.py
+      - scripts/validate_async_reliability_real.py
+      - src/b3_agent/institution_target_ingestion.py
+      - src/b3_agent/economic_evidence.py
+      - scripts/ingest_institution_targets.py
+      - src/b3_agent/economic_decision.py
+      - scripts/validate_economic_decision_real.py
+      - src/b3_agent/orchestration/fast_dispatch.py
+      - src/b3_agent/price_target_evidence.py
+      - src/b3_agent/providers/brapi/fundamentals.py
+      - src/b3_agent/dividend_evidence.py
+      - src/b3_agent/stock_purchase.py
+      - scripts/validate_stock_purchase_real.py
+      - src/b3_agent/put_pair.py
+      - src/b3_agent/strategy_live.py
+      - src/b3_agent/server.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  wait-for-ci:
+    name: Wait for green PR CI
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Require green CI before Ubuntu validation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os, time
+          from urllib.request import Request, urlopen
+          print("CI_GATE_EXPECTED_SHA=" + os.environ["GITHUB_SHA"], flush=True)
+          repository = os.environ["GITHUB_REPOSITORY"]
+          expected_sha = os.environ["GITHUB_SHA"]
+          headers = {"Authorization": "Bearer " + os.environ["GH_TOKEN"], "Accept": "application/vnd.github+json"}
+          def get_json(url):
+              request = Request(url, headers=headers)
+              with urlopen(request, timeout=15) as response:
+                  return json.load(response)
+          
+          # Reuse green CI only when GitHub confirms that all changes since it are
+          # this gate workflow alone; source, tests, CI config, and frontend must be identical.
+          branch_url = f"https://api.github.com/repos/{repository}/actions/runs?branch=feature/react-functional-v43-integration&event=pull_request&per_page=100"
+          branch_runs = get_json(branch_url)["workflow_runs"]
+          prior_green = sorted(
+              (run for run in branch_runs if run["name"] == "CI" and run["status"] == "completed" and run["conclusion"] == "success" and run["head_sha"] != expected_sha),
+              key=lambda run: run["created_at"],
+              reverse=True,
+          )
+          gate_passed = False
+          workflow_path = ".github/workflows/b3-workspace-deterministic.yml"
+          for prior in prior_green:
+              compare_url = f"https://api.github.com/repos/{repository}/compare/{prior['head_sha']}...{expected_sha}"
+              try:
+                  comparison = get_json(compare_url)
+              except Exception as exc:
+                  print(f"CI_GATE_COMPARE_UNAVAILABLE run={prior['id']} error={type(exc).__name__}", flush=True)
+                  continue
+              changed = [item["filename"] for item in comparison.get("files", [])]
+              if (
+                  comparison.get("status") == "ahead"
+                  and 0 < comparison.get("total_commits", 0) <= 10
+                  and changed
+                  and all(filename == workflow_path for filename in changed)
+              ):
+                  print(f"CI_GATE_REUSED_RUN={prior['id']} SHA={prior['head_sha']} changed={changed}", flush=True)
+                  print("CI_GATE=PASS (application tree unchanged)", flush=True)
+                  gate_passed = True
+                  break
+          if not gate_passed:
+              exact_url = f"https://api.github.com/repos/{repository}/actions/runs?head_sha={expected_sha}&event=pull_request&per_page=20"
+              for attempt in range(180):
+                  runs = get_json(exact_url)["workflow_runs"]
+                  ci = [run for run in runs if run["name"] == "CI"]
+                  if ci and ci[0]["status"] == "completed":
+                      latest = ci[0]
+                      print(
+                          f"CI_GATE_RUN={latest['id']} SHA={latest['head_sha']} "
+                          f"STATUS={latest['status']} CONCLUSION={latest['conclusion']}",
+                          flush=True,
+                      )
+                      if latest["conclusion"] != "success":
+                          raise RuntimeError(f"CI run {latest['id']} concluded {latest['conclusion']}; Ubuntu validation refused")
+                      print("CI_GATE=PASS", flush=True)
+                      break
+                  time.sleep(5)
+              else:
+                  raise RuntimeError("CI completion not observed; Ubuntu validation refused")
+          PY
+
+  deterministic-workspaces:
+    needs: wait-for-ci
+    name: Deterministic PETR4 / VALE3 / ITUB4 × BBDC4
+    runs-on: [self-hosted, Linux, X64]
+    concurrency:
+      group: b3-workspace-deterministic-ubuntu
+      cancel-in-progress: false
+    timeout-minutes: 45
+    steps:
+      - name: Checkout tested branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Acquire reviewed primary institutional reports into existing Qdrant
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+          B3_AGENT_DATA_DIR: /opt/b3-runtime/data
+        run: |
+          timeout 120s /opt/b3-investment-options-agent/.venv/bin/python scripts/ingest_institution_targets.py --apply --reviewed-fallback docs/research/institution_targets_reviewed.json \
+            --url https://conteudos.xpi.com.br/acoes/relatorios/itau-unibanco-itub4-ainda-faz-sentido-pagar-por-qualidade/ \
+            --url https://conteudos.xpi.com.br/acoes/relatorios/bradesco-bbdc4-recuperacao-gradual-mas-com-ventos-macro-contrarios/ \
+            --url https://oespecialista.safra.com.br/analise/light-inicia-cobertura-preco-alvo-2026/ \
+            --url https://www.itau.com.br/investimentos/analises/vale-vale3-recomendacao-preco-alvo-180826/
+
+      - name: Validate asynchronous dividends and one real local worker
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: |
+          timeout 660s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_async_economic_real.py
+
+      - name: Validate real discovery and Qwen queue draining
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: timeout 660s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_async_reliability_real.py
+
+      - name: Validate candidate workspace contracts against real Ubuntu data
+        if: ${{ !cancelled() && needs.wait-for-ci.result == 'success' }}
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: |
+          timeout 90s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_progressive_workspace_real.py
+
+      - name: Validate observed stock ranking and one focused senior comparison
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: |
+          timeout 300s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_stock_screen_real.py --opportunities-senior
+          timeout 300s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_economic_decision_real.py --senior
+
+      - name: Update and restart the prepared Ubuntu runtime
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_dir=/opt/b3-investment-options-agent
+          # Refuse before changing checkout when activation cannot complete.
+          sudo -n -l systemctl restart b3-runtime.service >/dev/null
+          "$runtime_dir/.venv/bin/python" -c 'from importlib.metadata import version; from packaging.specifiers import SpecifierSet; assert version("yfinance") in SpecifierSet(">=1.7,<2"), "Prepare candidate dependencies before activation"'
+          test "$(git -C "$runtime_dir" branch --show-current)" = "feature/react-functional-v43-integration"
+          test -z "$(git -C "$runtime_dir" status --porcelain --untracked-files=no)"
+          git -C "$runtime_dir" fetch origin feature/react-functional-v43-integration
+          git -C "$runtime_dir" merge --ff-only "$GITHUB_SHA"
+          test "$(git -C "$runtime_dir" rev-parse HEAD)" = "$GITHUB_SHA"
+          if sudo -n systemctl restart b3-runtime.service; then
+            echo "RUNTIME_RESTART=PERFORMED"
+          else
+            echo "RUNTIME_RESTART=BLOCKED; activation not completed"
+            exit 1
+          fi
+          ready=0
+          for attempt in {1..20}; do
+            if curl -fsS --max-time 2 http://127.0.0.1:8000/health >/dev/null; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          test "$ready" -eq 1
+
+      - name: Accept PETR4 HTTP history and chart payload
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import time
+          from datetime import datetime, timezone
+          from urllib.request import urlopen
+          started = time.monotonic()
+          with urlopen("http://127.0.0.1:8000/analysis/live/PETR4", timeout=20) as response:
+              data = json.load(response)
+          market = data["market"]
+          latest = market["latest"]
+          sources = data["source_refs"]
+          result = {
+              "ticker": data["ticker"],
+              "history_count": market["history_count"],
+              "latest_source": latest["source"],
+              "latest_date": latest["observation_timestamp"],
+              "sources": sources,
+              "options_count": data["options"]["contract_count"],
+              "market_fields": sorted(market),
+              "elapsed_ms": round((time.monotonic() - started) * 1000, 1),
+          }
+          print(json.dumps(result, ensure_ascii=False), flush=True)
+          assert data["ticker"] == "PETR4"
+          latest_at = datetime.fromisoformat(latest["observation_timestamp"].replace("Z", "+00:00"))
+          now = datetime.now(timezone.utc)
+          assert latest_at <= now and (now-latest_at).days <= 7, "Future or stale history tail"
+          assert market["history_count"] == len(market["price_history"]) >= 60, "History indicator coverage regressed"
+          assert sources and set(sources) <= {"b3_cotahist", "yahoo", "oplab", "brapi"}, "Unexpected history provenance"
+          assert data["options"]["contract_count"] == 0, "History route must not request options"
+          print("PETR4_HTTP_ACCEPTANCE=PASS", flush=True)
+          PY
+
+      - name: Identify checkout and active process separately
+        run: |
+          git -C /opt/b3-investment-options-agent rev-parse HEAD
+          systemctl show b3-runtime.service --property=MainPID --property=ActiveEnterTimestamp
+
+      - name: Compare deterministic paths and screen data endpoints
+        env:
+          B3_BASE_URL: http://127.0.0.1:8000
+        run: |
+          python3 scripts/validate_workspace_deterministic_outputs.py \
+            --base-url "$B3_BASE_URL" \
+            --timeout-seconds 75

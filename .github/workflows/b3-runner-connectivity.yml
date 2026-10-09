@@ -1,0 +1,118 @@
+name: B3 Ubuntu runner connectivity
+on:
+  pull_request:
+    branches: ['**']
+    paths: ['.github/workflows/b3-runner-connectivity.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Validate stock-only collection and update idle production checkout
+        shell: bash
+        run: |
+          /opt/b3-investment-options-agent/.venv/bin/python -m pytest tests/test_collection_universe.py tests/test_instrument_identity.py tests/test_opportunity_screen.py -q
+          if systemctl is-active --quiet b3-opportunities-daily.service; then
+            echo 'Production update skipped: review is still active'
+            exit 1
+          fi
+          git -C /opt/b3-investment-options-agent diff --quiet
+          git -C /opt/b3-investment-options-agent diff --cached --quiet
+          test "$(git -C /opt/b3-investment-options-agent branch --show-current)" = feature/react-functional-v43-integration
+          git -C /opt/b3-investment-options-agent fetch origin feature/react-functional-v43-integration
+          git -C /opt/b3-investment-options-agent merge --ff-only "$GITHUB_SHA_CANDIDATE"
+        env:
+          GITHUB_SHA_CANDIDATE: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Inspect current stock universe and saved review coverage
+        shell: bash
+        run: |
+          cd /opt/b3-investment-options-agent
+          PYTHONPATH=src .venv/bin/python - <<'PY'
+          import json
+          from b3_agent.config import settings
+          from b3_agent.intelligence.collection_universe import CollectionUniverseStore
+          from b3_agent.jobs.opportunity_review import OpportunityReviewStore
+          universe = CollectionUniverseStore(settings.data_dir).snapshot()
+          print("UNIVERSE", json.dumps(universe))
+          latest = OpportunityReviewStore(settings.data_dir).latest()
+          response = latest.get("response") or {}
+          result = response.get("result") or {}
+          proposal = result.get("decision_proposal") or {}
+          print("REVIEW", json.dumps({
+              "generated_at": latest.get("generated_at"),
+              "status": response.get("status"),
+              "synthesis_status": result.get("derived_synthesis_status"),
+              "result_keys": sorted(result),
+              "scope": result.get("opportunity_research_scope"),
+              "assessment_count": len(proposal.get("alternative_assessments") or []),
+          }, default=str))
+          PY
+      - name: Audit senior participation in latest HTTP review
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, urllib.request
+          with urllib.request.urlopen("http://127.0.0.1:8000/opportunities/latest", timeout=20) as handle:
+              latest = json.load(handle)
+          response = latest.get("response") or {}
+          result = response.get("result") or {}
+          fields = ("derived_synthesis_status", "telemetry", "stage_telemetry", "decision_proposal", "opportunity_research_scope", "summary", "routing", "route", "llm_enabled")
+          print("SENIOR_AUDIT", json.dumps({
+              "generated_at": latest.get("generated_at"),
+              "response_status": response.get("status"),
+              "error": response.get("error"),
+              "audit": response.get("audit"),
+              "result_keys": sorted(result),
+              "evidence": {k: result.get(k) for k in fields if k in result},
+          }, ensure_ascii=False, default=str)[:22000])
+          PY
+      - name: Inspect actual OpenClaw model metadata and reload idle HTTP service
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path.home() / ".openclaw" / "agents" / "b3-investment" / "sessions"
+          files = sorted(root.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)[:4]
+          for path in files:
+              metadata = []
+              for line in path.read_text(errors="replace").splitlines():
+                  try:
+                      item = json.loads(line)
+                  except ValueError:
+                      continue
+                  msg = item.get("message") or {}
+                  if item.get("type") == "model_change" or msg.get("role") == "assistant":
+                      metadata.append({k: item.get(k) for k in ("type", "timestamp", "provider", "modelId")})
+                      metadata[-1].update({k: msg.get(k) for k in ("provider", "model", "stopReason") if msg.get(k) is not None})
+              print("OPENCLAW_SESSION_METADATA", path.name, json.dumps(metadata[-4:]))
+          PY
+          if sudo -n systemctl restart b3-runtime.service; then
+            echo HTTP_RESTART_SUCCEEDED
+          else
+            echo HTTP_RESTART_REQUIRES_INTERACTIVE_SUDO
+          fi
+      - name: Read-only Ubuntu connectivity and service status
+        shell: bash
+        run: |
+          hostname
+          date --iso-8601=seconds
+          git -C /opt/b3-investment-options-agent rev-parse HEAD
+          systemctl show b3-runtime.service b3-opportunities-daily.service b3-opportunities-daily.timer --property=Id,ActiveState,SubState,Result,ExecMainStatus
+          systemctl --user show openclaw-gateway.service --property=Id,ActiveState,SubState,Result
+          python3 - <<'PY'
+          import socket
+          for port in (8000, 18789):
+              try:
+                  with socket.create_connection(("127.0.0.1", port), timeout=3):
+                      print(f"port {port}: reachable")
+              except OSError as exc:
+                  print(f"port {port}: {type(exc).__name__}")
+          PY

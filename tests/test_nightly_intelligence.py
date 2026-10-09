@@ -260,3 +260,66 @@ def test_v43_nightly_enqueue_is_idempotent_for_same_material_bundle(tmp_path):
     assert first["results"][0]["local_analysis_queue_status"] == "ENQUEUED"
     assert second["results"][0]["local_analysis_queue_status"] == "ALREADY_QUEUED"
     assert len(queue.pending()) == 1
+
+
+def test_nightly_runner_partitions_invalid_monitored_identities_without_raw_symbols():
+    import importlib.util
+    from pathlib import Path
+
+    runner_path = Path(__file__).resolve().parents[1] / "scripts" / "run_nightly_intelligence.py"
+    spec = importlib.util.spec_from_file_location("b3_nightly_runner", runner_path)
+    runner = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(runner)
+
+    valid, rejected_hashes = runner.partition_monitored_tickers(
+        ["itub4", "ITUB4", "PETR4F", "bad identity", ""]
+    )
+
+    assert valid == ["ITUB4"]
+    assert len(rejected_hashes) == 2
+    assert all(len(value) == 12 for value in rejected_hashes)
+    assert "PETR4F" not in rejected_hashes
+    assert "BAD IDENTITY" not in rejected_hashes
+
+
+def test_nightly_runner_rejects_only_invalid_identities():
+    import importlib.util
+    from pathlib import Path
+
+    runner_path = Path(__file__).resolve().parents[1] / "scripts" / "run_nightly_intelligence.py"
+    spec = importlib.util.spec_from_file_location("b3_nightly_runner", runner_path)
+    runner = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(runner)
+
+    valid, rejected_hashes = runner.partition_monitored_tickers(["PETR4F", "WEGE3X"])
+
+    assert valid == []
+    assert len(rejected_hashes) == 2
+
+
+def test_nightly_runner_target_refresh_summary_reads_only_present_scalar_values():
+    import importlib.util
+    from pathlib import Path
+
+    runner_path = Path(__file__).resolve().parents[1] / "scripts" / "run_nightly_intelligence.py"
+    spec = importlib.util.spec_from_file_location("b3_nightly_runner_summary", runner_path)
+    runner = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(runner)
+
+    class SparseRefreshResult(dict):
+        def get(self, key, default=None):
+            return "PROJECTED" if key == "status" else default
+
+        def __getitem__(self, key):
+            if key == "status":
+                raise KeyError(key)
+            return super().__getitem__(key)
+
+    result = runner._safe_target_refresh_summary(
+        SparseRefreshResult(status="PROJECTED", records=3, private_payload={"ticker": "ITUB4"})
+    )
+
+    assert result == {"status": "PROJECTED", "records": 3}

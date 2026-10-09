@@ -1,0 +1,89 @@
+name: B3 integrated Opportunities active acceptance (Ubuntu)
+
+on:
+  push:
+    branches: [feature/react-functional-v43-integration]
+    paths:
+      - scripts/validate_active_opportunities.py
+      - .github/workflows/b3-opportunities-active.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: b3-opportunities-active-ubuntu
+  cancel-in-progress: false
+
+jobs:
+  wait-for-ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Require green CI for the tested revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os, time
+          from urllib.request import Request, urlopen
+          repository = os.environ["GITHUB_REPOSITORY"]
+          sha = os.environ["GITHUB_SHA"]
+          url = f"https://api.github.com/repos/{repository}/actions/runs?head_sha={sha}&event=pull_request&per_page=20"
+          headers = {"Authorization": "Bearer " + os.environ["GH_TOKEN"], "Accept": "application/vnd.github+json"}
+          for attempt in range(180):
+              request = Request(url, headers=headers)
+              with urlopen(request, timeout=15) as response:
+                  runs = json.load(response)["workflow_runs"]
+              ci = [run for run in runs if run["name"] == "CI"]
+              if ci and ci[0]["status"] == "completed":
+                  if ci[0]["conclusion"] != "success":
+                      raise RuntimeError(f"CI run {ci[0]['id']} concluded {ci[0]['conclusion']}; active acceptance refused")
+                  print(f"CI_GATE=PASS RUN={ci[0]['id']} SHA={sha}", flush=True)
+                  break
+              time.sleep(5)
+          else:
+              raise RuntimeError("CI completion not observed; active acceptance refused")
+          PY
+
+  active-opportunities:
+    needs: wait-for-ci
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 12
+    steps:
+      - name: Checkout tested revision
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Verify active service was restarted with the tested backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_dir=/opt/b3-investment-options-agent
+          git -C "$runtime_dir" fetch origin feature/react-functional-v43-integration
+          runtime_sha=$(git -C "$runtime_dir" rev-parse HEAD)
+          git -C "$runtime_dir" merge-base --is-ancestor "$runtime_sha" "$GITHUB_SHA"
+          git -C "$runtime_dir" diff --exit-code "$runtime_sha" "$GITHUB_SHA" -- \
+            src/b3_agent/server.py \
+            src/b3_agent/opportunity_screen.py \
+            src/b3_agent/opportunity_materiality.py \
+            src/b3_agent/stock_opportunity_service.py
+          systemctl is-active b3-runtime.service
+          pid=$(systemctl show b3-runtime.service --property=MainPID --value)
+          test "$pid" -gt 0
+          python3 - <<'PY'
+          import os, subprocess
+          from pathlib import Path
+          pid=int(subprocess.check_output(["systemctl","show","b3-runtime.service","--property=MainPID","--value"],text=True).strip())
+          boot=next(int(line.split()[1]) for line in Path("/proc/stat").read_text().splitlines() if line.startswith("btime "))
+          fields=Path(f"/proc/{pid}/stat").read_text().rsplit(")",1)[1].split()
+          started=boot+int(fields[19])/os.sysconf("SC_CLK_TCK")
+          installed=Path("/opt/b3-investment-options-agent/src/b3_agent/server.py").stat().st_mtime
+          assert started >= installed, "Active process predates the installed Opportunities backend"
+          print("ACTIVE_PROCESS_AFTER_INSTALL=PASS",flush=True)
+          PY
+      - name: Accept integrated Opportunities through the active HTTP API
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: timeout 300s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_active_opportunities.py

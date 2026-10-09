@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
+import tempfile
 from typing import Any, Protocol
 from uuid import uuid4
 
@@ -113,6 +115,27 @@ class OpenClawStructuredClient:
             f"Input:\n{input_text}"
         )
         session_key = f"b3-{schema_name}-{uuid4().hex}"
+        message_file = tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            prefix="b3-openclaw-",
+            suffix=".txt",
+            delete=False,
+        )
+        try:
+            message_path = message_file.name
+            message_file.write(prompt)
+            message_file.flush()
+        except BaseException:
+            message_file.close()
+            try:
+                os.unlink(message_file.name)
+            except FileNotFoundError:
+                pass
+            raise
+        finally:
+            message_file.close()
+
         command = [
             self.executable,
             "agent",
@@ -122,8 +145,8 @@ class OpenClawStructuredClient:
             self.model,
             "--session-key",
             session_key,
-            "--message",
-            prompt,
+            "--message-file",
+            message_path,
         ]
 
         try:
@@ -137,6 +160,16 @@ class OpenClawStructuredClient:
             raise RuntimeError(
                 f"OpenClaw timed out after {self.timeout:.0f}s for {schema_name}"
             ) from exc
+        except OSError as exc:
+            raise RuntimeError(
+                f"OpenClaw launch failed for {schema_name}: "
+                f"{type(exc).__name__}: {exc}"
+            ) from exc
+        finally:
+            try:
+                os.unlink(message_path)
+            except FileNotFoundError:
+                pass
 
         if result.returncode != 0:
             message = (

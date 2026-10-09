@@ -1,0 +1,43 @@
+name: B3 active runtime post-restart (Ubuntu)
+on:
+  push:
+    branches: [feature/react-functional-v43-integration]
+    paths:
+      - .github/workflows/b3-post-restart-http.yml
+      - scripts/validate_backend_active_http.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: b3-post-restart-http
+  cancel-in-progress: false
+jobs:
+  active-http:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Identify active service and corrected installed revision
+        run: |
+          systemctl is-active b3-runtime.service
+          systemctl show b3-runtime.service --property=MainPID --property=ActiveEnterTimestamp
+          git -C /opt/b3-investment-options-agent rev-parse HEAD
+          git -C /opt/b3-investment-options-agent merge-base --is-ancestor a3dced7729f460187aaf44ba6a9809101bcc95d5 HEAD
+      - name: Require process start after installation of corrected provider
+        run: |
+          python3 - <<'PYCODE'
+          import os, subprocess
+          from pathlib import Path
+          pid=subprocess.check_output(['systemctl','show','b3-runtime.service','--property=MainPID','--value'],text=True,timeout=10).strip()
+          assert int(pid)>0
+          boot=next(int(line.split()[1]) for line in Path('/proc/stat').read_text().splitlines() if line.startswith('btime '))
+          fields=Path(f'/proc/{pid}/stat').read_text().rsplit(')',1)[1].split()
+          started=boot+int(fields[19])/os.sysconf('SC_CLK_TCK')
+          installed=Path('/opt/b3-investment-options-agent/src/b3_agent/providers/bradesco_dividends.py').stat().st_mtime
+          assert started>=installed, 'Active process predates corrected provider installation; authenticated restart required'
+          print('ACTIVE_PROCESS_AFTER_INSTALL=PASS',flush=True)
+          PYCODE
+      - name: Verify dividends, BUY and Opportunities on active HTTP without queue replay
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_backend_active_http.py

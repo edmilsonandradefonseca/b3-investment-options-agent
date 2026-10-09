@@ -1,0 +1,22 @@
+name: B3 V4.4 read-only review (Ubuntu)
+on:
+  push:
+    branches: [feature/react-functional-v43-integration]
+    paths:
+      - docs/FRONTEND_DECISION_WORKSPACES_SPEC_V1.2.md
+      - scripts/audit_v44_runtime.py
+      - .github/workflows/b3-v44-review.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: b3-v44-read-only-review
+  cancel-in-progress: false
+jobs:
+  runtime:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Identify active runtime and public data contracts
+        run: python3 scripts/audit_v44_runtime.py

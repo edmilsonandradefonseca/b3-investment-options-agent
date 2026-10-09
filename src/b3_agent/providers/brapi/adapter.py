@@ -2,6 +2,7 @@
 import os
 import urllib.parse
 import urllib.request
+import math
 
 from b3_agent.providers.http_retry import request_json
 
@@ -16,6 +17,36 @@ class BrapiAdapter:
     @property
     def name(self) -> str:
         return "brapi"
+
+    def get_current_quote(self, ticker: str) -> StockMarketData:
+        normalized = ticker.strip().upper()
+        if not normalized:
+            raise ValueError("ticker must not be empty")
+        request = urllib.request.Request(f"{self.BASE_URL}/quote/{urllib.parse.quote(normalized)}", headers=self._headers())
+        payload = request_json(request, provider="brapi", timeout_env="B3_BRAPI_TIMEOUT_SECONDS",
+            default_timeout=10, default_attempts=1, opener=urllib.request.urlopen)
+        rows = payload.get("results", [])
+        item = next((row for row in rows if row.get("symbol") == normalized), None)
+        if item is None or item.get("currency") != "BRL":
+            raise ValueError("BRAPI current quote identity or currency mismatch")
+        raw_time = item.get("regularMarketTime")
+        if isinstance(raw_time, str):
+            observed = datetime.fromisoformat(raw_time.replace("Z", "+00:00"))
+        elif isinstance(raw_time, (int, float)) and not isinstance(raw_time, bool):
+            observed = datetime.fromtimestamp(raw_time, timezone.utc)
+        else:
+            raise ValueError("BRAPI quote timestamp missing")
+        if observed.tzinfo is None:
+            raise ValueError("BRAPI quote timezone missing")
+        values = [item.get(key) for key in ("regularMarketOpen", "regularMarketDayHigh", "regularMarketDayLow", "regularMarketPrice", "regularMarketVolume")]
+        if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0 for v in values) or min(values[:4]) <= 0:
+            raise ValueError("BRAPI current OHLCV invalid")
+        now = datetime.now(timezone.utc)
+        return StockMarketData(instrument_id=normalized, ticker=normalized,
+            observation_timestamp=observed, available_timestamp=now, source=self.name, ingested_at=now,
+            source_record_id=f"{normalized}:quote:{observed.isoformat()}",
+            quality_status="WARNING", quality_flags=("current_quote", "potentially_delayed", "not_executable_quote"),
+            open=values[0], high=values[1], low=values[2], close=values[3], volume=values[4])
 
     def get_market_data(
         self,

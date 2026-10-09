@@ -1,0 +1,55 @@
+name: B3 Market provider diagnosis and repair
+on:
+  push:
+    branches: [feature/react-functional-v43-integration]
+    paths: [.github/workflows/b3-market-provider-repair.yml, scripts/diagnose_market_providers.py]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: b3-market-provider-repair
+  cancel-in-progress: false
+jobs:
+  diagnose:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test corrected curve adapter
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: /opt/b3-investment-options-agent/.venv/bin/python -m pytest -q tests/test_b3_yield_curve.py
+      - name: Install verified provider correction
+        run: |
+          set -euo pipefail
+          provider=src/b3_agent/providers/b3_yield_curve.py
+          if cmp -s "$provider" "/opt/b3-investment-options-agent/$provider"; then
+            echo PROVIDER_ALREADY_INSTALLED=PASS
+          else
+            test -z "$(git -C /opt/b3-investment-options-agent status --porcelain --untracked-files=no)"
+            install -m 0644 "$provider" "/opt/b3-investment-options-agent/$provider"
+          fi
+      - name: Bind runtime package to canonical production checkout
+        run: |
+          /opt/b3-investment-options-agent/.venv/bin/python -m pip install --no-deps -e /opt/b3-investment-options-agent
+          /opt/b3-investment-options-agent/.venv/bin/python -c "from pathlib import Path; import b3_agent.providers.b3_yield_curve as provider; print('RUNTIME_PROVIDER_PATH=' + provider.__file__); assert Path(provider.__file__).resolve() == Path('/opt/b3-investment-options-agent/src/b3_agent/providers/b3_yield_curve.py')"
+      - name: Restart runtime through systemd without interactive authentication
+        continue-on-error: true
+        run: systemctl --no-ask-password restart b3-runtime.service
+      - name: Verify active process loaded installed provider
+        run: |
+          /opt/b3-investment-options-agent/.venv/bin/python - <<'PYCODE'
+          import os, subprocess
+          from pathlib import Path
+          pid=int(subprocess.check_output(['systemctl','show','b3-runtime.service','--property=MainPID','--value'],text=True))
+          boot=next(int(line.split()[1]) for line in Path('/proc/stat').read_text().splitlines() if line.startswith('btime '))
+          fields=Path(f'/proc/{pid}/stat').read_text().rsplit(')',1)[1].split()
+          started=boot+int(fields[19])/os.sysconf('SC_CLK_TCK')
+          installed=Path('/opt/b3-investment-options-agent/src/b3_agent/providers/b3_yield_curve.py').stat().st_mtime
+          print('PROCESS_START_EPOCH=',started,'PROVIDER_INSTALL_EPOCH=',installed,flush=True)
+          assert started >= installed, 'ACTIVE_PROCESS_PREDATES_CORRECTION: authenticated restart required'
+          print('ACTIVE_PROCESS_AFTER_PROVIDER_INSTALL=PASS')
+          PYCODE
+      - name: Diagnose providers without exposing credentials
+        if: always()
+        run: /opt/b3-investment-options-agent/.venv/bin/python scripts/diagnose_market_providers.py --require-curve

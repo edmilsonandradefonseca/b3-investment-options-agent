@@ -1,0 +1,73 @@
+name: B3 V4.4 guarded delivery (Ubuntu)
+on:
+  push:
+    branches: [feature/react-functional-v43-integration]
+    paths:
+      - .github/workflows/b3-v44-delivery.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: b3-workspace-deterministic-ubuntu
+  cancel-in-progress: false
+jobs:
+  deliver:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require successful CI for this exact candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import os,json,time
+          from urllib.request import Request,urlopen
+          url=f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/actions/runs?head_sha={os.environ['GITHUB_SHA']}&event=pull_request&per_page=30"
+          for attempt in range(72):
+              with urlopen(Request(url,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'}),timeout=15) as response:
+                  runs=json.load(response)['workflow_runs']
+              ci=[r for r in runs if r['name']=='CI']
+              if ci and ci[0]['status']=='completed':
+                  assert ci[0]['conclusion']=='success', 'CI failed: deployment refused'
+                  print('CI_GATE=PASS');break
+              time.sleep(5)
+          else: raise RuntimeError('No successful CI: deployment refused')
+          PY
+      - name: Fast-forward clean authorized runtime and restart
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_dir=/opt/b3-investment-options-agent
+          test "$(git -C "$runtime_dir" branch --show-current)" = feature/react-functional-v43-integration
+          test -z "$(git -C "$runtime_dir" status --porcelain --untracked-files=no)"
+          previous_pid=$(systemctl show b3-runtime.service --property MainPID --value)
+          git -C "$runtime_dir" fetch origin feature/react-functional-v43-integration
+          git -C "$runtime_dir" merge --ff-only "$GITHUB_SHA"
+          test "$(git -C "$runtime_dir" rev-parse HEAD)" = "$GITHUB_SHA"
+          sudo -n systemctl restart b3-runtime.service
+          current_pid=$(systemctl show b3-runtime.service --property MainPID --value)
+          test "$current_pid" != "$previous_pid"
+          ready=0
+          for attempt in {1..30}; do
+            if curl -fsS --max-time 2 http://127.0.0.1:8000/health >/dev/null; then ready=1; break; fi
+            sleep 2
+          done
+          test "$ready" -eq 1
+          echo "RUNTIME_RESTART=VERIFIED sha=$GITHUB_SHA pid=$current_pid"
+      - name: Confirm natural budget reaches canonical comparison on active API
+        run: |
+          python3 - <<'PY'
+          import json,time
+          from urllib.request import Request,urlopen
+          request=Request('http://127.0.0.1:8000/orchestrate',data=json.dumps({'task':'Tenho R$ 10 mil. Comprar ITUB4 ou BBDC4?','ticker':None,'context':{'workspace':'Strategy Lab','analysis_mode':'deterministic','research_mode':'stored_only'}}).encode(),headers={'Content-Type':'application/json'})
+          started=time.monotonic()
+          with urlopen(request,timeout=120) as response: data=json.load(response)
+          assert not data.get('error'), 'Canonical comparison failed'
+          rows=data['result']['stock_purchase_comparison']['rows']
+          assert {r['ticker'] for r in rows}=={'ITUB4','BBDC4'}
+          print(json.dumps({'case':'LAB-01 canonical natural budget','status':'PASS','row_count':len(rows),'elapsed_s':round(time.monotonic()-started,2)}))
+          PY
+      - name: Verify senior contract and deployed version without exposing portfolio
+        run: python3 scripts/audit_v44_runtime.py

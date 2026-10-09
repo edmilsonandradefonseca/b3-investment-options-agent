@@ -1,0 +1,23 @@
+name: B3 authorized production queue catch-up
+on:
+  push:
+    branches: [feature/react-functional-v43-integration]
+    paths:
+      - scripts/validate_production_queue_drain_real.py
+      - .github/workflows/b3-production-catchup.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: b3-production-catchup
+  cancel-in-progress: false
+jobs:
+  catch-up:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Drain authorized production backlog with bounded worker
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: timeout 2460s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_production_queue_drain_real.py

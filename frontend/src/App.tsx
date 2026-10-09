@@ -1,321 +1,412 @@
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import AssetIncomeTargets from './components/AssetIncomeTargets';
+import {formatFundamental} from './app/fundamentals';
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from 'react';
+import { b3Api, getApiBaseUrl, setApiBaseUrl } from './api/client';
+import {lazy,Suspense} from 'react';
+import { getPageDefinition, pageFromHash, hashForPage } from './app/pages';
+const PortfolioWorkspace=lazy(()=>import('./components/PortfolioWorkspace'));
+const AdminWorkspace=lazy(()=>import('./components/AdminWorkspace'));
+const OpportunityExplorer=lazy(()=>import('./components/OpportunityExplorer'));
+import {HistoryWorkspace,RiskWorkspace,OverviewWorkspace} from './components/ContextWorkspaces';
+import {State,date} from './components/cockpit';
+import MarketContext from './components/MarketContext';
 
-import { ApiError, b3Api, getApiBaseUrl, setApiBaseUrl } from "./api/client";
-import type { OrchestrateResponse } from "./api/contracts";
-import {
-  PAGE_DEFINITIONS,
-  getPageDefinition,
-  hashForPage,
-  pageFromHash,
-  type PageId,
-  type PageTab,
-} from "./app/pages";
-import { ResultSurface } from "./components/ResultSurface";
+const PriceChart=lazy(()=>import('./components/PriceChart'));
+import OptionsWorkspace from './OptionsWorkspace';
+import AnalysisOutput from './components/AnalysisOutput';
+import StrategySession from './components/StrategySession';
+import PersonalHistory from './components/PersonalHistory';
+import type { CapitalProfile, PortfolioSnapshot, BrokerageOperation, PilotAnalysis, OrchestrateResponse, TransactionResponse, LiveAnalysisResponse, ResearchNewsResponse, FundamentalsResponse, CurrentOptionRow, OpportunityReviewStatus } from './api/contracts';
 
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "erro desconhecido";
+type Page = 'Overview'|'Portfolio'|'Options'|'Opportunities'|'Strategy Lab'|'Market Intelligence'|'History & Learning'|'Risk & Stress'|'Admin';
+type OpportunityRunState = {status:'idle'|'running'|'complete'|'error';startedAt:string|null;finishedAt:string|null;sources:string[];message:string|null};
+const pages: Page[] = ['Portfolio','Options','Opportunities','Strategy Lab','Market Intelligence','Admin'];
+const dashboardFastPathUseCases: Partial<Record<Page, string[]>> = {
+  Portfolio: ['UC-01'],
+  Options: ['UC-02'],
+};
+const brl = (n?: number|null) => n == null ? 'Indisponível' : new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n);
+const when = date;
+const err = (e:unknown) => e instanceof Error ? e.message : String(e);
+const optionTypeForStrategy=(strategy:string):'PUT'|'CALL'|null=>
+ strategy==='Vender PUT'?'PUT':strategy==='Vender CALL coberta'?'CALL':null;
+function fundamentalValue(metric: FundamentalsResponse["metrics"][number]): string {
+ return formatFundamental(metric.value, metric.unit);
 }
-
-function App() {
-  const [page, setPage] = useState<PageId>(() => pageFromHash());
-  const [activeTab, setActiveTab] = useState<string | null>(null);
-  const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState<OrchestrateResponse | null>(null);
-  const [serverOnline, setServerOnline] = useState(false);
-  const [asking, setAsking] = useState(false);
-  const [importStatus, setImportStatus] = useState("");
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [backendUrl, setBackendUrl] = useState(() => getApiBaseUrl());
-
-  useEffect(() => {
-    const syncPageFromHash = () => setPage(pageFromHash());
-    window.addEventListener("hashchange", syncPageFromHash);
-    if (!window.location.hash) window.history.replaceState(null, "", hashForPage("Overview"));
-    return () => window.removeEventListener("hashchange", syncPageFromHash);
-  }, []);
-
-  const pageDefinition = useMemo(() => getPageDefinition(page), [page]);
-  const selectedTab: PageTab | null = useMemo(() => {
-    const tabs = pageDefinition.tabs ?? [];
-    return tabs.find((tab) => tab.id === activeTab) ?? tabs[0] ?? null;
-  }, [pageDefinition, activeTab]);
-
-  const prompt = selectedTab?.prompt ?? pageDefinition.prompt;
-  const description = selectedTab?.description ?? pageDefinition.description;
-  const useCases = selectedTab?.useCases ?? pageDefinition.useCases;
-
-  async function checkBackend() {
-    try {
-      const health = await b3Api.health();
-      setServerOnline(health.status === "ok");
-      return true;
-    } catch {
-      setServerOnline(false);
-      return false;
-    }
-  }
-
-  useEffect(() => {
-    checkBackend();
-  }, []);
-
-  function navigate(nextPage: PageId) {
-    window.location.hash = hashForPage(nextPage);
-    setPage(nextPage);
-    setActiveTab(null);
-    setAnswer(null);
-    setQuestion("");
-  }
-
-  async function runAnalysis(task = prompt) {
-    if (!task.trim() || asking) return;
-    setAsking(true);
-    setAnswer(null);
-    try {
-      const response = await b3Api.orchestrate({
-        task: task.trim(),
-        context: {
-          client: "windows-react-production-v1",
-          dashboard_page: page,
-          dashboard_tab: selectedTab?.id ?? null,
-          use_cases: useCases,
-        },
-      });
-      setAnswer(response);
-      setServerOnline(true);
-    } catch (error) {
-      setAnswer({
-        status: "ERROR",
-        result: {},
-        sources: [],
-        audit: [],
-        error: errorMessage(error),
-      });
-      // An HTTP error proves the backend is reachable. Only transport/fetch
-      // failures should mark the backend itself offline.
-      setServerOnline(error instanceof ApiError);
-    } finally {
-      setAsking(false);
-    }
-  }
-
-  async function ask(event?: FormEvent) {
-    event?.preventDefault();
-    await runAnalysis(question.trim() || prompt);
-  }
-
-  async function importExcel(
-    event: ChangeEvent<HTMLInputElement>,
-    kind: "portfolio" | "options",
-  ) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    setImportStatus(`Loading ${kind === "portfolio" ? "portfolio" : "options"} snapshot…`);
-    try {
-      const data = kind === "portfolio"
-        ? await b3Api.importPortfolio(file)
-        : await b3Api.importOptions(file);
-      setImportStatus(`✓ ${data.file} validated and activated.`);
-      setServerOnline(true);
-    } catch (error) {
-      setImportStatus(`Error: ${errorMessage(error)}`);
-    }
-  }
-
-  async function saveBackend(event: FormEvent) {
-    event.preventDefault();
-    try {
-      const normalized = setApiBaseUrl(backendUrl);
-      setBackendUrl(normalized);
-      const ok = await checkBackend();
-      if (ok) setSettingsOpen(false);
-    } catch (error) {
-      setImportStatus(`Backend URL: ${errorMessage(error)}`);
-    }
-  }
-
-  return (
-    <div className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark">▮▮▮</span>
-          <div>
-            <strong>B3 Investment Copilot</strong>
-            <small>Windows 11 · React + Tauri · V4 frozen</small>
-          </div>
-        </div>
-        <div className="architecture-badge">SQLite/Parquet · Qdrant 768d hybrid · Neo4j</div>
-        <button className="backend-button" onClick={() => setSettingsOpen(true)}>
-          <span className={serverOnline ? "online-dot" : "offline-dot"}>●</span>
-          {serverOnline ? "Backend online" : "Configure backend"}
-        </button>
-      </header>
-
-      <div className="body">
-        <aside className="sidebar">
-          <nav>
-            {PAGE_DEFINITIONS.map((item) => (
-              <button
-                key={item.id}
-                className={page === item.id ? "nav-item active" : "nav-item"}
-                onClick={() => navigate(item.id)}
-              >
-                <span className="nav-icon">{item.icon}</span>
-                <span>
-                  <strong>{item.id}</strong>
-                  <small>{item.subtitle}</small>
-                </span>
-              </button>
-            ))}
-          </nav>
-
-          <section className="connections">
-            <label>REAL DATA</label>
-            <label className="load">
-              ↥ &nbsp; BTG Portfolio Excel
-              <input type="file" accept=".xlsx,.xlsm" hidden onChange={(event) => importExcel(event, "portfolio")} />
-            </label>
-            <label className="load secondary">
-              ↥ &nbsp; Options Excel
-              <input type="file" accept=".xlsx,.xlsm" hidden onChange={(event) => importExcel(event, "options")} />
-            </label>
-            {importStatus && <small className="import-status">{importStatus}</small>}
-          </section>
-
-          <section className="knowledge-status">
-            <label>RUNTIME</label>
-            <span>▦ Structured <i>SQLite / Parquet</i></span>
-            <span>◉ Semantic <i>Qdrant hybrid</i></span>
-            <span>● Relational <i>Neo4j</i></span>
-          </section>
-        </aside>
-
-        <main className="workspace">
-          <div className="workspace-head">
-            <div>
-              <div className="uc-row">{useCases.map((uc) => <span key={uc}>{uc}</span>)}</div>
-              <h1>{page}</h1>
-              <p>{description}</p>
-            </div>
-            <button className="refresh" onClick={() => runAnalysis()} disabled={asking}>
-              {asking ? "Loading real runtime…" : "Refresh"}
-            </button>
-          </div>
-
-          {!!pageDefinition.tabs?.length && (
-            <div className="workspace-tabs">
-              {pageDefinition.tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  className={selectedTab?.id === tab.id ? "selected" : ""}
-                  onClick={() => {
-                    setActiveTab(tab.id);
-                    setAnswer(null);
-                    setQuestion("");
-                  }}
-                >
-                  {tab.label}
-                  <small>{tab.useCases.join(" · ")}</small>
-                </button>
-              ))}
-            </div>
-          )}
-
-          <section className="cards">
-            <Metric title="Authority" value="Backend" detail="No calculations in React" />
-            <Metric title="Freshness" value="as_of" detail="Always preserved when supplied" />
-            <Metric title="Data gaps" value="Explicit" detail="UNKNOWN / LIMITED visible" />
-            <Metric title="Execution" value="Disabled" detail="Decision support only" />
-          </section>
-
-          <section className="panel production-panel">
-            <div className="panel-title">
-              <div>
-                <h2>Canonical intelligence</h2>
-                <span>{useCases.join(" · ")}</span>
-              </div>
-              <span className={serverOnline ? "server online" : "server"}>
-                ● {serverOnline ? getApiBaseUrl() : "backend offline"}
-              </span>
-            </div>
-            <ResultSurface response={answer} />
-          </section>
-        </main>
-
-        <aside className="copilot">
-          <div className="copilot-head">
-            <div>
-              <strong>Copilot</strong>
-              <small>Same frozen backend, contextual query</small>
-            </div>
-            <span className={serverOnline ? "online-dot" : "offline-dot"}>●</span>
-          </div>
-
-          <div className="copilot-intro">
-            <h2>{selectedTab?.label ?? page}</h2>
-            <p>{prompt}</p>
-          </div>
-
-          <div className="suggestions">
-            <button onClick={() => setQuestion(prompt)}>Use workspace query <span>›</span></button>
-            <button onClick={() => setQuestion("O que mudou desde a última análise? Preserve as_of e fontes.")}>What changed? <span>›</span></button>
-            <button onClick={() => setQuestion("Quais dados estão LIMITED, UNKNOWN ou ausentes e como isso limita a análise?")}>Data limitations <span>›</span></button>
-          </div>
-
-          {answer?.error && <div className="answer-card"><p>{answer.error}</p></div>}
-
-          <form onSubmit={ask} className="chat-form">
-            <textarea
-              value={question}
-              onChange={(event) => setQuestion(event.target.value)}
-              placeholder="Ask about this workspace…"
-              rows={5}
-            />
-            <button disabled={asking}>{asking ? "…" : "➤"}</button>
-          </form>
-
-          <small className="disclaimer">No order execution. Human remains final decision authority.</small>
-        </aside>
-      </div>
-
-      {settingsOpen && (
-        <div className="modal-backdrop" onClick={() => setSettingsOpen(false)}>
-          <div className="transaction-modal" onClick={(event) => event.stopPropagation()}>
-            <div className="panel-title">
-              <div>
-                <h2>Backend connection</h2>
-                <span>Windows app → real B3 backend instance</span>
-              </div>
-              <button onClick={() => setSettingsOpen(false)}>×</button>
-            </div>
-            <form className="transaction-form" onSubmit={saveBackend}>
-              <label>Backend URL</label>
-              <input
-                value={backendUrl}
-                onChange={(event) => setBackendUrl(event.target.value)}
-                placeholder="http://ubuntu:8000"
-                autoFocus
-              />
-              <button type="submit">Save and test connection</button>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+function eventText(event:Record<string,unknown>,...keys:string[]):string{
+ for(const key of keys){const value=event[key];if(typeof value==='string'&&value.trim())return value}
+ return '';
 }
-
-function Metric({ title, value, detail }: { title: string; value: string; detail: string }) {
-  return (
-    <div className="metric">
-      <span>{title}</span>
-      <strong>{value}</strong>
-      <small>{detail}</small>
-    </div>
-  );
+function eventUrl(event:Record<string,unknown>):string{
+ const value=eventText(event,'url','source_ref','source_url');
+ return value.startsWith('https://')||value.startsWith('http://')?value:'';
 }
+function isGreeting(task:string){
+ const normalized=task.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+ return /^(oi|ola|bom dia|boa tarde|boa noite|e ai)$/.test(normalized);
+}
+function isOperationalStatusQuestion(task:string){
+ const normalized=task.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+ return /^(vc |voce |copilot |sistema )?(esta|ta) (on|online|conectado|funcionando)$/.test(normalized)
+   || /^(status|status do sistema|esta conectado|esta funcionando)$/.test(normalized);
+}
+function isCompletedOpportunityReview(response:OrchestrateResponse|null|undefined):boolean{
+ if(!response||response.error)return false;
+ const result=response.result as Record<string,unknown>|undefined;
+ if(!result||result.derived_synthesis_status!=='COMPLETED')return false;
+ const screen=result.opportunity_screen&&typeof result.opportunity_screen==='object'?result.opportunity_screen as Record<string,unknown>:{};
+ const scope=result.opportunity_research_scope&&typeof result.opportunity_research_scope==='object'?result.opportunity_research_scope as Record<string,unknown>:{};
+ const synthesis=result.synthesis&&typeof result.synthesis==='object'?result.synthesis as Record<string,unknown>:{};
+ const rawProposal=result.decision_proposal??result.proposal;
+ const proposal=rawProposal&&typeof rawProposal==='object'?rawProposal as Record<string,unknown>:{};
+ const narrative=[synthesis.summary,proposal.thesis,proposal.rationale,result.summary].find(value=>typeof value==='string'&&value.trim().length>0);
+ return typeof screen.policy_version==='string'&&typeof scope.policy_version==='string'&&typeof narrative==='string';
+}
+export default function App(){
+ const inspectionSequence=useRef(0), expectedHash=useRef<string|null>(null), opportunitySearchInFlight=useRef(false), opportunityAutoReviews=useRef(new Set<string>()), opportunityReviewSequence=useRef(0), connectionRef=useRef(false);
+ const [copilotOpen,setCopilotOpen]=useState(true),[sidebarCollapsed,setSidebarCollapsed]=useState(false),[marketTab,setMarketTab]=useState('regime');
+ const [researchMode,setResearchMode]=useState("stored_first");
+ const [opportunityRun,setOpportunityRun]=useState<OpportunityRunState>({status:'idle',startedAt:null,finishedAt:null,sources:[],message:null});
+ const [opportunityAssets,setOpportunityAssets]=useState('VALE3, RENT3, VIVT3, BBAS3');
+ const [opportunityObjective,setOpportunityObjective]=useState('COMPARE_ONLY');
+ const [personalHistory,setPersonalHistory]=useState<Record<string,unknown>|null>(null);
+ const [page,setPage]=useState<Page>(()=>pageFromHash() as Page),[online,setOnline]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
+ const [portfolio,setPortfolio]=useState<PortfolioSnapshot|null>(null),[capital,setCapital]=useState<CapitalProfile|null>(null),[tx,setTx]=useState<TransactionResponse[]>([]);
+ const [brokerage,setBrokerage]=useState<BrokerageOperation[]>([]),[ledgerAvailable,setLedgerAvailable]=useState(false);
+ const [url,setUrl]=useState(getApiBaseUrl()),[settings,setSettings]=useState(false),[capitalEdit,setCapitalEdit]=useState(false),[available,setAvailable]=useState(''),[reserve,setReserve]=useState('');
+ const [selectedOption,setSelectedOption]=useState('');
+ const [ticker,setTicker]=useState(''),[asset,setAsset]=useState(''),[filter,setFilter]=useState('');
+ const [live,setLive]=useState<LiveAnalysisResponse|null>(null),[news,setNews]=useState<ResearchNewsResponse|null>(null),[newsError,setNewsError]=useState(''),[fundamentals,setFundamentals]=useState<FundamentalsResponse|null>(null),[fundamentalsError,setFundamentalsError]=useState(''),[pilot,setPilot]=useState<PilotAnalysis|null>(null),[horizon,setHorizon]=useState('1M'),[assetView,setAssetView]=useState(false);
+ const [showIndicatorHelp,setShowIndicatorHelp]=useState(false);
+ const [marketResults,setMarketResults]=useState<Record<string,OrchestrateResponse|null>>({});
+ const [workspaceResults,setWorkspaceResults]=useState<Partial<Record<Page,OrchestrateResponse|null>>>({});
+ const analysis=page==='Market Intelligence'?(marketResults[assetView?'asset':marketTab]??null):(workspaceResults[page]??null);
+ function setAnalysis(value:OrchestrateResponse|null,marketKey?:string){setWorkspaceResults(v=>({...v,[page]:value}));if(page==='Market Intelligence')setMarketResults(v=>({...v,[marketKey??(assetView?'asset':marketTab)]:value}))}
+ function navigate(p:Page,symbol?:string){++inspectionSequence.current;setPage(p);const nextHash=hashForPage(p);if(window.location.hash!==nextHash){expectedHash.current=nextHash;window.location.hash=nextHash}else expectedHash.current=null;setBusy(false);if(symbol){setTicker(symbol);setAsset(symbol);if(p==='Strategy Lab'){setLeft(symbol);setStrategyA('Comprar ação')}if(p==='Market Intelligence')setAssetView(true)}}
+ useEffect(()=>{const listener=()=>{const next=pageFromHash();if(next==='Copilot')return;const changedHash=window.location.hash;if(changedHash===expectedHash.current){expectedHash.current=null;return}++inspectionSequence.current;setPage(next);setBusy(false)};window.addEventListener('hashchange',listener);return()=>window.removeEventListener('hashchange',listener)},[]);
+ const [question,setQuestion]=useState(''),[chat,setChat]=useState<{q:string;r:OrchestrateResponse|null;error?:string}[]>([]),[batch,setBatch]=useState<string>('');
+ const [left,setLeft]=useState('ITUB4'),[right,setRight]=useState('BBDC4'),[strategyA,setStrategyA]=useState('Comprar ação'),[strategyB,setStrategyB]=useState('Comprar ação'),[amount,setAmount]=useState('10000');
+ const [putPairObjective,setPutPairObjective]=useState('COMPARE_ONLY');
+ const [economicPricesA,setEconomicPricesA]=useState(''),[economicPricesB,setEconomicPricesB]=useState(''),[economicDividendA,setEconomicDividendA]=useState(''),[economicDividendB,setEconomicDividendB]=useState(''),[economicEntryA,setEconomicEntryA]=useState(''),[economicEntryB,setEconomicEntryB]=useState(''),[economicExitA,setEconomicExitA]=useState(''),[economicExitB,setEconomicExitB]=useState(''),[economicObjective,setEconomicObjective]=useState('COMPARE_ONLY');
+ const [fundedQuantity,setFundedQuantity]=useState('100'),[fundedFees,setFundedFees]=useState(''),[fundedTaxes,setFundedTaxes]=useState('');
+ const [scenarioHorizon,setScenarioHorizon]=useState(''),[scenarioShocks,setScenarioShocks]=useState('-10, 0, 10'),[scenarioObjective,setScenarioObjective]=useState('COMPARE_ONLY');
+ const [optionA,setOptionA]=useState(''),[optionB,setOptionB]=useState(''),[optionRowsA,setOptionRowsA]=useState<CurrentOptionRow[]>([]),[optionRowsB,setOptionRowsB]=useState<CurrentOptionRow[]>([]);
+ const [putChainExpiry,setPutChainExpiry]=useState(''),[putCandidateIds,setPutCandidateIds]=useState<string[]>([]);
+ async function load(){setBusy(true);try{await b3Api.health();connectionRef.current=true;setOnline(true);const [p,c,t,l,latestReview,reviewStatus]=await Promise.allSettled([b3Api.portfolio(),b3Api.capital(),b3Api.listTransactions(500),b3Api.optionLedger(),b3Api.latestOpportunityReview(),b3Api.opportunityReviewStatus()]);if(p.status==='fulfilled'){setPortfolio(p.value);void b3Api.orchestrate({task:'UC-02 snapshot de opções',context:{workspace:'Options',dashboard_page:'Options',use_cases:['UC-02'],analysis_mode:'deterministic'}}).then(r=>setWorkspaceResults(v=>({...v,Options:r}))).catch(()=>{});void b3Api.orchestrate({task:'UC-01 portfolio snapshot',context:{workspace:'Portfolio',dashboard_page:'Portfolio',use_cases:['UC-01'],analysis_mode:'deterministic'}}).then(r=>setWorkspaceResults(v=>({...v,Portfolio:r}))).catch(()=>{})}if(c.status==='fulfilled'){setCapital(c.value);setAvailable(String(c.value.available_capital??''));setReserve(String(c.value.minimum_reserve??''));}if(t.status==='fulfilled')setTx(t.value);if(l.status==='fulfilled'){setBrokerage(l.value.operations);setLedgerAvailable(true)}else setLedgerAvailable(false);
+  const savedReview=latestReview.status==='fulfilled'?latestReview.value.response:null;
+  if(savedReview?.result)setWorkspaceResults(previous=>({...previous,Opportunities:savedReview}));
+  if(reviewStatus.status==='fulfilled'){
+   const state:OpportunityReviewStatus=reviewStatus.value;
+   setOpportunityRun({status:state.status==='RUNNING'?'running':state.status==='COMPLETED'?'complete':state.status==='FAILED'?'error':'idle',startedAt:state.started_at,finishedAt:state.finished_at,sources:savedReview?.sources??[],message:state.status==='FAILED'?`A revisão diária falhou: ${state.error||'erro não informado'}. O último resultado válido foi preservado.`:null});
+  }
+  setNotice([p,c,t].some(x=>x.status==='rejected')?'Alguns dados não estão disponíveis nesta versão do backend.':'');}catch(e){connectionRef.current=false;setOnline(false);setNotice(`Backend indisponível: ${err(e)}`)}finally{setBusy(false)}}
+ useEffect(()=>{void load()},[]);
+ useEffect(()=>{
+  const timer=window.setInterval(()=>{
+   void b3Api.health().then(()=>{
+    const reconnected=!connectionRef.current;
+    connectionRef.current=true;setOnline(true);
+    if(reconnected)void load();
+   }).catch(()=>{connectionRef.current=false;setOnline(false)});
+  },15_000);
+  return()=>window.clearInterval(timer);
+ },[]);
+ useEffect(()=>{
+  let cancelled=false;
+  const symbol=left.trim().toUpperCase();
+  const optionType=optionTypeForStrategy(strategyA);
+  if(!optionType||!/^[A-Z]{4}\d{1,2}$/.test(symbol)){setOptionRowsA([]);setOptionA('');return}
+  const timer=window.setTimeout(()=>{void b3Api.currentOptions(symbol,optionType,150).then(r=>{if(cancelled)return;const rows=r.options.filter(x=>(x.quote.bid??0)>0);setOptionRowsA(rows);setOptionA(v=>rows.some(x=>x.contract.option_id===v)?v:'')}).catch(e=>{if(!cancelled){setOptionRowsA([]);setOptionA('');setNotice(`${optionType}s ${symbol}: ${err(e)}`)}})},300);
+  return()=>{cancelled=true;window.clearTimeout(timer)}
+ },[left,strategyA]);
+ useEffect(()=>{
+  let cancelled=false;
+  const symbol=right.trim().toUpperCase();
+  const optionType=optionTypeForStrategy(strategyB);
+  if(!optionType||!/^[A-Z]{4}\d{1,2}$/.test(symbol)){setOptionRowsB([]);setOptionB('');return}
+  const timer=window.setTimeout(()=>{void b3Api.currentOptions(symbol,optionType,150).then(r=>{if(cancelled)return;const rows=r.options.filter(x=>(x.quote.bid??0)>0);setOptionRowsB(rows);setOptionB(v=>rows.some(x=>x.contract.option_id===v)?v:'')}).catch(e=>{if(!cancelled){setOptionRowsB([]);setOptionB('');setNotice(`${optionType}s ${symbol}: ${err(e)}`)}})},300);
+  return()=>{cancelled=true;window.clearTimeout(timer)}
+ },[right,strategyB]);
+ useEffect(()=>{
+  const expiries=[...new Set(optionRowsA.filter(row=>row.contract.option_type==='PUT').map(row=>row.contract.expiration_date))].sort();
+  setPutChainExpiry(value=>expiries.includes(value)?value:(expiries[0]||''));
+  setPutCandidateIds(ids=>ids.filter(id=>optionRowsA.some(row=>row.contract.option_id===id)));
+ },[optionRowsA]);
+ async function run(
+  task:string,
+  conversation=false,
+  options?:{ticker?:string|null;context?:Record<string,unknown>;preservePrevious?:boolean}
+ ):Promise<OrchestrateResponse|null>{
+  if(conversation && isGreeting(task)){
+    const greeting:OrchestrateResponse={
+      status:'ONLINE',
+      result:{summary:'Olá! Estou aqui. Posso ajudar com sua carteira, opções, oportunidades, Strategy Lab ou inteligência de mercado.'},
+      sources:[],
+      audit:[],
+      error:null,
+    };
+    setQuestion('');
+    setChat(v=>[...v,{q:task,r:greeting}]);
+    return greeting;
+  }
+  if(!conversation){++inspectionSequence.current;if(!options?.preservePrevious)setAnalysis(null);setNotice('')}
+  const sequence=inspectionSequence.current;
+  const current=()=>conversation||inspectionSequence.current===sequence;
+  let deterministicResult:OrchestrateResponse|null=null;
+  setBusy(true);
+  const requestTicker = options && Object.prototype.hasOwnProperty.call(options,'ticker')
+    ? options.ticker ?? null
+    : ticker || null;
+  const context: Record<string, unknown> = {
+    visible_filters:{option_filter:filter,horizon,market_tab:marketTab,opportunity_assets:opportunityAssets,opportunity_objective:opportunityObjective},
+    ...(conversation&&page==='Strategy Lab'?{comparison_assets:[left.toUpperCase(),right.toUpperCase()],strategy_a:strategyA,strategy_b:strategyB,comparison_amount:amount?Number(amount):null,option_a:optionA||null,option_b:optionB||null}:{}),
+    workspace:page,
+    research_mode:researchMode,
+    selected_ticker:requestTicker,
+    ...(page==='Options'?{selected_option:selectedOption||null}:{}),
+    option_filter:filter||null,
+    asset_view:assetView,
+    horizon,
+    ...(options?.context||{}),
+  };
+  // Workspace actions can use the deterministic dashboard fast path. Free-form
+  // Copilot questions keep only contextual metadata so ambiguous/complex intent
+  // can reach the senior reasoning path instead of being forced into a snapshot.
+  const fastPathUseCases=dashboardFastPathUseCases[page];
+  if(!conversation&&fastPathUseCases){context.dashboard_page=page;context.use_cases=fastPathUseCases}
+  if(!conversation&&page==='Strategy Lab'&&context.analysis_mode==null)context.analysis_mode='deterministic';
+  let pendingIndex=-1;
+  if(conversation){
+    setQuestion('');
+    setChat(v=>{pendingIndex=v.length;return [...v,{q:task,r:null}]});
+  }
+  try{
+    if(conversation && isOperationalStatusQuestion(task)){
+      const health=await b3Api.health();
+      const r:OrchestrateResponse={
+        status:'ONLINE',
+        result:{summary:`Sim. Estou conectado ao B3 Runtime em ${getApiBaseUrl()}.`,service:health.service,llm_enabled:health.llm_enabled},
+        sources:[],
+        audit:[],
+        error:null,
+      };
+      setChat(v=>v.map((item,index)=>index===pendingIndex?{...item,r}:item));
+      setOnline(true);
+      return r;
+    }
+    if(!conversation&&context.analysis_mode!=='deterministic'&&page==='Strategy Lab'){
+    deterministicResult=await b3Api.orchestrate({task,ticker:requestTicker,context:{...context,analysis_mode:'deterministic',research_mode:'stored_only'}});
+    if(!current())return null;
+      if(deterministicResult.result&&typeof deterministicResult.result==='object')setAnalysis({...deterministicResult,result:{...deterministicResult.result,derived_synthesis_status:'PENDING'}});
+    }
+    const r=await b3Api.orchestrate({task,ticker:requestTicker,context},page==='Opportunities'?90*60*1000:195_000);
+    if(!current())return null;
+    const hasResult=!!r.result&&typeof r.result==='object'&&!Array.isArray(r.result);
+    const opportunityIncomplete=!conversation&&page==='Opportunities'&&!isCompletedOpportunityReview(r);
+    const apiError=r.error||(!hasResult?'A API concluiu a requisição sem retornar resultado.':opportunityIncomplete?'A revisão não entregou a síntese integrada e a cobertura de pesquisa esperadas.':null);
+    if(conversation){
+      setChat(v=>v.map((item,index)=>index===pendingIndex?{...item,r}:item));
+    }else{
+      const hasDeterministicResult=!!deterministicResult?.result&&typeof deterministicResult.result==='object';
+      const displayed:OrchestrateResponse=apiError&&hasDeterministicResult?{...deterministicResult!,error:apiError}:r;
+      const priorOpportunity=options?.preservePrevious===true&&analysis!==null;
+      const serverSynthesisStatus=typeof displayed.result?.derived_synthesis_status==='string'?displayed.result.derived_synthesis_status:context.analysis_mode==='deterministic'?'NOT_REQUESTED':'COMPLETED';
+      if(!priorOpportunity||!apiError)setAnalysis({...displayed,result:{...(displayed.result||{}),derived_synthesis_status:apiError?'FAILED':serverSynthesisStatus}});
+      if(apiError)setNotice(`Análise: ${apiError}`);
+    }
+    setOnline(true);
+    return apiError?null:r;
+  }catch(e){
+    if(!current())return null;
+    const message=err(e);
+    if(conversation){
+      setChat(v=>v.map((item,index)=>index===pendingIndex?{...item,error:message}:item));
+    }else{
+      if(deterministicResult?.result&&typeof deterministicResult.result==='object')setAnalysis({...deterministicResult,result:{...deterministicResult.result,derived_synthesis_status:'FAILED'}});
+      setNotice(`Análise: ${message}`);
+    }
+    return null;
+  }finally{if(current())setBusy(false)}
+ }
+ function opportunitySnapshotKey(snapshot:PortfolioSnapshot){return [snapshot.status,snapshot.as_of??'unknown',snapshot.updated_at??'unknown'].join('|')}
+ async function runOpportunityScreen(){
+  const assets=opportunityAssets.split(/[,;\s]+/).filter(Boolean).map(value=>value.toUpperCase());
+  if(busy||opportunitySearchInFlight.current)return;
+  const activeReview=await b3Api.opportunityReviewStatus().catch(()=>null);
+  if(activeReview?.status==='RUNNING'){
+   setOpportunityRun(previous=>({...previous,status:'running',startedAt:activeReview.started_at,finishedAt:null,message:'A revisão diária já está em andamento; acompanhando a mesma execução.'}));
+   return;
+  }
+  opportunitySearchInFlight.current=true;
+  const reviewSequence=++opportunityReviewSequence.current;
+  const reviewedSnapshotKey=portfolio?opportunitySnapshotKey(portfolio):null;
+  const startedAt=new Date().toISOString();
+  setOpportunityRun(previous=>({...previous,status:'running',startedAt,finishedAt:null,message:null}));
+  try{
+   const response=await run(`UC-03: analise ${assets.join(', ')} e todas as ações vigentes da carteira como universo completo. Cruze notícias e eventos datados, histórico recente de preço e volume, fundamentos disponíveis, curva futura B3 PRE e DIC, fatores de mercado e exposição da carteira; cite datas e fontes por tese e diga claramente quando um desses dados estiver indisponível. Compare evidências favoráveis e contrárias e explique por que uma tese importa agora. Depois ordene, da maior para a menor prioridade, somente as oportunidades materiais sustentadas por evidência específica, atual e verificável. Não dê rank positivo a ativo apenas por volatilidade, liquidez ou upside de alvo institucional. Separe oportunidades ranqueadas de ativos para acompanhar; se nenhuma tese passar o critério, retorne ranking vazio e explique as lacunas. Rank é prioridade de revisão, não retorno esperado nem recomendação automática de compra/venda. Considere opções possuídas apenas como exposição/cobertura; não busque cadeia de opções.`,false,{ticker:null,preservePrevious:true,context:{workspace:'Opportunities',selected_ticker:null,opportunity_assets:assets,opportunity_objective:opportunityObjective,include_portfolio_stocks:true,research_mode:researchMode,include_yield_curve:true}});
+   if(!response){
+    const active=await b3Api.opportunityReviewStatus().catch(()=>null);
+    if(active?.status==='RUNNING'){
+     setOpportunityRun(previous=>({...previous,status:'running',startedAt:active.started_at,finishedAt:null,message:'A revisão já estava em andamento; acompanhando a mesma execução.'}));
+     return;
+    }
+   }
+   const finishedAt=new Date().toISOString();
+   const responseResult=response?.result&&typeof response.result==='object'?response.result:{};
+   const failed=!response||Boolean(response.error)||Object.keys(responseResult).length===0||!isCompletedOpportunityReview(response);
+   if(!failed)setWorkspaceResults(previous=>({...previous,Opportunities:response}));
+   const sourceRefs=responseResult.source_refs;
+   const sources=Array.from(new Set(response?[...(response.sources??[]),...(Array.isArray(sourceRefs)?sourceRefs:[])]:workspaceResults.Opportunities?.sources??[])).filter(Boolean);
+   setOpportunityRun(previous=>({...previous,status:failed?'error':'complete',finishedAt,sources,message:failed?'A nova busca não concluiu normalmente. A análise anterior foi preservada; confira as lacunas e tente novamente.':null}));
+  }catch(e){
+   const finishedAt=new Date().toISOString();
+   setOpportunityRun(previous=>({...previous,status:'error',finishedAt,message:`A nova busca falhou: ${err(e)}. A análise anterior foi preservada.`}));
+  }finally{
+   if(reviewedSnapshotKey)opportunityAutoReviews.current.add(reviewedSnapshotKey);
+   opportunitySearchInFlight.current=false;
+   setOpportunityRun(previous=>({...previous}));
+   if(reviewSequence!==opportunityReviewSequence.current)return;
+  }
+ }
+ useEffect(()=>{
+  if(page!=='Opportunities'||opportunityRun.status!=='running')return;
+  let cancelled=false;
+  const poll=async()=>{
+   try{
+    const state=await b3Api.opportunityReviewStatus();
+    if(cancelled||state.status==='RUNNING'||state.status==='NOT_STARTED')return;
+    if(state.status==='COMPLETED'){
+     const latest=await b3Api.latestOpportunityReview();
+     if(cancelled)return;
+     if(latest.response?.result)setWorkspaceResults(previous=>({...previous,Opportunities:latest.response}));
+     setOpportunityRun(previous=>({...previous,status:'complete',startedAt:state.started_at,finishedAt:state.finished_at,sources:latest.response?.sources??previous.sources,message:null}));
+    }else if(state.status==='FAILED'){
+     setOpportunityRun(previous=>({...previous,status:'error',startedAt:state.started_at,finishedAt:state.finished_at,message:`A revisão falhou: ${state.error||'erro não informado'}. O último resultado válido foi preservado.`}));
+    }
+   }catch{/* Keep showing the last known status during a temporary API interruption. */}
+  };
+  const timer=window.setInterval(()=>{void poll()},5000);
+  void poll();
+  return()=>{cancelled=true;window.clearInterval(timer)};
+ },[page,opportunityRun.status]);
+ function openInStrategyLab(response:OrchestrateResponse|null=null){
+  ++inspectionSequence.current;
+  navigate('Strategy Lab');setBusy(false);setNotice('');
+  const comparison=response?.result.strategy_comparison;
+  if(comparison&&typeof comparison==='object'&&!Array.isArray(comparison)){
+   setAnalysis(response);
+  }else if(response?.result.put_chain_comparison){
+   setAnalysis(response);
+  }else{
+   setLeft(ticker||asset);setAnalysis(null);
+  }
+ }
+ async function importPortfolio(e:ChangeEvent<HTMLInputElement>){const f=e.target.files?.[0];e.target.value='';if(!f)return;setBusy(true);try{await b3Api.importPortfolio(f);await load();setNotice('Carteira validada e atualizada.')}catch(x){setNotice(`Importação recusada: ${err(x)}`)}finally{setBusy(false)}}
+ async function importNotes(e:ChangeEvent<HTMLInputElement>){
+  const files=[...(e.target.files||[])];e.target.value='';
+  if(!files.length)return;
+  if(files.length>100||files.some(f=>f.name.toLowerCase().endsWith('.zip'))&&files.length!==1){setNotice('Selecione até 100 PDFs ou um ZIP.');return}
+  setBusy(true);
+  try{
+   if(files[0].name.toLowerCase().endsWith('.zip')){
+    const result=await b3Api.importBrokerageBatch(files[0]);
+    setBatch(JSON.stringify(result,null,2));
+    setNotice(`Notas: ${result.files_processed} PDFs processados, ${result.files_failed} recusados, ${result.inserted_count} execuções inseridas. Confira o resultado por arquivo.`);
+   }else{
+    const results=[];
+    for(const f of files){try{const r=await b3Api.importBrokerageNote(f);results.push({file:f.name,status:'processado',inseridas:r.inserted_count})}catch(x){results.push({file:f.name,status:'erro',detalhe:err(x)})}}
+    setBatch(JSON.stringify(results,null,2));
+    setNotice(`Notas: ${results.filter(r=>r.status==='processado').length} PDFs processados, ${results.filter(r=>r.status==='erro').length} recusados. Confira o resultado por arquivo.`);
+   }
+   await load();
+  }catch(x){setNotice(`Lote: ${err(x)}`)}finally{setBusy(false)}
+ }
+ async function inspect(t:string){
+  const v=t.trim().toUpperCase();
+  if(!/^[A-Z0-9]{4,12}$/.test(v)){setNotice('Informe um ticker B3 válido.');return}
+  const sequence=++inspectionSequence.current;
+  const current=()=>inspectionSequence.current===sequence;
+  if(v!==ticker){setLive(null);setNews(null);setFundamentals(null);setPilot(null);setMarketResults(previous=>({...previous,asset:null}));setPersonalHistory(null)}setTicker(v);setAsset(v);setNewsError('');setFundamentalsError('');setNotice('');setBusy(true);
+  // Publish independent evidence immediately. Stored research wins unless refresh was requested;
+  // external news fills a real evidence gap without waiting for senior synthesis.
+  const loadResearch=async()=>{
+   let stored:ResearchNewsResponse|null=null;
+   try{stored=await b3Api.storedResearch(v);if(current()&&researchMode!=='refresh'&&stored.events.length){setNews(stored);setNewsError('');return}}
+   catch(error){if(researchMode==='stored_only'){if(current())setNewsError(`Research armazenado indisponível: ${err(error)}`);return}}
+   if(researchMode==='stored_only')return;
+   try{const fresh=await b3Api.researchNews(v);if(current()){setNews(fresh);setNewsError('')}}
+   catch(error){if(current()){if(stored?.events.length)setNews(stored);setNewsError(`Busca externa indisponível: ${err(error)}`)}}
+  };
+  await Promise.allSettled([
+    b3Api.personalHistory(v).then(value=>{if(current())setPersonalHistory(value)}),
+    b3Api.fundamentals(v).then(value=>{if(current()){setFundamentals(value);setFundamentalsError('')}}).catch(error=>{if(current()){setFundamentalsError(err(error))}}),
+    b3Api.liveAnalysis(v).then(value=>{if(current())setLive(value)}).catch(error=>{if(current())setNotice(`Cotação/histórico indisponível: ${err(error)}`)}),
+    loadResearch(),
+    b3Api.pilotAnalysis(v).then(value=>{if(current())setPilot(value)}),
+    b3Api.orchestrate({task:`UC-05/06/10: produza uma síntese integrada e prática de ${v}, usando fatos B3, interpretação do João/pesquisa, agentes especialistas, toda a carteira carregada e histórico pessoal relevante. Comece pela leitura/ação sustentada agora e explique o motivo com números e datas: tendência técnica por horizonte (preço vs SMA, RSI, MACD, volatilidade e drawdown disponíveis), fundamentos realmente fornecidos, notícias/eventos elegíveis e seus possíveis efeitos, concentração e exposição total em ações/opções, caixa e histórico de operações. B3 é autoridade para preços, indicadores, fundamentos, quantidades, contratos, cotações, custos e cálculos; João/pesquisa contextualizam eventos e causas sem substituir esses fatos. Reconcilie divergências citando fonte, valor e data; quando unidade ou cobertura impedir reconciliação, explique o que isso bloqueia. Compare manter, aumentar/reduzir e estruturas de opções apenas com cadeia executável e impacto de carteira calculável; recomende uma operação condicional somente com contrato, quantidade, preço, capital, risco e fontes. Se não houver base, diga claramente por que aguardar é a conclusão adequada e qual dado concreto poderia alterá-la. Use texto simples, evite jargão e listas diagnósticas no resumo; não invente valuation, alvo, probabilidade, notícia ou dado. Diferencie fato, interpretação e incerteza; amostra vazia não prova ausência de risco e VALIDATED/PASS não significa cobertura completa.`,ticker:v,context:{workspace:'Market Intelligence',selected_ticker:v,asset_view:true,horizon,research_mode:researchMode,include_yield_curve:true}})
+      .then(value=>{if(current()){setMarketResults(v=>({...v,asset:value}));const context=value.result.research_context as {as_of?:string;tickers?:Record<string,{research_events?:ResearchNewsResponse['events']}>}|undefined;const events=context?.tickers?.[v]?.research_events;if(events)setNews({ticker:v,as_of:context?.as_of||'',events,source_refs:events.map(e=>e.source_ref).filter((ref):ref is string=>typeof ref==='string')})}})
+      .catch(error=>{if(current())setNotice(`Inteligência integrada indisponível: ${err(error)}`)}),
+  ]);
+  if(current())setBusy(false);
+ }
 
-export default App;
+ function openAssetAnalysis(symbol:string){const requested=symbol.trim().toUpperCase();if(!/^[A-Z0-9]{4,12}$/.test(requested)){setNotice('Informe um ticker B3 válido.');return}navigate('Market Intelligence',requested);setAssetView(true);void inspect(requested)}
+
+ const stocks=(portfolio?.positions||[]).filter(p=>p.instrument_type==='STOCK').sort((a,b)=>Math.abs(b.market_value||0)-Math.abs(a.market_value||0));const options=(portfolio?.positions||[]).filter(p=>p.instrument_type==='OPTION');
+ const receivedIncomeCell=(symbol:string)=>{
+  const income=portfolio?.received_income;
+  if(!income)return 'Indisponível';
+  const summary=income.summaries.find(row=>row.ticker===symbol);
+  if(!summary)return 'Sem registro no período';
+  return <span title={`Dividendos líquidos: ${brl(summary.dividends_net)}; JCP líquido: ${brl(summary.jcp_net)}; ${summary.payment_count} pagamentos; ${income.period_start} a ${income.period_end}`}>{brl(summary.total_net)}</span>;
+ };
+ const putExpiries=[...new Set(optionRowsA.filter(row=>row.contract.option_type==='PUT').map(row=>row.contract.expiration_date))].sort();
+ const putRowsForExpiry=optionRowsA.filter(row=>row.contract.option_type==='PUT'&&row.contract.expiration_date===putChainExpiry);
+ const allHistory=live?.market.price_history||[];
+ const horizonDays:Record<string,number|undefined>={'1W':7,'1M':31,'3M':93,'6M':186,'1Y':366,'Tudo':undefined};
+ const cutoffTime=live?new Date(live.as_of).getTime()-(horizonDays[horizon]??Infinity)*86400000:0;
+ const visibleHistory=horizonDays[horizon]===undefined?allHistory:allHistory.filter(row=>new Date(row.observation_timestamp).getTime()>=cutoffTime);
+ const coverageLimited=Boolean(live&&horizonDays[horizon]!==undefined&&allHistory.length&&new Date(allHistory[0].observation_timestamp).getTime()>cutoffTime);
+ const quant=live?.market.quant||{};
+ const quantValue=(key:string,digits=2,suffix='')=>{const value=quant[key];return typeof value==='number'&&Number.isFinite(value)?`${value.toFixed(digits)}${suffix}`:'Indisponível'};
+ const quantPercent=(key:string)=>{const value=quant[key];return typeof value==='number'&&Number.isFinite(value)?`${(value*100).toFixed(2)}%`:'Indisponível'};
+
+ const currentPriceForReading=(live?.market.current_quote??live?.market.latest)?.close;
+ const technicalRead:Array<{title:string;text:string}>=[];
+ const sma20=typeof quant.sma_20==='number'?quant.sma_20:null,sma50=typeof quant.sma_50==='number'?quant.sma_50:null,sma200=typeof quant.sma_200==='number'?quant.sma_200:null;
+ if(typeof currentPriceForReading==='number'&&sma20!==null&&sma50!==null){
+  const above20=currentPriceForReading>=sma20,above50=currentPriceForReading>=sma50;
+  const trend=above20&&above50?'alinhamento positivo de curto e médio prazo':!above20&&!above50?'pressão negativa de curto e médio prazo':'sinal misto entre as médias de 20 e 50 pregões';
+  technicalRead.push({title:'Tendência de curto e médio prazo',text:'Preço '+brl(currentPriceForReading)+' '+(above20?'acima':'abaixo')+' da SMA20 ('+brl(sma20)+') e '+(above50?'acima':'abaixo')+' da SMA50 ('+brl(sma50)+'); '+trend+' na amostra.'});
+ }
+ if(sma200===null)technicalRead.push({title:'Tendência de longo prazo',text:'SMA200 indisponível com '+(live?.market.history_count??0)+' registros; sem conclusão para esse horizonte.'});
+ else if(typeof currentPriceForReading==='number')technicalRead.push({title:'Tendência de longo prazo',text:'Preço '+(currentPriceForReading>=sma200?'acima':'abaixo')+' da SMA200 ('+brl(sma200)+'), conforme a amostra disponível.'});
+ if(typeof quant.rsi_14==='number'){
+  const rsi=quant.rsi_14,reading=rsi>=70?'na zona tradicional de sobrecompra':rsi>=60?'elevado e próximo do limiar tradicional de sobrecompra (70)':rsi<=30?'na zona tradicional de sobrevenda':rsi<=40?'fraco e próximo do limiar tradicional de sobrevenda (30)':'na faixa intermediária tradicional (30–70)';
+  technicalRead.push({title:'Força relativa · RSI (14)',text:'RSI '+rsi.toFixed(2)+': '+reading+'. Isoladamente, não confirma reversão nem determina compra ou venda.'});
+ }
+ if(typeof quant.macd==='number')technicalRead.push({title:'Momentum · MACD',text:'MACD '+brl(quant.macd)+' está '+(quant.macd>=0?'positivo':'negativo')+' pelo cálculo do backend; série de sinal/cruzamento não exposta, então não se conclui cruzamento.'});
+ if(typeof quant.volatility_20d==='number'&&typeof quant.volatility_60d==='number')technicalRead.push({title:'Volatilidade realizada',text:'20 pregões: '+quantPercent('volatility_20d')+'; 60 pregões: '+quantPercent('volatility_60d')+'. A janela curta está '+(quant.volatility_20d<quant.volatility_60d?'abaixo':'acima ou igual à')+' janela de 60 dias; são medidas históricas anualizadas, não previsão.'});
+ if(typeof quant.max_drawdown==='number')technicalRead.push({title:'Queda máxima observada',text:quantPercent('max_drawdown')+' no período histórico disponível; esse é o recuo máximo pico-a-vale da amostra, não a queda atual.'});
+ const newsPanel=<section className="panel"><h2>Notícias e eventos verificados</h2>{newsError&&<div className="state-banner limited">{newsError}</div>}{news?.events.length?news.events.map((event,i)=>{const headline=eventText(event,'headline','title','event_type')||`Evento ${i+1}`;const summary=eventText(event,'summary','description');const date=eventText(event,'published_at','published_date','available_timestamp');const source=eventText(event,'source_name','source');const url=eventUrl(event);return <article className="research-event" key={String(event.source_record_id||url||i)}><h3>{url?<a href={url} target="_blank" rel="noreferrer">{headline}</a>:headline}</h3>{date&&<small>{when(date)}{source?` · ${source}`:''}</small>}{summary&&<p>{summary}</p>}</article>}):<p className="muted">{news?.as_of?'Pesquisa concluída em '+when(news.as_of)+': nenhum evento com publicação admissível até o corte foi encontrado para '+(ticker||'este ativo')+'.':newsError?'A pesquisa de notícias falhou; veja o detalhe acima.':busy?'Consultando research armazenado e buscando notícias que preencham lacunas. A síntese pode aparecer enquanto esta consulta termina.':'Nenhuma pesquisa datada e verificável disponível.'}</p>}{news?.excluded_future_count? <p className="muted">{news.excluded_future_count} registro(s) com publicação posterior ao corte {when(news.as_of)} foram excluídos e não entraram na análise. Confira datas e fuso horário na origem; até resolver a diferença, a cobertura de notícias pode estar incompleta.</p>:null}{news?.source_refs?.length?<small className="muted">Fontes: {news.source_refs.join(' · ')} · corte {when(news.as_of)}</small>:null}{!news?.events.length&&ticker&&<button className="secondary" disabled={busy} onClick={()=>void inspect(ticker)}>Pesquisar novamente</button>}</section>;
+ return <div className="app-shell"><header className="topbar"><div className="brand"><span className="brand-mark">▮▮▮</span><div><strong>B3 Investment Copilot</strong><small>Carteira · Opções · Inteligência</small></div></div><button className="backend-button" onClick={()=>setSettings(true)}><span className={online?'online-dot':'offline-dot'}>●</span> {online?'Conectado':'Offline'} · {getApiBaseUrl()}</button><button className="ghost copilot-toggle" aria-expanded={copilotOpen} onClick={()=>setCopilotOpen(!copilotOpen)}>✦ Copilot {copilotOpen?'−':'+'}</button></header><div className={`body ${copilotOpen?'':'copilot-closed'} ${sidebarCollapsed?'sidebar-collapsed':''}`}><aside className="sidebar"><button className="sidebar-toggle ghost" aria-label="Recolher menu" onClick={()=>setSidebarCollapsed(!sidebarCollapsed)}>{sidebarCollapsed?'→':'← Recolher menu'}</button><nav>{pages.map((p)=><button key={p} className={`nav-item ${page===p?'active':''}`} onClick={()=>navigate(p)} aria-current={page===p?'page':undefined} title={p} aria-label={p}><span className="nav-icon" aria-hidden="true">{getPageDefinition(p).icon}</span><strong>{p}</strong></button>)}</nav><section className="connections"><h3>Dados</h3><label className="load">{portfolio?.updated_at?'Atualizar carteira BTG':'Carregar carteira BTG'}<input hidden type="file" accept=".xlsx,.xlsm" onChange={importPortfolio}/></label><label className="load secondary">Carregar notas PDF / ZIP<input hidden type="file" accept=".pdf,.zip" multiple onChange={importNotes}/></label><button className="load secondary" onClick={()=>setCapitalEdit(true)}>Capital disponível</button><button className="load secondary" onClick={()=>setSettings(true)}>Configurar servidor Ubuntu</button><small>Carteira: {when(portfolio?.updated_at)}</small>{batch&&<details><summary>Resultado das notas</summary><pre>{batch}</pre></details>}</section></aside><main className="workspace"><div className="workspace-head"><div><h1>{page}</h1><p>{page==='Portfolio'?`Snapshot BTG: ${portfolio?.as_of||'Indisponível'}`:getPageDefinition(page).subtitle}</p></div><div className="task-indicator" role="status" aria-live="polite" aria-atomic="true" aria-busy={busy}>{busy&&<><span className="task-indicator__light" aria-hidden="true"/><span>Processando tarefa…</span></>}</div><button className="refresh" disabled={busy} onClick={()=>{void load();if(page==='Market Intelligence'){if(assetView){const selected=asset.trim()||ticker.trim();if(selected)void inspect(selected)}else{const prompt=getPageDefinition('Market Intelligence').tabs?.find(tab=>tab.id===marketTab)?.prompt;if(prompt)void run(prompt,false,{ticker:null,preservePrevious:true,context:{selected_ticker:null}})}}else if(page==='Options')void run('UC-02 snapshot de opções.',false,{context:{analysis_mode:'deterministic'}})}}>{busy?'Carregando…':'Atualizar'}</button></div>{busy&&<div className="loading-strip" role="status">Consultando dados · preservando fontes e datas de corte</div>}{notice&&<div className="state-banner limited" role="status">{notice}</div>}{['Opportunities','Market Intelligence','Strategy Lab'].includes(page)&&<label className="research-policy">Notícias e eventos <select value={researchMode} onChange={e=>setResearchMode(e.target.value)}><option value="stored_first">Reusar base e buscar lacunas</option><option value="stored_only">Somente research armazenado</option><option value="refresh">Atualizar research externo</option></select><small>Aplica-se ao research; cotações e fundamentos seguem seus provedores.</small></label>}
+ {page==='Overview'&&<OverviewWorkspace portfolio={portfolio} capital={capital} onNavigate={p=>navigate(p as Page)}/>}
+ {<div hidden={page!=='Admin'}><Suspense fallback={<State kind="loading" title="Carregando diagnóstico">Consultando o runtime B3.</State>}><AdminWorkspace/></Suspense></div>}
+ {<div hidden={page!=='Portfolio'}><Suspense fallback={<State kind="loading" title="Carregando carteira">Preparando a visualização.</State>}><PortfolioWorkspace portfolio={portfolio} capital={capital} result={workspaceResults.Portfolio??null} onSelect={setTicker} onNavigate={(p,t)=>navigate(p as Page,t)}/></Suspense></div>}
+ {<div hidden={page!=='Options'}><OptionsWorkspace positions={options} operations={brokerage} ledgerAvailable={ledgerAvailable} onSelect={(contract,underlying)=>{setSelectedOption(contract);setTicker(underlying??contract)}} portfolio={portfolio} pnl={workspaceResults.Portfolio??null} result={workspaceResults.Options??null}/><button disabled={busy} onClick={()=>void run('UC-02 snapshot de opções com DTE.',false,{context:{analysis_mode:'deterministic'}})}>Atualizar DTE canônico</button></div>}
+ {<div hidden={page!=='History & Learning'}><HistoryWorkspace ticker={ticker} onSelect={setTicker}/></div>}
+ {page==='Risk & Stress'&&<RiskWorkspace ticker={ticker} result={analysis} busy={busy} onRun={(task,context)=>void run(task,false,{ticker:null,context})}/>}
+ {<div hidden={page!=='Opportunities'}><section className={`opportunity-run-status ${opportunityRun.status}`} role="status" aria-live="polite" aria-atomic="true" aria-busy={opportunityRun.status==='running'}><span className="opportunity-run-led" aria-hidden="true"/><div><strong>{opportunityRun.status==='running'?'Analisando oportunidades…':opportunityRun.status==='complete'?'Busca concluída':opportunityRun.status==='error'?'Falha na nova busca':'Busca ainda não executada'}</strong><p>{opportunityRun.startedAt?`Início ${when(opportunityRun.startedAt)}`:'Execute uma busca para atualizar as teses e a exposição.'}{opportunityRun.finishedAt?` · Término ${when(opportunityRun.finishedAt)}`:''}</p>{opportunityRun.status==='running'&&<p>Revisão completa em andamento: cruzando notícias datadas, histórico, fundamentos, curvas PRE/DIC e exposição da carteira. Pode levar vários minutos; a busca só será concluída após a síntese do agente.</p>}{opportunityRun.message&&<p role="alert">{opportunityRun.message}</p>}{opportunityRun.sources.length>0&&<details><summary>Fontes utilizadas ({opportunityRun.sources.length})</summary><ul>{opportunityRun.sources.map(source=><li key={source}>{source}</li>)}</ul></details>}</div></section><div className="toolbar"><form onSubmit={e=>{e.preventDefault();openAssetAnalysis(asset)}}><label>Ativo para análise detalhada <input required value={asset} onChange={e=>setAsset(e.target.value)} placeholder="PETR4"/></label><button>Ver gráfico e análise</button></form><form onSubmit={e=>{e.preventDefault();void runOpportunityScreen()}}>
+ <label>Ações candidatas acompanhadas<input required value={opportunityAssets} onChange={e=>setOpportunityAssets(e.target.value)} placeholder="VALE3, RENT3, VIVT3, BBAS3"/></label>
+ <label>Ordenação estatística auxiliar<select value={opportunityObjective} onChange={e=>setOpportunityObjective(e.target.value)}><option value="COMPARE_ONLY">Comparar sem ranking</option><option value="LOWEST_REALIZED_VOLATILITY_60D">Menor volatilidade realizada · 60 retornos</option><option value="HIGHEST_OBSERVED_LIQUIDITY_20D">Maior proxy de liquidez · 20 observações</option></select></label>
+ <p className="muted">A busca une estes candidatos a todas as ações do snapshot vigente. O agente cruza notícias, histórico, fundamentos, curvas futuras PRE/DIC e carteira; uma revisão completa pode levar vários minutos. Opções abertas entram somente como exposição; nenhuma cadeia é consultada.</p>
+ <button disabled={busy||opportunityRun.status==='running'}>Buscar novas oportunidades</button>
+ </form></div><Suspense fallback={<State kind="loading" title="Carregando universo">Preparando a visualização.</State>}><OpportunityExplorer data={workspaceResults.Opportunities??null} onSelect={setTicker} onCompare={symbol=>{navigate('Strategy Lab',symbol);setStrategyB('Comprar ação')}}/></Suspense></div>}
+ <div hidden={page!=='Strategy Lab'}><StrategySession researchMode={researchMode} portfolioRevision={portfolio?JSON.stringify(portfolio):null}/></div>
+ {page==='Strategy Lab'&&<details className="panel"><summary>Comparação estruturada e premissas</summary><section className="panel"><div className="section-head"><div><h2>Comparar alternativas</h2><p>Mesmo orçamento, fatos verificados e premissas explícitas.</p></div><span className="badge">Decisão humana</span></div><details className="comparison-inputs" open={!analysis}><summary>Ativos, estratégias e orçamento · editar premissas</summary><form data-testid="primary-comparison" className="lab-form" onSubmit={e=>{e.preventDefault();void run(`UC-04 compare ${strategyA} em ${left} versus ${strategyB} em ${right}. Use evidência qualificada.`,false,{ticker:null,context:{comparison_assets:[left.toUpperCase(),right.toUpperCase()],strategy_a:strategyA,strategy_b:strategyB,comparison_amount:Number(amount),option_a:optionA||null,option_b:optionB||null,analysis_mode:'deterministic',research_mode:'stored_only'}})}}><label>Ativo A<input aria-label="Comparação ativo A" required value={left} onChange={e=>setLeft(e.target.value.toUpperCase())}/></label><label>Ativo B<input aria-label="Comparação ativo B" required value={right} onChange={e=>setRight(e.target.value.toUpperCase())}/></label><label>Estratégia A<select aria-label="Comparação estratégia A" value={strategyA} onChange={e=>setStrategyA(e.target.value)}>{['Comprar ação','Vender PUT','Vender CALL coberta','Manter'].map(t=><option key={t}>{t}</option>)}</select></label><label>Estratégia B<select aria-label="Comparação estratégia B" value={strategyB} onChange={e=>setStrategyB(e.target.value)}>{['Comprar ação','Vender PUT','Vender CALL coberta','Manter'].map(t=><option key={t}>{t}</option>)}</select></label><label>Orçamento por alternativa (R$)<input aria-label="Comparação orçamento" required type="number" min="0.01" step="0.01" value={amount} onChange={e=>setAmount(e.target.value)}/></label><button disabled={busy}>Comparar fatos</button><p className="muted">Para opções, escolha o contrato exato nos controles avançados. Retorno esperado permanece desconhecido quando não há previsão qualificada.</p></form></details></section><section className="panel" data-testid="primary-comparison-result"><h2>Resultado da comparação</h2>{busy&&!analysis&&<State kind="loading" title="Consultando alternativas">Dados canônicos aparecem antes da síntese.</State>}<AnalysisOutput data={analysis}/></section><details className="panel"><summary>Premissas e estratégias avançadas: cenários, custos, troca financiada e strikes</summary><section className="panel"><h2>Decisão econômica · duas compras</h2><form className="lab-form" onSubmit={e=>{e.preventDefault();const a=left.trim().toUpperCase(),b=right.trim().toUpperCase();const pa=economicPricesA.split(',').map(x=>Number(x.trim())),pb=economicPricesB.split(',').map(x=>Number(x.trim()));if(a===b||pa.length!==pb.length||pa.length>9||pa.some(x=>!Number.isFinite(x)||x<0)||pb.some(x=>!Number.isFinite(x)||x<0)){setNotice('Informe duas ações distintas e o mesmo número de preços possíveis, até 9 cenários.');return;}const maybe=(v:string)=>v.trim()===''?undefined:Number(v);void run(`Compare economicamente comprar ${a} versus ${b} com orçamento igual. Use os cenários de preços e os custos e dividendos que informei; são hipóteses, não previsões. Explique resultado líquido, caixa residual, custo de oportunidade e limitações.`,false,{ticker:null,context:{selected_ticker:null,comparison_assets:[a,b],strategy_a:'Comprar ação',strategy_b:'Comprar ação',comparison_amount:Number(amount),economic_inputs:{objective:economicObjective,horizon:scenarioHorizon,entry_costs_brl:{[a]:maybe(economicEntryA),[b]:maybe(economicEntryB)},scenarios:pa.map((price,index)=>({name:`Cenário ${index+1}`,terminal_prices_brl:{[a]:price,[b]:pb[index]},gross_dividends_per_share_brl:{[a]:maybe(economicDividendA),[b]:maybe(economicDividendB)},exit_costs_brl:{[a]:maybe(economicExitA),[b]:maybe(economicExitB)}}))}}});}}><label>Ação A<input required value={left} onChange={e=>setLeft(e.target.value)}/></label><label>Ação B<input required value={right} onChange={e=>setRight(e.target.value)}/></label><label>Orçamento igual por alternativa (R$)<input required type="number" min="0.01" step="0.01" value={amount} onChange={e=>setAmount(e.target.value)}/></label><label>Horizonte<input required type="date" value={scenarioHorizon} onChange={e=>setScenarioHorizon(e.target.value)}/></label><label>Preços possíveis A no horizonte (R$, separados por vírgula)<input required value={economicPricesA} onChange={e=>setEconomicPricesA(e.target.value)} placeholder="Informe os preços de cada cenário"/></label><label>Preços possíveis B, na mesma ordem<input required value={economicPricesB} onChange={e=>setEconomicPricesB(e.target.value)}/></label>{[['Dividendos brutos A por ação no período',economicDividendA,setEconomicDividendA],['Dividendos brutos B por ação no período',economicDividendB,setEconomicDividendB],['Custos totais de entrada A',economicEntryA,setEconomicEntryA],['Custos totais de entrada B',economicEntryB,setEconomicEntryB],['Custos totais de saída A, incluindo impostos do cenário',economicExitA,setEconomicExitA],['Custos totais de saída B, incluindo impostos do cenário',economicExitB,setEconomicExitB]].map(([label,value,setter])=><label key={String(label)}>{String(label)}<input type="number" min="0" step="0.01" value={String(value)} onChange={e=>(setter as (value:string)=>void)(e.target.value)} placeholder="Indisponível se vazio; informe 0 quando essa for sua hipótese"/></label>)}<label>Objetivo<select value={economicObjective} onChange={e=>setEconomicObjective(e.target.value)}><option value="COMPARE_ONLY">Comparar sem preferência</option><option value="MAXIMIZE_WORST_CASE_NET_RETURN">Maior retorno líquido no pior cenário informado</option></select></label><button disabled={busy}>Comparar decisão econômica</button><p className="muted">Os cenários são suas hipóteses. Custos devem incluir taxas, impostos e slippage; o sistema não estima esses valores. Caixa residual rende zero neste modelo. Dados vazios não são considerados zero.</p></form></section><section className="panel"><h2>Troca financiada de ações</h2><form className="lab-form" onSubmit={e=>{e.preventDefault();void run(`Compare manter ${fundedQuantity} ações ${left} versus vender essa quantidade para financiar ${right}. Explique o fluxo de caixa e restrições; não invente custos, retorno ou execução.`,false,{ticker:null,context:{selected_ticker:null,comparison_assets:[left.trim().toUpperCase(),right.trim().toUpperCase()],funded_switch:{quantity:Number(fundedQuantity),fees_brl:fundedFees===''?null:Number(fundedFees),taxes_brl:fundedTaxes===''?null:Number(fundedTaxes)}}})}}><label>Ação a vender<input required value={left} onChange={e=>setLeft(e.target.value)}/></label><label>Ação a comprar<input required value={right} onChange={e=>setRight(e.target.value)}/></label><label>Quantidade a vender<input required type="number" min="1" step="1" value={fundedQuantity} onChange={e=>setFundedQuantity(e.target.value)}/></label><label>Custos totais do cenário (R$)<input type="number" min="0" step="0.01" value={fundedFees} onChange={e=>setFundedFees(e.target.value)} placeholder="UNKNOWN se vazio"/></label><label>Impostos informados do cenário (R$)<input type="number" min="0" step="0.01" value={fundedTaxes} onChange={e=>setFundedTaxes(e.target.value)} placeholder="UNKNOWN se vazio"/></label><button disabled={busy}>Comparar troca financiada</button><p className="muted">Custos e impostos são premissas informadas; não são estimados automaticamente. A comparação não executa ordens.</p></form><h2>Comparar alternativas</h2><form className="lab-form" onSubmit={e=>{e.preventDefault();const assetA=left.toUpperCase();const assetB=right.toUpperCase();const optionTextA=optionTypeForStrategy(strategyA)&&optionA?` contrato ${optionA}`:'';const optionTextB=optionTypeForStrategy(strategyB)&&optionB?` contrato ${optionB}`:'';const shocks=scenarioShocks.trim()?scenarioShocks.split(',').map(value=>Number(value.trim())):[];void run(`UC-04: compare ${strategyA} em ${assetA}${optionTextA} e ${strategyB} em ${assetB}${optionTextB}${amount?`, valor informado R$ ${amount}`:''}. Use cotações atuais OPLAB separadas do histórico. Mostre cenários, premissas e riscos canônicos; não atribua probabilidade aos choques.`,false,{ticker:null,context:{selected_ticker:null,comparison_assets:[assetA,assetB],strategy_a:strategyA,strategy_b:strategyB,option_a:optionTypeForStrategy(strategyA)?optionA:null,option_b:optionTypeForStrategy(strategyB)?optionB:null,comparison_amount:amount?Number(amount):null,scenario_horizon:scenarioHorizon||null,scenario_shocks_pct:scenarioHorizon?shocks:null,scenario_objective:scenarioObjective,put_objective:strategyA==='Vender PUT'&&strategyB==='Vender PUT'?putPairObjective:'COMPARE_ONLY'}})}}>{strategyA==='Vender PUT'&&strategyB==='Vender PUT'&&<label>Objetivo das duas PUTs<select value={putPairObjective} onChange={e=>setPutPairObjective(e.target.value)}><option value="COMPARE_ONLY">Comparar sem vencedor</option><option value="LOWEST_MODEL_EXPIRY_ITM">Menor estimativa de ITM no próprio vencimento</option><option value="HIGHEST_GROSS_PREMIUM_PER_CAPITAL_30D">Maior prêmio bruto por capital normalizado a 30 dias</option></select><small>Vencimentos podem diferir. Prêmio bruto não é retorno esperado; ITM não é probabilidade comprovada de exercício.</small></label>}<label>Ativo A<input required value={left} onChange={e=>setLeft(e.target.value)} placeholder="ITUB4"/></label><label>Estratégia A<select value={strategyA} onChange={e=>setStrategyA(e.target.value)}>{['Comprar ação','Vender/reduzir ação','Vender PUT','Vender CALL coberta','Manter'].map(x=><option key={x}>{x}</option>)}</select></label>{optionTypeForStrategy(strategyA)&&<label>{optionTypeForStrategy(strategyA)} A<select required value={optionA} onChange={e=>setOptionA(e.target.value)}><option value="">Selecione contrato OPLAB</option>{optionRowsA.map(row=><option key={row.contract.option_id} value={row.contract.option_id}>{row.contract.option_id} · Strike {brl(row.contract.strike)} · {row.contract.expiration_date} · Bid {brl(row.quote.bid)} · Ask {brl(row.quote.ask)} · Last {brl(row.quote.last)}</option>)}</select></label>}<label>Ativo B<input required value={right} onChange={e=>setRight(e.target.value)} placeholder="WEGE3"/></label><label>Estratégia B<select value={strategyB} onChange={e=>setStrategyB(e.target.value)}>{['Vender PUT','Vender CALL coberta','Vender/reduzir ação','Comprar ação','Manter'].map(x=><option key={x}>{x}</option>)}</select></label>{optionTypeForStrategy(strategyB)&&<label>{optionTypeForStrategy(strategyB)} B<select required value={optionB} onChange={e=>setOptionB(e.target.value)}><option value="">Selecione contrato OPLAB</option>{optionRowsB.map(row=><option key={row.contract.option_id} value={row.contract.option_id}>{row.contract.option_id} · Strike {brl(row.contract.strike)} · {row.contract.expiration_date} · Bid {brl(row.quote.bid)} · Ask {brl(row.quote.ask)} · Last {brl(row.quote.last)}</option>)}</select></label>}<label>Valor a simular em R$ {strategyA==='Vender/reduzir ação'||strategyB==='Vender/reduzir ação'?'(obrigatório para redução)':'(opcional)'}<input type="number" min="0" required={strategyA==='Vender/reduzir ação'||strategyB==='Vender/reduzir ação'} value={amount} onChange={e=>setAmount(e.target.value)}/></label><label>Horizonte comum dos cenários<input type="date" value={scenarioHorizon} onChange={e=>setScenarioHorizon(e.target.value)}/></label><label>Choques de preço em % (separados por vírgula)<input value={scenarioShocks} onChange={e=>setScenarioShocks(e.target.value)} placeholder="-10, 0, 10"/></label><label>Objetivo<select value={scenarioObjective} onChange={e=>setScenarioObjective(e.target.value)}><option value="COMPARE_ONLY">Comparar sem ranking</option><option value="MAXIMIZE_WORST_CASE_RETURN_ON_CAPITAL">Maior retorno no pior cenário informado</option></select></label><button>Comparar</button><p className="muted">Sem horizonte, a comparação fundamental continua disponível sem payoff projetado. Para opções, o horizonte precisa coincidir com o vencimento. Choques são hipóteses suas, não previsões ou probabilidades. PUT usa 1 contrato cash-secured e o bid atual; CALL exige cobertura na carteira. Reduzir ação usa valor nocional e não infere quantidade executável, impostos, taxas ou slippage.</p></form></section>{page==='Strategy Lab'&&<section className="panel"><h2>Comparar strikes PUT</h2><p className="muted">Use Ativo A com estratégia “Vender PUT” para carregar uma única cadeia OPLAB; selecione contratos do mesmo vencimento. Bid, spread, liquidez e cenários são comparados sem substituir contratos.</p><form className="lab-form" onSubmit={e=>{e.preventDefault();const shocks=scenarioShocks.trim()?scenarioShocks.split(',').map(value=>Number(value.trim())):[];void run(`UC-04: compare ${putCandidateIds.length} PUT strikes de ${left.toUpperCase()} para ${putChainExpiry}.`,false,{ticker:null,context:{selected_ticker:null,comparison_ticker:left.toUpperCase(),put_candidate_option_ids:putCandidateIds,scenario_horizon:putChainExpiry||null,scenario_shocks_pct:putChainExpiry?shocks:null,scenario_objective:scenarioObjective}})}}><label>Ativo<input required value={left} onChange={e=>setLeft(e.target.value)} placeholder="VALE3"/></label><label>Vencimento<select required value={putChainExpiry} onChange={e=>{setPutChainExpiry(e.target.value);setPutCandidateIds([])}}><option value="">Selecione vencimento</option>{putExpiries.map(expiry=><option key={expiry} value={expiry}>{expiry}</option>)}</select></label>{putRowsForExpiry.map(row=><label key={row.contract.option_id} className="candidate-option"><input type="checkbox" checked={putCandidateIds.includes(row.contract.option_id)} onChange={e=>setPutCandidateIds(ids=>e.target.checked?[...ids,row.contract.option_id]:ids.filter(id=>id!==row.contract.option_id))}/>{row.contract.option_id} · Strike {brl(row.contract.strike)} · Bid {brl(row.quote.bid)} · Ask {brl(row.quote.ask)} · IV {row.quote.implied_volatility??'UNKNOWN'} · Volume {row.quote.volume??'UNKNOWN'} · OI {row.quote.open_interest??'UNKNOWN'}</label>)}<button disabled={putCandidateIds.length<2||busy}>Comparar {putCandidateIds.length} PUTs</button><p className="muted">Cenários e objetivo usam os controles gerais abaixo. Estimativas de ITM/touch dependem de IV e são não calibradas; assignment antecipado e frequência pessoal permanecem campos separados.</p></form></section>}</details></details>}
+ {page==='Market Intelligence'&&<><div className="workspace-tabs"><button className={!assetView?'selected':''} onClick={()=>setAssetView(false)}>Contexto de mercado</button><button className={assetView?'selected':''} onClick={()=>setAssetView(true)}>Ativo · gráfico e indicadores</button></div>{!assetView?<><div className="workspace-tabs" role="tablist">{getPageDefinition('Market Intelligence').tabs!.map(t=><button key={t.id} role="tab" aria-selected={marketTab===t.id} className={marketTab===t.id?'selected':''} onClick={()=>setMarketTab(t.id)}>{t.label}</button>)}</div><section className="panel"><h2>Regime, fatores e eventos</h2><p className="muted">Esta aba resume o mercado amplo. Para cotação, gráfico histórico, volume e indicadores de um ticker, abra a análise de ativo.</p><button disabled={busy} onClick={()=>void run(getPageDefinition('Market Intelligence').tabs!.find(t=>t.id===marketTab)!.prompt,false,{ticker:null,preservePrevious:true,context:{selected_ticker:null}})}>Analisar contexto</button> <button onClick={()=>{const selected=asset.trim()||ticker.trim();setAssetView(true);if(selected)void inspect(selected)}}>Analisar ativo · abrir gráfico</button><MarketContext tab={marketTab} data={analysis} busy={busy} portfolio={portfolio}/>{marketTab==='factors'&&!analysis&&<State kind="limited" title="Fatores · amostra limitada">Solicite a análise para consultar cobertura e validação estatística. Associação não é causalidade.</State>}</section></>:<><div className="toolbar"><form onSubmit={e=>{e.preventDefault();void inspect(asset)}}><label>Ativo B3 <input required value={asset} onChange={e=>setAsset(e.target.value)} placeholder="PETR4"/></label><button disabled={busy}>Analisar</button></form><div>{['1W','1M','3M','6M','1Y','Tudo'].map(h=><button key={h} className={h===horizon?'selected':''} onClick={()=>setHorizon(h)}>{({'1W':'1S','1Y':'1A'} as Record<string,string>)[h]||h}</button>)}</div></div><section className="panel"><h2>Análise do agente B3</h2>{busy&&!analysis&&<p className="muted" role="status">Síntese em andamento. Evidências disponíveis aparecem assim que chegam.</p>}{!analysis&&<PersonalHistory value={personalHistory}/>}<AnalysisOutput data={analysis}/></section><div className="cards"><div className="metric"><span>Ativo</span><strong>{ticker||'—'}</strong><small>{when(live?.as_of)}</small></div><div className="metric"><span>{live?.market.current_quote?'Cotação atual':'Último fechamento'}</span><strong>{brl((live?.market.current_quote??live?.market.latest)?.close)}</strong><small>{when((live?.market.current_quote??live?.market.latest)?.observation_timestamp)} · {(live?.market.current_quote??live?.market.latest)?.source||'Fonte indisponível'}{live?.market.current_quote_status==='UNAVAILABLE'?' · cotação corrente indisponível':''}</small></div><div className="metric"><span>Volume</span><strong>{live?.market.latest.volume??'—'}</strong><small>Registro diário de {when(live?.market.latest.observation_timestamp)}</small></div></div><section className="panel"><h2>Histórico de preços · {({'1W':'1S','1Y':'1A'} as Record<string,string>)[horizon]||horizon}</h2>{live?<><p className="muted">Base de preço uniforme na série: ajustado somente com cobertura integral; caso contrário, fechamento bruto. {visibleHistory.length} de {live.market.history_count} registros · {allHistory.length?when(allHistory[0].observation_timestamp):'sem data inicial'} a {allHistory.length?when(allHistory[allHistory.length-1].observation_timestamp):'—'} · dados até {when(live.as_of)} · {live.source_refs.join(' · ')}</p>{coverageLimited&&<div className="state-banner limited">A janela {horizon} foi solicitada, mas o histórico começa em {when(allHistory[0].observation_timestamp)}; o gráfico cobre somente os registros disponíveis.</div>}<Suspense fallback={<State kind="loading" title="Carregando gráfico">Preparando a visualização.</State>}><PriceChart priceBasis={allHistory.every(row=>typeof row.adjusted_close==='number'&&Number.isFinite(row.adjusted_close)&&row.adjusted_close>0)?'adjusted_close':'close'} records={visibleHistory} averageCost={stocks.find(p=>p.ticker===ticker)?.average_cost}/></Suspense></>:<p className="muted">Aguardando histórico do backend.</p>}</section><AssetIncomeTargets data={analysis} ticker={ticker}/>{newsPanel}<section className="panel"><h2>Indicadores técnicos · amostra point-in-time disponível</h2>{live?<><p className="muted">Cálculo determinístico no backend sobre {live.market.history_count} registros disponíveis em {when(live.as_of)}. Valores sem amostra suficiente permanecem indisponíveis.</p><button type="button" className="ghost" aria-expanded={showIndicatorHelp} aria-controls="technical-indicator-help" onClick={()=>setShowIndicatorHelp(value=>!value)}>{showIndicatorHelp?'Ocultar explicação':'Como interpretar RSI, SMA e os demais'}</button>{showIndicatorHelp&&<section id="technical-indicator-help" className="analysis-summary" aria-label="Explicação dos indicadores técnicos"><h3>O que cada indicador mostra</h3><dl><dt><strong>RSI (14)</strong></dt><dd>Resume a força recente das altas e baixas numa escala de 0 a 100. Acima de 70 costuma ser chamado de sobrecomprado e abaixo de 30 de sobrevendido; uma tendência forte pode permanecer nessas faixas. Não é sinal automático de compra ou venda.</dd><dt><strong>SMA (20), SMA (50) e SMA (200)</strong></dt><dd>Média simples dos fechamentos das últimas 20, 50 ou 200 sessões disponíveis. Ajudam a comparar o preço com tendências de curto, médio e longo prazo. Cruzar uma média não garante suporte, resistência ou movimento futuro.</dd><dt><strong>MACD</strong></dt><dd>Compara médias móveis para resumir direção e ritmo da tendência. O valor isolado não confirma cruzamento: para isso também é preciso observar a linha de sinal ou o histograma.</dd><dt><strong>Volatilidade anualizada (20d e 60d)</strong></dt><dd>Estima o tamanho das oscilações históricas em janelas de 20 e 60 pregões, anualizado. Mede intensidade, não direção, e não prevê a oscilação futura.</dd><dt><strong>Drawdown máximo na amostra</strong></dt><dd>Maior queda percentual de um pico até um vale dentro do histórico disponível. Resume uma queda passada da amostra e não necessariamente a queda atual.</dd></dl><p className="muted">“Indisponível” significa que faltam dados ou sessões para calcular a métrica; não significa zero. Indicadores descrevem o histórico e devem ser lidos junto com fundamentos, notícias, riscos e sua carteira.</p></section>}<div className="indicator-grid"><div><span>RSI (14)</span><strong>{quantValue('rsi_14')}</strong></div><div><span>SMA (20)</span><strong>{typeof quant.sma_20==='number'?brl(quant.sma_20):'Indisponível'}</strong></div><div><span>SMA (50)</span><strong>{typeof quant.sma_50==='number'?brl(quant.sma_50):'Indisponível'}</strong></div><div><span>SMA (200)</span><strong>{typeof quant.sma_200==='number'?brl(quant.sma_200):'Indisponível'}</strong></div><div><span>Volatilidade anualizada (20d)</span><strong>{quantPercent('volatility_20d')}</strong></div><div><span>Volatilidade anualizada (60d)</span><strong>{quantPercent('volatility_60d')}</strong></div><div><span>MACD</span><strong>{typeof quant.macd==='number'?brl(quant.macd):'Indisponível'}</strong></div><div><span>Drawdown máximo na amostra</span><strong>{quantPercent('max_drawdown')}</strong></div></div><section className="analysis-summary"><h3>Leitura técnica</h3>{technicalRead.length?<ul>{technicalRead.map(item=><li key={item.title}><strong>{item.title}:</strong> {item.text}</li>)}</ul>:<p className="muted">Sem indicadores suficientes para uma interpretação por horizonte.</p>}<p className="muted">Interpretação determinística dos dados exibidos; não é previsão nem recomendação isolada.</p></section></>:<p className="muted">Aguardando histórico e cálculos do backend.</p>}</section><section className="panel"><h2>Fundamentos e alvos institucionais</h2>{fundamentalsError&&<div className="state-banner limited">Fundamentos indisponíveis: {fundamentalsError}</div>}{fundamentals?.metrics.length?<><p className="muted">{Array.from(new Set(fundamentals.metrics.map(metric=>metric.source))).join(' · ')} · consulta em {when(fundamentals.as_of)}. Fontes e datas por métrica; período fiscal somente quando informado.</p><div className="table-wrap"><table><thead><tr><th>Métrica</th><th>Valor</th><th>Período</th><th>Fonte</th><th>Data observada</th><th>Data fiscal</th><th>Disponível desde</th><th>Qualidade</th></tr></thead><tbody>{fundamentals.metrics.map((metric,index)=><tr key={metric.source_record_id||String(index)}><td>{metric.metric}</td><td>{fundamentalValue(metric)}</td><td>{metric.period_type==='CURRENT_SNAPSHOT'?'Snapshot atual · período fiscal não verificado':metric.period_type||'Indisponível'}</td><td>{metric.source}</td><td>{when(metric.observation_timestamp)}</td><td>{metric.report_date||'Não informada'}</td><td>{when(metric.available_timestamp)}</td><td>{metric.quality_status}{metric.quality_flags.length?' · '+metric.quality_flags.join(', '):''}</td></tr>)}</tbody></table></div></>:<p className="muted">{fundamentalsError?'A consulta à fonte fundamental falhou.':fundamentals?.status==='NO_DATA'?'As fontes não retornaram métricas admissíveis para este ticker.':busy?'Consultando fundamentos…':'Fundamentos indisponíveis.'}</p>}{fundamentals?.excluded_future_count? <p className="muted">{fundamentals.excluded_future_count} registros futuros foram excluídos do corte.</p>:null}<p className="muted">Preços-alvo qualificados e suas fontes aparecem na análise integrada quando disponíveis. Ausência de uma instituição não é estimativa de preço.</p>{fundamentals?.limitations.map(item=><p className="muted" key={item}>{item}</p>)}</section><details className="panel"><summary>Diagnóstico histórico do piloto de inteligência</summary>{pilot?.status==='NOT_AVAILABLE'?<p className="muted">Ainda não há análise do lote de 20 ações para este ativo.</p>:pilot?.evidence?<><p className="muted">Evidências coletadas em {when(pilot.evidence.collected_at)}{pilot.evidence.latest_market_record?` · Cotação de ${when(pilot.evidence.latest_market_record.observation_timestamp)}`: ''} · {pilot.evidence.source_refs.length} referências</p><div className="llm-columns"><div><h3>DeepSeek local · {pilot.deepseek_status||'pendente'}</h3><p>{pilot.deepseek?.analysis||pilot.deepseek_error||'Aguardando execução.'}</p></div><div><h3>OpenClaw / ChatGPT · {pilot.openclaw_status||'pendente'}</h3><p>{pilot.openclaw?.analysis.summary||pilot.openclaw_error||'Aguardando execução.'}</p>{pilot.openclaw?.analysis.risks?.length?<details><summary>Riscos</summary><ul>{pilot.openclaw.analysis.risks.map((r,i)=><li key={i}>{r}</li>)}</ul></details>:null}{pilot.openclaw?.analysis.limitations?.length?<details><summary>Limitações</summary><ul>{pilot.openclaw.analysis.limitations.map((r,i)=><li key={i}>{r}</li>)}</ul></details>:null}</div></div><details><summary>Fontes usadas ({pilot.evidence.source_refs.length})</summary>{pilot.evidence.source_refs.map((ref,i)=><p key={i}>{ref}</p>)}</details></>:<p className="muted">Selecione um ativo para consultar o piloto.</p>}</details></>}</>}
+ </main>{copilotOpen&&<aside className="copilot"><div className="copilot-head"><strong>✦ Copilot</strong><button className="ghost" aria-label="Fechar Copilot" onClick={()=>setCopilotOpen(false)}>×</button><span className={online?'online-dot':'offline-dot'}>●</span></div><p className="context">Contexto: {ticker?`${ticker} / `:''}{page}{page==='Options'&&selectedOption?` / ${selectedOption}`:''}{assetView&&page==='Market Intelligence'?' / Ativo':''}</p><button disabled={busy} onClick={()=>void run(`Faça um panorama de ${page}${ticker?` para ${ticker}`:''}; fatos, riscos, contradições, limitações e fontes.`,true)}>Visão geral</button><div className="conversation">{chat.map((c,i)=><div className="answer-card" key={i}><b>Você: {c.q}</b>{c.error?<div className="state-banner error"><strong>Erro no runtime</strong><span>{c.error}</span></div>:c.r?<><AnalysisOutput data={c.r}/>{(c.r.result.strategy_comparison||c.r.result.put_chain_comparison)?<button disabled={busy} onClick={()=>openInStrategyLab(c.r)}>Abrir comparação no Strategy Lab</button>:null}</>:<p className="muted" role="status">Analisando no runtime B3…</p>}</div>)}</div><form className="chat-form" onSubmit={e=>{e.preventDefault();if(question.trim())void run(question.trim(),true)}}><textarea value={question} onChange={e=>setQuestion(e.target.value)} placeholder="Pergunte sobre a seleção atual…" rows={4}/><button disabled={busy||!question.trim()}>Enviar</button></form></aside>}</div>
+ {settings&&<div className="modal-backdrop" onClick={()=>setSettings(false)}><div className="transaction-modal" onClick={e=>e.stopPropagation()}><h2>Servidor Ubuntu · API B3</h2><form className="transaction-form" onSubmit={async(e:FormEvent)=>{e.preventDefault();try{setApiBaseUrl(url);setSettings(false);setPortfolio(null);setCapital(null);await load()}catch(x){setNotice(err(x))}}}><label>IP ou hostname e porta</label><input value={url} onChange={e=>setUrl(e.target.value)} placeholder="http://ubuntu:8000"/><small>{url}</small><button>Salvar e testar conexão</button></form><button onClick={()=>setSettings(false)}>Fechar</button></div></div>}
+ {capitalEdit&&<div className="modal-backdrop" onClick={()=>setCapitalEdit(false)}><div className="transaction-modal" onClick={e=>e.stopPropagation()}><h2>Capital BTG</h2><form className="transaction-form" onSubmit={async(e:FormEvent)=>{e.preventDefault();try{const c=await b3Api.saveCapital(Number(available),Number(reserve));setCapital(c);setCapitalEdit(false);setNotice('Capital salvo no backend.')}catch(x){setNotice(err(x))}}}><label>Capital disponível (R$)</label><input type="number" min="0" step="0.01" required value={available} onChange={e=>setAvailable(e.target.value)}/><label>Reserva mínima (R$)</label><input type="number" min="0" step="0.01" required value={reserve} onChange={e=>setReserve(e.target.value)}/><button>Salvar no backend</button></form><button onClick={()=>setCapitalEdit(false)}>Fechar</button></div></div>}
+ </div>;
+}

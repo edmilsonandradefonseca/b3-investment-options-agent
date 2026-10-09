@@ -39,6 +39,49 @@ class FastRouter:
                 "B3_MACRO_REFRESH_V1", meta,
             )
 
+        # Structured Strategy Lab requests use the deterministic UC-04 composer
+        # before any senior-LLM escalation. Unsupported strategy types continue
+        # to OpenClaw until their deterministic builders are implemented.
+        workspace = str(meta.get("workspace") or meta.get("dashboard_page") or "").strip().lower()
+        comparison_assets = meta.get("comparison_assets")
+        strategy_a = str(meta.get("strategy_a") or "").strip()
+        strategy_b = str(meta.get("strategy_b") or "").strip()
+        option_a = str(meta.get("option_a") or "").strip() or None
+        option_b = str(meta.get("option_b") or "").strip() or None
+        comparison_amount = meta.get("comparison_amount")
+        put_candidate_ids = meta.get("put_candidate_option_ids")
+        explicit_put_chain_request = (
+            workspace == "strategy lab"
+            and isinstance(put_candidate_ids, (list, tuple))
+            and 2 <= len(put_candidate_ids) <= 20
+            and bool(str(meta.get("comparison_ticker") or meta.get("selected_ticker") or "").strip())
+            and all(isinstance(item, str) and item.strip() for item in put_candidate_ids)
+        )
+        stock_reduction_present = (
+            self._is_stock_reduction(strategy_a)
+            or self._is_stock_reduction(strategy_b)
+        )
+        stock_reduction_amount_ok = (
+            not stock_reduction_present
+            or self._positive_number(comparison_amount)
+        )
+        if (
+            explicit_put_chain_request
+            or (
+                workspace == "strategy lab"
+                and isinstance(comparison_assets, (list, tuple))
+                and len(comparison_assets) == 2
+                and self._strategy_supported(strategy_a, option_a)
+                and self._strategy_supported(strategy_b, option_b)
+                and stock_reduction_amount_ok
+            )
+        ):
+            return self._decision(
+                "strategy_comparison", "UC-04", "sync", "deterministic",
+                RouteTarget.STRATEGY_ENGINE, MatchClass.MATCH_EXACT,
+                "B3_STRATEGY_COMPARISON_V1", meta,
+            )
+
         # Explicitly complex intent always wins over dashboard metadata.
         if self._contains_any(
             normalized,
@@ -133,6 +176,64 @@ class FastRouter:
             None, None, "sync", "senior_llm", RouteTarget.OPENCLAW,
             MatchClass.AMBIGUOUS, None, meta,
         )
+
+    @staticmethod
+    def _is_stock_reduction(value: str) -> bool:
+        normalized = " ".join(value.casefold().split())
+        return normalized in {
+            "vender ação",
+            "vender acao",
+            "vender/reduzir ação",
+            "vender/reduzir acao",
+            "reduzir ação",
+            "reduzir acao",
+            "sell stock",
+            "sell_stock",
+            "reduce stock",
+            "reduce_stock",
+        }
+
+    @staticmethod
+    def _positive_number(value: object) -> bool:
+        try:
+            return float(value) > 0
+        except (TypeError, ValueError):
+            return False
+
+    @staticmethod
+    def _strategy_supported(value: str, option_id: str | None = None) -> bool:
+        normalized = " ".join(value.casefold().split())
+        if normalized in {
+            "comprar ação",
+            "comprar acao",
+            "buy stock",
+            "buy_stock",
+            "manter",
+            "hold",
+            "vender ação",
+            "vender acao",
+            "vender/reduzir ação",
+            "vender/reduzir acao",
+            "reduzir ação",
+            "reduzir acao",
+            "sell stock",
+            "sell_stock",
+            "reduce stock",
+            "reduce_stock",
+        }:
+            return True
+        if normalized in {
+            "vender put",
+            "sell put",
+            "sell_put",
+            "vender call",
+            "vender call coberta",
+            "covered call",
+            "sell call",
+            "sell_call",
+        }:
+            return bool(str(option_id or "").strip())
+        return False
 
     @staticmethod
     def _contains_any(text: str, values: tuple[str, ...]) -> bool:

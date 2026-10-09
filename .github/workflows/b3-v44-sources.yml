@@ -1,0 +1,30 @@
+name: B3 V4.4 stock source acceptance (Ubuntu)
+on:
+  push:
+    branches: [feature/react-functional-v43-integration]
+    paths:
+      - .github/workflows/b3-v44-sources.yml
+      - scripts/validate_v44_stock_sources.py
+      - src/b3_agent/providers/**
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: b3-v44-sources
+  cancel-in-progress: false
+jobs:
+  sources:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare isolated candidate dependencies
+        run: |
+          /opt/b3-investment-options-agent/.venv/bin/python -m venv --system-site-packages .venv-v44-sources
+          .venv-v44-sources/bin/python -m pip install -e '.[dev]'
+      - name: Verify atomic budget and stock source contracts
+        run: .venv-v44-sources/bin/python -m pytest tests/test_v44_stock_sources.py tests/test_brapi_adapter.py tests/test_brapi_fundamentals.py tests/test_local_market_history.py tests/test_stored_dividends.py
+      - name: Read real stock data through candidate APIs without changing service
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: timeout 480s .venv-v44-sources/bin/python scripts/validate_v44_stock_sources.py

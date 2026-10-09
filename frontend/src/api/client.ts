@@ -1,8 +1,18 @@
 import type {
   ApiErrorPayload,
+  CapitalProfile,
+  BrokerageLedger,
+  CurrentMarketQuoteResponse,
+  CurrentOptionsResponse,
+  PilotAnalysis,
+  PortfolioSnapshot,
   BrokerageBatchImportResponse,
   BrokerageNoteImportResponse,
   HealthResponse,
+  RuntimeStatusResponse,
+  SchedulerConfigResponse,
+  CollectionUniverseResponse,
+  FundamentalsResponse,
   LiveAnalysisResponse,
   OrchestrateRequest,
   OrchestrateResponse,
@@ -11,6 +21,10 @@ import type {
   TransactionRequest,
   TransactionResponse,
   VersionResponse,
+  InvestorFlowResponse,
+  YieldCurveResponse,
+  OpportunityReviewStatus,
+  OpportunityReviewLatest,
 } from "./contracts";
 
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
@@ -65,17 +79,28 @@ async function readError(response: Response): Promise<ApiErrorPayload | null> {
   }
 }
 
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(apiUrl(path), init);
-  if (!response.ok) {
-    const payload = await readError(response);
-    throw new ApiError(
-      payload?.detail ?? payload?.error ?? `HTTP ${response.status}`,
-      response.status,
-      payload,
-    );
+async function requestJson<T>(path: string, init?: RequestInit, timeoutMs = 30_000): Promise<T> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(apiUrl(path), { ...init, signal: controller.signal });
+    if (!response.ok) {
+      const payload = await readError(response);
+      throw new ApiError(
+        payload?.detail ?? payload?.error ?? `HTTP ${response.status}`,
+        response.status,
+        payload,
+      );
+    }
+    return (await response.json()) as T;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error(`Tempo limite excedido ao aguardar o backend (${Math.round(timeoutMs / 1000)}s).`);
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
   }
-  return (await response.json()) as T;
 }
 
 async function upload<T>(path: string, file: File): Promise<T> {
@@ -85,14 +110,38 @@ async function upload<T>(path: string, file: File): Promise<T> {
 }
 
 export const b3Api = {
+  personalHistory: (ticker: string, since = "") => requestJson<Record<string, unknown>>(`/history/context?${new URLSearchParams({...(ticker.trim()?{ticker:ticker.trim().toUpperCase()}:{}),...(since?{since}:{})})}`),
   health: () => requestJson<HealthResponse>("/health"),
+  runtimeStatus: () => requestJson<RuntimeStatusResponse>("/runtime/status"),
+  schedulerConfig: () => requestJson<SchedulerConfigResponse>("/admin/scheduler-config"),
+  saveSchedulerConfig: (start_time: string, end_time: string, interval_minutes: number) => requestJson<SchedulerConfigResponse>("/admin/scheduler-config", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ start_time, end_time, interval_minutes }),
+  }),
+  collectionUniverse: () => requestJson<CollectionUniverseResponse>("/admin/collection-universe"),
+  saveCollectionUniverse: (tickers: string[]) => requestJson<CollectionUniverseResponse>("/admin/collection-universe", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tickers }),
+  }),
+  portfolio: () => requestJson<PortfolioSnapshot>("/portfolio/current"),
+  optionLedger: () => requestJson<BrokerageLedger>("/options/ledger"),
+  pilotAnalysis: (ticker: string) => requestJson<PilotAnalysis>(`/intelligence/pilot/${encodeURIComponent(ticker.trim().toUpperCase())}`),
+  capital: () => requestJson<CapitalProfile>("/capital-profile"),
+  saveCapital: (available_capital: number, minimum_reserve: number) => requestJson<CapitalProfile>("/capital-profile", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ available_capital, minimum_reserve }),
+  }),
   version: () => requestJson<VersionResponse>("/version"),
-  orchestrate: (request: OrchestrateRequest) =>
+  orchestrate: (request: OrchestrateRequest, timeoutMs = 195_000) =>
     requestJson<OrchestrateResponse>("/orchestrate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
-    }),
+    }, timeoutMs),
+  opportunityReviewStatus: () =>
+    requestJson<OpportunityReviewStatus>("/opportunities/status"),
+  latestOpportunityReview: () =>
+    requestJson<OpportunityReviewLatest>("/opportunities/latest"),
   listTransactions: (limit = 100) =>
     requestJson<TransactionResponse[]>(`/transactions?limit=${encodeURIComponent(limit)}`),
   addTransaction: (request: TransactionRequest) =>
@@ -106,8 +155,30 @@ export const b3Api = {
   importBrokerageNote: (file: File) => upload<BrokerageNoteImportResponse>("/imports/brokerage-notes", file),
   importBrokerageBatch: (file: File) => upload<BrokerageBatchImportResponse>("/imports/brokerage-notes/batch", file),
   brokerageBatchUploadUrl: () => apiUrl("/imports/brokerage-notes/upload"),
+  currentMarketQuote: (ticker: string) =>
+    requestJson<CurrentMarketQuoteResponse>(
+      `/market/current/${encodeURIComponent(ticker.trim().toUpperCase())}`,
+    ),
+  currentOptions: (ticker: string, optionType: "PUT" | "CALL" = "PUT", limit = 100) =>
+    requestJson<CurrentOptionsResponse>(
+      `/options/current/${encodeURIComponent(ticker.trim().toUpperCase())}?option_type=${encodeURIComponent(optionType)}&limit=${encodeURIComponent(limit)}`,
+    ),
   liveAnalysis: (ticker: string) =>
     requestJson<LiveAnalysisResponse>(`/analysis/live/${encodeURIComponent(ticker.trim().toUpperCase())}`),
+  fundamentals: (ticker: string) =>
+    requestJson<FundamentalsResponse>(`/fundamentals/${encodeURIComponent(ticker.trim().toUpperCase())}`),
+  storedResearch: (ticker: string, limit = 8) =>
+    requestJson<ResearchNewsResponse>(
+      `/intelligence/research-context?ticker=${encodeURIComponent(ticker.trim().toUpperCase())}&limit=${limit}`,
+    ),
+  investorFlows: () =>
+    requestJson<InvestorFlowResponse>("/market-intelligence/investor-flows", undefined, 60_000),
+  yieldCurve: (curve: "PRE" | "DIC" | "DCL" = "PRE") =>
+    requestJson<YieldCurveResponse>(
+      `/market-intelligence/yield-curves?curve=${encodeURIComponent(curve)}`,
+      undefined,
+      60_000,
+    ),
   researchNews: (ticker: string, limit = 20) =>
     requestJson<ResearchNewsResponse>(
       `/research/news/${encodeURIComponent(ticker.trim().toUpperCase())}?limit=${encodeURIComponent(limit)}`,

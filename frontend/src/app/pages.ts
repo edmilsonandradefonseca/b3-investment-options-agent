@@ -7,6 +7,7 @@ export type PageId =
   | "Market Intelligence"
   | "History & Learning"
   | "Risk & Stress"
+  | "Admin"
   | "Copilot";
 
 export type PageTab = {
@@ -148,6 +149,15 @@ export const PAGE_DEFINITIONS: PageDefinition[] = [
     description: "UC-11 · Stress determinístico e sensitivities.",
   },
   {
+    id: "Admin",
+    route: "admin",
+    icon: "⚙",
+    subtitle: "Conexão e serviços",
+    useCases: [],
+    prompt: "Mostre somente o status operacional reportado pelo backend B3, com fontes e horário quando disponíveis.",
+    description: "Diagnóstico do backbone, serviços e conectividade.",
+  },
+  {
     id: "Copilot",
     route: "copilot",
     icon: "✦",
@@ -160,12 +170,12 @@ export const PAGE_DEFINITIONS: PageDefinition[] = [
 
 export function pageFromHash(hash = window.location.hash): PageId {
   const route = hash.replace(/^#\/?/, "").split("?")[0].trim();
-  return PAGE_DEFINITIONS.find((page) => page.route === route)?.id ?? "Overview";
+  return PAGE_DEFINITIONS.find((page) => page.route === route)?.id ?? "Portfolio";
 }
 
 export function hashForPage(pageId: PageId): string {
   const page = PAGE_DEFINITIONS.find((item) => item.id === pageId);
-  return `#/${page?.route ?? "overview"}`;
+  return `#/${page?.route ?? "portfolio"}`;
 }
 
 export function getPageDefinition(pageId: PageId): PageDefinition {

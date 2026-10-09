@@ -7,6 +7,7 @@ from b3_agent.agents.synthesis import SynthesisAgent
 from b3_agent.knowledge.obsidian import ObsidianKnowledgeStore
 from b3_agent.knowledge.retrieval import ObsidianRetriever
 from b3_agent.orchestration.workflow import build_workflow
+from b3_agent.orchestration import runtime
 
 
 class FakeLLM:
@@ -65,6 +66,7 @@ def test_full_specialist_path_preserves_deterministic_analysis(tmp_path: Path):
 
     result = workflow.invoke({
         "user_question": "PETR4 investment thesis valuation",
+        "lab_conversation": [{"question": "E se cair 5%?", "response": {"summary": "Hipótese anterior"}}],
         "portfolio_context": {"quality_status": "VALIDATED"},
         "market_analysis": {"deterministic": "market-fact"},
         "options_analysis": {"deterministic": "options-fact"},
@@ -97,6 +99,46 @@ def test_full_specialist_path_preserves_deterministic_analysis(tmp_path: Path):
     assert '"portfolio_agent_analysis"' in synthesis_input
     assert '"options_agent_analysis"' in synthesis_input
     assert '"market-fact"' in synthesis_input
+    assert "HISTORICAL_CONVERSATION_NOT_CURRENT_FACTS" in synthesis_input
+    assert "E se cair 5%?" in synthesis_input
 
     decision_input = next(call["input_text"] for call in llm.calls if call["schema_name"] == "investment_decision")
     assert '"synthesis"' in decision_input
+
+
+def test_workspace_intelligence_uses_one_senior_call_and_preserves_facts(tmp_path: Path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    llm = FakeLLM()
+    workflow = build_workflow(
+        retriever=ObsidianRetriever(ObsidianKnowledgeStore(vault)),
+        market_agent=MarketAnalysisAgent(llm),
+        portfolio_agent=PortfolioAnalysisAgent(llm),
+        options_agent=OptionsAnalysisAgent(llm),
+        synthesis_agent=SynthesisAgent(llm),
+        reasoning_agent=InvestmentReasoningAgent(llm),
+        risk_validator=RiskValidator(),
+        single_synthesis=True,
+    )
+
+    result = workflow.invoke({
+        "user_question": "Compare the supplied workspace alternatives.",
+        "ticker": "PETR4",
+        "workspace_intelligence": True,
+        "deterministic_context": {
+            "market_analysis": {"price_status": "UNKNOWN"},
+            "workspace_result": {"evidence_marker": "canonical-fact-123"},
+        },
+    })
+
+    assert result["decision_proposal"]["action"] == "NO_CHANGE"
+    assert [call["schema_name"] for call in llm.calls] == ["investment_decision"]
+    assert "canonical-fact-123" in llm.calls[0]["input_text"]
+    assert "market_analysis" in llm.calls[0]["input_text"]
+
+
+def test_workspace_single_synthesis_is_enabled_by_default_and_can_be_disabled(monkeypatch):
+    monkeypatch.delenv("B3_WORKSPACE_SINGLE_SYNTHESIS", raising=False)
+    assert runtime._workspace_single_synthesis_enabled() is True
+    monkeypatch.setenv("B3_WORKSPACE_SINGLE_SYNTHESIS", "false")
+    assert runtime._workspace_single_synthesis_enabled() is False

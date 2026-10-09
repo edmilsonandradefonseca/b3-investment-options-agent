@@ -1,0 +1,102 @@
+from datetime import datetime,timezone
+import pytest
+from b3_agent.institution_target_ingestion import xp_report_evidence
+URL='https://conteudos.xpi.com.br/acoes/relatorios/fixture/'
+NOW=datetime(2026,10,3,tzinfo=timezone.utc)
+
+def page(text='ITUB4 preço-alvo para R$50/ação ao final de 2027.',title='Itaú (ITUB4)',date='2026-08-06T23:18:02+00:00'):
+    return f'<meta property="article:modified_time" content="{date}"><h1>{title}</h1><div class="article-content"><p>{text}</p></div><p>BBDC4 preço-alvo para R$999/ação ao final de 2027.</p>'
+
+def test_extracts_only_explicit_single_equity_primary_report_and_dates_version():
+    result=xp_report_evidence(URL,page(),NOW)
+    assert result.metadata.extra['price_target']['price_brl']==50
+    assert result.metadata.extra['price_target']['horizon_date']=='2027-12-31'
+    assert result.metadata.published_at.hour==23
+    assert result.metadata.extra['source_content_sha256']
+    assert '999' not in result.content
+
+@pytest.mark.parametrize('html',[page(text='ITUB4 preço-alvo R$50'),page(title='ITUB4 BBDC4'),page(date='2026-11-01T00:00:00+00:00'),page(date='2026-08-01'),page(text='BBDC4 preço-alvo para R$50/ação ao final de 2027.'),page(text='ITUB4 preço-alvo para R$50/ação ao final de 2027. ITUB4 preço-alvo para R$51/ação ao final de 2027.')])
+def test_incomplete_foreign_conflicting_future_and_naive_report_rejected(html):
+    with pytest.raises(ValueError): xp_report_evidence(URL,html,NOW)
+
+def test_spoof_and_aggregate_page_rejected():
+    for url in ['https://conteudos.xpi.com.br.evil.example/acoes/relatorios/fixture/','https://conteudos.xpi.com.br/acoes/itub4/']:
+        with pytest.raises(ValueError): xp_report_evidence(url,page(),NOW)
+
+
+def test_reviewed_transport_preserves_source_dates_and_rejects_modified_facts():
+    import json
+    from dataclasses import asdict
+    from b3_agent.institution_target_ingestion import reviewed_evidence
+    raw=json.loads(json.dumps(asdict(xp_report_evidence(URL,page(),NOW)),default=lambda o:o.isoformat()))
+    restored=reviewed_evidence(raw,NOW)
+    assert restored.metadata.retrieved_at==NOW
+    assert restored.metadata.retention_class.value=="market_evidence"
+    assert restored.metadata.decay_profile.value=="fast"
+    raw['content']='tampered'
+    with pytest.raises(ValueError): reviewed_evidence(raw,NOW)
+
+
+def test_background_refresh_uses_existing_local_queue_without_calling_model(tmp_path):
+    import json
+    from dataclasses import asdict
+    from urllib.error import HTTPError
+    from b3_agent.jobs.primary_targets import PrimaryTargetRefreshJob
+    from b3_agent.intelligence.local_evidence_analysis import LocalEvidenceQueue
+    item=xp_report_evidence(URL,page(),NOW)
+    path=tmp_path/'sources.json'
+    path.write_text(json.dumps({'schema_version':'reviewed-primary-target-evidence-v1','evidence':[asdict(item)]},default=lambda o:o.isoformat()))
+    queue=LocalEvidenceQueue(tmp_path/'queue');projected=[]
+    def unavailable(url): raise HTTPError(url,403,'Forbidden',None,None)
+    job=PrimaryTargetRefreshJob(acquire=unavailable,project=lambda rows:projected.extend(rows),queue=queue)
+    first=job.run(path);second=job.run(path)
+    assert first['llm_calls']==0
+    assert first['results'][0]['acquisition_status']=='HTTP403_IMPORTED_REVIEWED_PRIMARY_RECORD'
+    assert first['results'][0]['queue_status']=='ENQUEUED'
+    assert second['results'][0]['queue_status']=='ALREADY_QUEUED'
+    assert len(queue.pending())==1 and projected[0].metadata.retrieved_at==NOW
+
+
+def test_safra_explicit_report_rejects_conflicts_and_cross_equity():
+    from b3_agent.institution_target_ingestion import safra_report_evidence
+    from datetime import datetime, timezone
+    url = 'https://oespecialista.safra.com.br/analise/light-inicia-cobertura-preco-alvo-2026/'
+    html = '<meta property="article:modified_time" content="2026-09-18T13:32:18+00:00"><div class="page-content"><p>Light (LIGT3). O preço-alvo para o final de 2026 é de R$ 4,20 por ação.</p></div>'
+    cutoff = datetime(2026, 10, 4, tzinfo=timezone.utc)
+    result = safra_report_evidence(url, html, cutoff)
+    assert result.metadata.extra['price_target']['price_brl'] == 4.2
+    assert result.metadata.extra['price_target']['horizon_date'] == '2026-12-31'
+    for bad in [html.replace('4,20', '4,20 e ITUB4'), html.replace('</p>', ' preço-alvo de R$ 5,00 por ação no final de 2026.</p>'), html.replace('final de 2026', 'próximo ano')]:
+        with pytest.raises(ValueError):
+            safra_report_evidence(url, bad, cutoff)
+
+
+def test_itau_article_uses_exact_metadata_equity_and_explicit_body_horizon():
+    import json
+    from datetime import datetime, timezone
+    from b3_agent.institution_target_ingestion import itau_report_evidence
+    url = 'https://www.itau.com.br/investimentos/analises/vale-vale3-recomendacao-preco-alvo-180826/'
+    metadata = {'@type':'NewsArticle', 'dateModified':'2026-08-18T11:31:00Z', 'mentions':[{'@id':'https://itau.com.br/investimentos/#corp-VALE3'}]}
+    body = '<p>Reduzimos o preço-alvo para R$ 94 ao fim de 2027, de R$ 95 anteriormente. Ticker: VALE3.</p>'
+    def page(text):
+        return '<script type="application/ld+json">' + json.dumps(metadata) + '</script><script>self.__next_f.push(' + json.dumps([1,text]) + ')</script>'
+    cutoff = datetime(2026, 10, 4, tzinfo=timezone.utc)
+    item = itau_report_evidence(url, page(body), cutoff)
+    assert item.metadata.extra['price_target']['price_brl'] == 94
+    assert item.metadata.extra['price_target']['horizon_date'] == '2027-12-31'
+    for bad in [body.replace('VALE3', 'PETR4'), body.replace('ao fim de 2027', 'no futuro'), body.replace('</p>', ' preço-alvo para R$ 93 ao fim de 2027.</p>')]:
+        with pytest.raises(ValueError):
+            itau_report_evidence(url, page(bad), cutoff)
+
+
+def test_btg_primary_pdf_layout_checks_version_age_horizon_and_share_class():
+    from b3_agent.institution_target_ingestion import btg_report_evidence
+    from datetime import datetime, timezone
+    url='https://content.btgpactual.com/research/files/file/pt-BR/report.pdf'
+    text='BTG Pactual Equity Research 17/12/2025 preço -alvo para o fim de 2026 para R$7 por ação Ticker MATD3 Preço Alvo (R$) 7,0 Atualização Preço-alvo 16/12/2025'
+    admitted=datetime(2025,12,18,12,tzinfo=timezone.utc)
+    result=btg_report_evidence(url,text,admitted,source_hash='a'*64)
+    assert result.metadata.extra['price_target']['price_brl']==7
+    assert result.metadata.extra['target_version_date']=='2025-12-16'
+    for cutoff,bad in [(datetime(2026,10,4,tzinfo=timezone.utc),text),(admitted,text+' ITUB4'),(admitted,text.replace('Alvo (R$) 7,0','Alvo (R$) 8,0')),(admitted,text.replace('fim de 2026','futuro'))]:
+        with pytest.raises(ValueError):btg_report_evidence(url,bad,cutoff,source_hash='a'*64)
