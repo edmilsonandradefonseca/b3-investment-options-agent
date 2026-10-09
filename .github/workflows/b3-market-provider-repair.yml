@@ -31,7 +31,7 @@ jobs:
           fi
       - name: Bind runtime package to canonical production checkout
         run: |
-          /opt/b3-investment-options-agent/.venv/bin/python -m pip install --no-deps --no-build-isolation -e /opt/b3-investment-options-agent
+          /opt/b3-investment-options-agent/.venv/bin/python -m pip install --no-deps -e /opt/b3-investment-options-agent
           /opt/b3-investment-options-agent/.venv/bin/python -c "from pathlib import Path; import b3_agent.providers.b3_yield_curve as provider; print('RUNTIME_PROVIDER_PATH=' + provider.__file__); assert Path(provider.__file__).resolve() == Path('/opt/b3-investment-options-agent/src/b3_agent/providers/b3_yield_curve.py')"
       - name: Restart runtime to load correction
         id: restart
