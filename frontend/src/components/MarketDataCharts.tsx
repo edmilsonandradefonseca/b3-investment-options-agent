@@ -1,7 +1,8 @@
 import {useEffect,useMemo,useState} from "react";
 import type {ReactNode} from "react";
 import {b3Api} from "../api/client";
-import type {InvestorFlowObservation,InvestorFlowResponse,YieldCurveResponse} from "../api/contracts";
+import {invoke,isTauri} from "@tauri-apps/api/core";
+import type {YieldCurveResponse} from "../api/contracts";
 import {State} from "./cockpit";
 
 type CurveCode = "PRE" | "DIC" | "DCL";
@@ -56,37 +57,27 @@ function ChartPanel({title,subtitle,children}:{title:string;subtitle:string;chil
 }
 
 export default function MarketDataCharts(){
- const [flows,setFlows]=useState<InvestorFlowResponse|null>(null),[flowError,setFlowError]=useState(""),[flowBusy,setFlowBusy]=useState(false);
+ const [externalError,setExternalError]=useState("");
+ const openForeignFlow=async()=>{setExternalError("");try{if(isTauri()){await invoke("open_foreign_flow");}else{window.open("https://fluxos.investfy.com/?tab=chart&period=ytd&investor=foreigners&chart=column&ma=28","_blank","noopener,noreferrer");}}catch{setExternalError("Não foi possível abrir o navegador. Use o link abaixo.");}};
  const [curve,setCurve]=useState<CurveCode>("PRE"),[curveData,setCurveData]=useState<YieldCurveResponse|null>(null),[curveError,setCurveError]=useState(""),[curveBusy,setCurveBusy]=useState(false);
  const [revision,setRevision]=useState(0);
- useEffect(()=>{let active=true;setFlowBusy(true);setFlowError("");b3Api.investorFlows().then(data=>{if(active)setFlows(data)}).catch(error=>{if(active)setFlowError(error instanceof Error?error.message:String(error))}).finally(()=>{if(active)setFlowBusy(false)});return()=>{active=false}},[revision]);
  useEffect(()=>{let active=true;setCurveBusy(true);setCurveError("");b3Api.yieldCurve(curve).then(data=>{if(active)setCurveData(data)}).catch(error=>{if(active)setCurveError(error instanceof Error?error.message:String(error))}).finally(()=>{if(active)setCurveBusy(false)});return()=>{active=false}},[curve,revision]);
 
- const foreign=useMemo(()=>[...(flows?.observations??[])]
-  .filter((item:InvestorFlowObservation)=>item.investor_type==="FOREIGN"&&typeof item.net_financial_value==="number"&&item.observation_date)
-  .sort((a,b)=>String(a.observation_date).localeCompare(String(b.observation_date))),[flows]);
- const recentForeign=foreign.slice(-180);
- const flowValues=recentForeign.map(item=>({x:Date.parse(item.observation_date as string),y:item.net_financial_value as number}));
  const curveRows=useMemo(()=>[...(curveData?.observations??[])].sort((a,b)=>a.days_calendar-b.days_calendar),[curveData]);
  const curveValues=curveRows.map(item=>({x:item.days_calendar,y:item.rate_percent_per_year}));
- const latestForeign=foreign.at(-1);
  const latestCurve=curveRows[0];
  const curveDescription=curve==="PRE"?"DI × prefixado":curve==="DIC"?"DI × IPCA":"Cupom limpo em dólar";
 
  return <div className="market-series-grid" style={{display:"grid",gap:"1rem"}}>
-  <ChartPanel title="Fluxo do investidor estrangeiro" subtitle={`Dados de Mercado · série diária · ${foreign.length} observações`}>
-   <button type="button" className="ghost" disabled={flowBusy} onClick={()=>setRevision(value=>value+1)}>{flowBusy?"Atualizando…":"Atualizar"}</button>
-   {flowBusy&&!flows?<State kind="loading" title="Consultando fluxo">Buscando série diária no provedor.</State>:<>
-    {flowError&&<State kind="error" title={foreign.length?"Falha ao atualizar · dados anteriores preservados":"Consulta de fluxo indisponível"}>{flowError}</State>}
-    {!foreign.length?(flowError?null:<State kind="limited" title="Sem observações de fluxo">A API não retornou a categoria estrangeiros para este período.</State>):<>
-     <div className="market-series-metric" style={{display:"flex",flexDirection:"column",gap:".25rem",padding:".5rem 0"}}><strong>{numberLabel(latestForeign?.net_financial_value)}</strong><span>valor mais recente · {dateLabel(latestForeign?.observation_date)}</span></div>
-     <LineChart values={flowValues} color="#43b7ff" zero label="Fluxo diário reportado de investidores estrangeiros" xLabel="Data" yLabel="Valor reportado (unidade não declarada)" xFormat={value=>dateLabel(new Date(value).toISOString())}/>
-     <p className="muted">Fonte: Dados de Mercado · unidade não declarada no esquema da API; valor exibido sem conversão ou símbolo monetário. O gráfico mostra o campo reportado, não uma decomposição de compras e vendas.</p>
-    </>}
-   </>}
+  <ChartPanel title="Fluxo do investidor estrangeiro" subtitle="Investfy · consulta em outra janela">
+   <p className="muted">Consulte o gráfico de investidores estrangeiros no Investfy.</p>
+   <button type="button" onClick={()=>void openForeignFlow()}>Abrir fluxo de estrangeiros ↗</button>
+   <p className="muted">Abre no navegador com período acumulado no ano, gráfico de colunas e média móvel de 28 períodos.</p>
+   {externalError&&<State kind="error" title="Abertura indisponível">{externalError} <a href="https://fluxos.investfy.com/?tab=chart&period=ytd&investor=foreigners&chart=column&ma=28" target="_blank" rel="noopener noreferrer">Abrir Investfy</a></State>}
   </ChartPanel>
 
   <ChartPanel title="Curva de juros" subtitle={`B3 TaxaSwap · ${curveDescription} · ${curveData?.as_of?dateLabel(curveData.as_of):"data indisponível"}`}>
+   <button type="button" className="ghost" disabled={curveBusy} onClick={()=>setRevision(value=>value+1)}>{curveBusy?"Atualizando…":"Atualizar curva"}</button>
    <label className="curve-selector">Curva<select aria-label="Selecionar curva de juros" value={curve} onChange={event=>{setCurveData(null);setCurveError("");setCurve(event.target.value as CurveCode)}}><option value="PRE">DI × Pré (PRE)</option><option value="DIC">DI × IPCA (DIC)</option><option value="DCL">Cupom limpo dólar (DCL)</option></select></label>
    {curveBusy&&!curveData?<State kind="loading" title="Consultando curva">Buscando vértices publicados pela B3.</State>:<>
     {curveError&&<State kind="error" title={curveRows.length?"Falha ao atualizar · dados anteriores preservados":"Consulta de curva indisponível"}>{curveError}</State>}
