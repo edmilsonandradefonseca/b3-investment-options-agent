@@ -31,3 +31,11 @@ No terminal Ubuntu, executar sudo systemctl restart b3-runtime.service com auten
 Depois validar GET /market-intelligence/yield-curves?curve=PRE: HTTP 200, status OK, as_of real e observações não vazias. Confirmar /health e processo posterior à instalação.
 Para fluxo, configurar credencial válida DADOSDE_MERCADO_API_TOKEN em arquivo de ambiente carregado pelo serviço, sem enviar seu valor em chat/logs, reiniciar e validar /market-intelligence/investor-flows.
 Não marcar Market Intelligence completo enquanto esses aceites estiverem pendentes.
+
+
+## Atualização — 09/10/2026, 10h56 BRT
+A captura enviada pelo usuário confirma que a curva PRE carregou no desktop: referência 08/10/2026, primeiro vértice 13,65% a.a., 1 dia corrido/útil. O problema observado passou a ser gráfico sem números nos eixos. Essa evidência é confirmação visual fornecida pelo usuário; não é novo gate HTTP independente.
+Correção publicada em 778615a3a80069c3dd3c5050f50f254b9cd23163: marcações numéricas nos eixos, X em dias corridos e Y em % a.a., grade e valores por vértice no hover; fluxo usa datas no eixo X.
+Build React passou; renderização SSR confirmou rótulos e extremos; SVG renderizado foi inspecionado sem cortes/sobreposição na curva.
+Instalador Windows desta correção: https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37940837773.
+Fluxo estrangeiro permanece dependente de credencial. A CI ampla e o walkthrough geral conservam os bloqueios já descritos; não foram considerados aceite desta correção pontual.
