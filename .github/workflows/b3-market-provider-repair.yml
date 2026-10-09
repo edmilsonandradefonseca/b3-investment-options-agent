@@ -29,9 +29,19 @@ jobs:
             test -z "$(git -C /opt/b3-investment-options-agent status --porcelain --untracked-files=no)"
             install -m 0644 "$provider" "/opt/b3-investment-options-agent/$provider"
           fi
+      - name: Bind runtime package to canonical production checkout
+        run: |
+          /opt/b3-investment-options-agent/.venv/bin/python -m pip install --no-deps --no-build-isolation -e /opt/b3-investment-options-agent
+          /opt/b3-investment-options-agent/.venv/bin/python -c "from pathlib import Path; import b3_agent.providers.b3_yield_curve as provider; print('RUNTIME_PROVIDER_PATH=' + provider.__file__); assert Path(provider.__file__).resolve() == Path('/opt/b3-investment-options-agent/src/b3_agent/providers/b3_yield_curve.py')"
       - name: Restart runtime to load correction
         id: restart
         continue-on-error: true
-        run: sudo -n systemctl restart b3-runtime.service
+        run: |
+          sudo -n systemctl restart b3-runtime.service
+          for attempt in {1..20}; do
+            if curl -fsS --max-time 2 http://127.0.0.1:8000/health >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          exit 1
       - name: Diagnose providers without exposing credentials
         run: /opt/b3-investment-options-agent/.venv/bin/python scripts/diagnose_market_providers.py
