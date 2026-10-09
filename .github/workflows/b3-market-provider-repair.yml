@@ -37,11 +37,20 @@ jobs:
         id: restart
         continue-on-error: true
         run: |
+          previous_pid="$(systemctl show b3-runtime.service --property=MainPID --value)"
           sudo -n systemctl restart b3-runtime.service
+          if [ "$(systemctl show b3-runtime.service --property=MainPID --value)" = "$previous_pid" ]; then
+            echo SUDO_RESTART_DID_NOT_CHANGE_PROCESS
+            systemctl --no-ask-password restart b3-runtime.service
+          fi
+          current_pid="$(systemctl show b3-runtime.service --property=MainPID --value)"
+          test "$current_pid" != "$previous_pid"
+          echo RUNTIME_NEW_PROCESS_VERIFIED=PASS
           for attempt in {1..20}; do
             if curl -fsS --max-time 2 http://127.0.0.1:8000/health >/dev/null; then exit 0; fi
             sleep 2
           done
           exit 1
       - name: Diagnose providers without exposing credentials
+        if: always()
         run: /opt/b3-investment-options-agent/.venv/bin/python scripts/diagnose_market_providers.py --require-curve
