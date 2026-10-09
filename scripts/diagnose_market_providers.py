@@ -33,3 +33,15 @@ for path in (Path('/opt/b3-investment-options-agent/.env'), Path('/opt/b3-invest
         from dotenv import dotenv_values
         env=dotenv_values(path)
         print(json.dumps({'config':str(path),'flow_token_present':bool(env.get('DADOSDE_MERCADO_API_TOKEN'))}))
+import subprocess
+service = subprocess.check_output(['systemctl','show','b3-runtime.service','--property=EnvironmentFiles','--value'],text=True).strip()
+print(json.dumps({'service_environment_files':service}))
+for location in ('/opt/b3-runtime/.env', '/opt/b3-runtime/config/runtime.env', '/etc/b3-runtime.env'):
+    path=Path(location)
+    if path.is_file():
+        try:
+            from dotenv import dotenv_values
+            env=dotenv_values(path)
+            print(json.dumps({'config':location,'flow_token_present':bool(env.get('DADOSDE_MERCADO_API_TOKEN'))}))
+        except PermissionError:
+            print(json.dumps({'config':location,'readable':False}))

@@ -15,5 +15,18 @@ jobs:
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
+      - name: Test corrected curve adapter
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: /opt/b3-investment-options-agent/.venv/bin/python -m pytest -q tests/test_b3_yield_curve.py
+      - name: Install verified provider correction
+        run: |
+          set -euo pipefail
+          test -z "$(git -C /opt/b3-investment-options-agent status --porcelain --untracked-files=no)"
+          install -m 0644 src/b3_agent/providers/b3_yield_curve.py /opt/b3-investment-options-agent/src/b3_agent/providers/b3_yield_curve.py
+      - name: Restart runtime to load correction
+        id: restart
+        continue-on-error: true
+        run: sudo -n systemctl restart b3-runtime.service
       - name: Diagnose providers without exposing credentials
         run: /opt/b3-investment-options-agent/.venv/bin/python scripts/diagnose_market_providers.py

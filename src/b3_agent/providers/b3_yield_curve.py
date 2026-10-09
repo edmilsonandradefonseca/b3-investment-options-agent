@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Callable
+import io
+import zipfile
 
 import pyettj.ettj as pyettj_ettj
 import requests
@@ -68,9 +70,20 @@ class B3YieldCurveAdapter:
                 verify=True,
             )
             response.raise_for_status()
+            # B3 returns HTTP 200 and an empty ZIP before publication (and on
+            # non-trading days). This is absence of a daily file, not corruption.
+            # Only an actual empty ZIP permits fallback; malformed bytes still fail.
+            if zipfile.is_zipfile(io.BytesIO(response.content)):
+                with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+                    if not archive.namelist():
+                        raise YieldCurveProviderError(
+                            "NO_DATA", f"A B3 ainda não publicou TaxaSwap em {date_label}."
+                        )
             text = pyettj_ettj._extrair_txt(response.content, date_label)
             frame = pyettj_ettj._parsear_txt(text, [curve], reference_date)
             pyettj_ettj._validar_output(frame, [curve], date_label)
+        except YieldCurveProviderError:
+            raise
         except Exception as exc:
             if type(exc).__name__ in {"NoDataError", "HolidayError", "DataNotAvailableError"}:
                 raise YieldCurveProviderError(

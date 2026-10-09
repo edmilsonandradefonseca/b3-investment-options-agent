@@ -64,8 +64,8 @@ export default function MarketDataCharts(){
   <ChartPanel title="Fluxo do investidor estrangeiro" subtitle={`Dados de Mercado · série diária · ${foreign.length} observações`}>
    <button type="button" className="ghost" disabled={flowBusy} onClick={()=>setRevision(value=>value+1)}>{flowBusy?"Atualizando…":"Atualizar"}</button>
    {flowBusy&&!flows?<State kind="loading" title="Consultando fluxo">Buscando série diária no provedor.</State>:<>
-    {flowError&&<State kind="error" title="Falha ao atualizar · dados anteriores preservados">{flowError}</State>}
-    {flows?.status==="NO_DATA"||!foreign.length?<State kind="limited" title="Sem observações de fluxo">A API não retornou a categoria estrangeiros para este período.</State>:<>
+    {flowError&&<State kind="error" title={foreign.length?"Falha ao atualizar · dados anteriores preservados":"Consulta de fluxo indisponível"}>{flowError}</State>}
+    {!foreign.length?(flowError?null:<State kind="limited" title="Sem observações de fluxo">A API não retornou a categoria estrangeiros para este período.</State>):<>
      <div className="market-series-metric" style={{display:"flex",flexDirection:"column",gap:".25rem",padding:".5rem 0"}}><strong>{numberLabel(latestForeign?.net_financial_value)}</strong><span>valor mais recente · {dateLabel(latestForeign?.observation_date)}</span></div>
      <LineChart values={flowValues} color="#43b7ff" zero label="Fluxo diário reportado de investidores estrangeiros"/>
      <p className="muted">Fonte: Dados de Mercado · unidade não declarada no esquema da API; valor exibido sem conversão ou símbolo monetário. O gráfico mostra o campo reportado, não uma decomposição de compras e vendas.</p>
@@ -76,8 +76,8 @@ export default function MarketDataCharts(){
   <ChartPanel title="Curva de juros" subtitle={`B3 TaxaSwap · ${curveDescription} · ${curveData?.as_of?dateLabel(curveData.as_of):"data indisponível"}`}>
    <label className="curve-selector">Curva<select aria-label="Selecionar curva de juros" value={curve} onChange={event=>{setCurveData(null);setCurveError("");setCurve(event.target.value as CurveCode)}}><option value="PRE">DI × Pré (PRE)</option><option value="DIC">DI × IPCA (DIC)</option><option value="DCL">Cupom limpo dólar (DCL)</option></select></label>
    {curveBusy&&!curveData?<State kind="loading" title="Consultando curva">Buscando vértices publicados pela B3.</State>:<>
-    {curveError&&<State kind="error" title="Falha ao atualizar · dados anteriores preservados">{curveError}</State>}
-    {!curveRows.length?<State kind="limited" title="Sem vértices disponíveis">A fonte não retornou observações para esta curva.</State>:<>
+    {curveError&&<State kind="error" title={curveRows.length?"Falha ao atualizar · dados anteriores preservados":"Consulta de curva indisponível"}>{curveError}</State>}
+    {!curveRows.length?(curveError?null:<State kind="limited" title="Sem vértices disponíveis">A fonte não retornou observações para esta curva.</State>):<>
      <div className="market-series-metric" style={{display:"flex",flexDirection:"column",gap:".25rem",padding:".5rem 0"}}><strong>{numberLabel(latestCurve?.rate_percent_per_year)}% a.a.</strong><span>primeiro vértice · {latestCurve?.days_calendar} dias corridos · {latestCurve?.days_business} dias úteis</span></div>
      <LineChart values={curveValues} color="#47d7a0" label={`Curva ${curve} em percentual ao ano por dias corridos`}/>
      <p className="muted">Fonte: B3 TaxaSwap, interpretada pelo parser do pyettj · taxa em % a.a. · eixo horizontal em dias corridos. As curvas são identificadas pelo código publicado; DIC é DI × IPCA.</p>
