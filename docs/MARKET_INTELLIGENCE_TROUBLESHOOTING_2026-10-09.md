@@ -39,3 +39,10 @@ Correção publicada em 778615a3a80069c3dd3c5050f50f254b9cd23163: marcações nu
 Build React passou; renderização SSR confirmou rótulos e extremos; SVG renderizado foi inspecionado sem cortes/sobreposição na curva.
 Instalador Windows desta correção: https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37940837773.
 Fluxo estrangeiro permanece dependente de credencial. A CI ampla e o walkthrough geral conservam os bloqueios já descritos; não foram considerados aceite desta correção pontual.
+
+
+## Fluxo estrangeiro: consulta externa escolhida pelo usuário
+
+Em 09/10, o usuário escolheu simplificar a consulta com botão para abrir https://fluxos.investfy.com/?tab=chart&period=ytd&investor=foreigners&chart=column&ma=28 em outra tela. Commit `7f3c63ffbdcef3ce65772f86e67c58e03678a2df` substitui o painel de coleta do Dados de Mercado por `Abrir fluxo de estrangeiros`. Remove a requisição automática a investor-flows dessa tela. Desktop usa comando Tauri que abre somente o endereço fixo no navegador padrão, sem shell; versão web usa nova aba. Curva de juros mantém gráfico e recebe botão próprio de atualização. Backend do provedor permanece disponível para integrações futuras; nenhuma ingestão de dados Investfy foi implementada.
+
+Validação: `npm run build` passou; renderização SSR confirmou botão e painel de curva. Instalador Windows iniciado no run https://github.com/edmilsonandradefonseca/b3-investment-options-agent/actions/runs/37944431656 . Abertura efetiva no computador Windows do usuário ainda requer validação após instalar.
