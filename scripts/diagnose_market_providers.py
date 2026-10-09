@@ -36,7 +36,7 @@ for path in (Path('/opt/b3-investment-options-agent/.env'), Path('/opt/b3-invest
 import subprocess
 service = subprocess.check_output(['systemctl','show','b3-runtime.service','--property=EnvironmentFiles','--value'],text=True).strip()
 print(json.dumps({'service_environment_files':service}))
-for location in ('/opt/b3-runtime/.env', '/opt/b3-runtime/config/runtime.env', '/etc/b3-runtime.env'):
+for location in ('/opt/b3-runtime/.env', '/opt/b3-runtime/config/runtime.env', '/opt/b3-runtime/b3.env', '/opt/joao-runtime/joao.env', '/etc/b3-runtime.env'):
     path=Path(location)
     if path.is_file():
         try:
@@ -45,3 +45,11 @@ for location in ('/opt/b3-runtime/.env', '/opt/b3-runtime/config/runtime.env', '
             print(json.dumps({'config':location,'flow_token_present':bool(env.get('DADOSDE_MERCADO_API_TOKEN'))}))
         except PermissionError:
             print(json.dumps({'config':location,'readable':False}))
+
+pid=subprocess.check_output(['systemctl','show','b3-runtime.service','--property=MainPID','--value'],text=True).strip()
+try:
+    fields=Path(f'/proc/{pid}/environ').read_bytes().split(b'\0')
+    token_present=any(field.startswith(b'DADOSDE_MERCADO_API_TOKEN=') and bool(field.partition(b'=')[2].strip()) for field in fields)
+    print(json.dumps({'active_process_flow_token_present':token_present}))
+except PermissionError:
+    print(json.dumps({'active_process_environment_readable':False}))

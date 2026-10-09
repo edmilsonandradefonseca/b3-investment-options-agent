@@ -22,8 +22,13 @@ jobs:
       - name: Install verified provider correction
         run: |
           set -euo pipefail
-          test -z "$(git -C /opt/b3-investment-options-agent status --porcelain --untracked-files=no)"
-          install -m 0644 src/b3_agent/providers/b3_yield_curve.py /opt/b3-investment-options-agent/src/b3_agent/providers/b3_yield_curve.py
+          provider=src/b3_agent/providers/b3_yield_curve.py
+          if cmp -s "$provider" "/opt/b3-investment-options-agent/$provider"; then
+            echo PROVIDER_ALREADY_INSTALLED=PASS
+          else
+            test -z "$(git -C /opt/b3-investment-options-agent status --porcelain --untracked-files=no)"
+            install -m 0644 "$provider" "/opt/b3-investment-options-agent/$provider"
+          fi
       - name: Restart runtime to load correction
         id: restart
         continue-on-error: true
