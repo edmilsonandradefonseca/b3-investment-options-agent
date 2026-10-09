@@ -74,6 +74,23 @@ for item in Path('/proc').iterdir():
     except (OSError,PermissionError):
         pass
 
+
+import shutil
+for name in ('sudo','systemctl'):
+    path=shutil.which(name)
+    print(json.dumps({'command':name,'path':path,'resolved':str(Path(path).resolve()) if path else None}))
+print(json.dumps({'service_start':subprocess.check_output(['systemctl','show','b3-runtime.service','--property=ExecMainStartTimestamp','--property=MainPID'],text=True).strip()}))
+from concurrent.futures import ThreadPoolExecutor
+with ThreadPoolExecutor(max_workers=1) as pool:
+    try:
+        rows=pool.submit(B3YieldCurveAdapter().get_latest, 'PRE').result(timeout=120)
+        print(json.dumps({'thread_curve':'PASS','count':len(rows)}))
+    except Exception as exc:
+        chain=[]
+        while exc:
+            chain.append({'type':type(exc).__name__, 'message':str(exc)[:300]})
+            exc=exc.__cause__
+        print(json.dumps({'thread_curve':'FAILED','chain':chain}))
 if '--require-curve' in sys.argv:
     assert active_curve_ok, 'ACTIVE_CURVE_HTTP_FAILED: provider correction is not certified on active API'
     print('ACTIVE_CURVE_HTTP=PASS')
