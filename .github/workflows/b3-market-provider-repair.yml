@@ -44,4 +44,4 @@ jobs:
           done
           exit 1
       - name: Diagnose providers without exposing credentials
-        run: /opt/b3-investment-options-agent/.venv/bin/python scripts/diagnose_market_providers.py
+        run: /opt/b3-investment-options-agent/.venv/bin/python scripts/diagnose_market_providers.py --require-curve

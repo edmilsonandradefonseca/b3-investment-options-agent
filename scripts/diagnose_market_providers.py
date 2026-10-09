@@ -11,11 +11,14 @@ from urllib.error import HTTPError
 for name in ('_montar_url', '_extrair_txt', '_parsear_txt', '_validar_output'):
     fn = getattr(ettj, name, None)
     print(json.dumps({'helper': name, 'signature': str(inspect.signature(fn)) if fn else 'MISSING'}))
+active_curve_ok = False
 for path in ('/market-intelligence/yield-curves?curve=PRE', '/market-intelligence/investor-flows'):
     try:
         with urlopen('http://127.0.0.1:8000'+path, timeout=90) as response:
             data = json.load(response)
-        print(json.dumps({'path': path, 'status': data.get('status'), 'observations':len(data.get('observations', []))}))
+        if 'yield-curves' in path:
+            active_curve_ok = data.get('status') == 'OK' and len(data.get('observations', [])) > 1
+        print(json.dumps({'path': path, 'status': data.get('status'), 'as_of':data.get('as_of'), 'observations':len(data.get('observations', []))}))
     except HTTPError as exc:
         data=json.load(exc)
         print(json.dumps({'path':path,'http':exc.code,'detail':data.get('detail')}))
@@ -53,3 +56,7 @@ try:
     print(json.dumps({'active_process_flow_token_present':token_present}))
 except PermissionError:
     print(json.dumps({'active_process_environment_readable':False}))
+
+if '--require-curve' in sys.argv:
+    assert active_curve_ok, 'ACTIVE_CURVE_HTTP_FAILED: provider correction is not certified on active API'
+    print('ACTIVE_CURVE_HTTP=PASS')
