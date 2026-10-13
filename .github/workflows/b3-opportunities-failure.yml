@@ -42,7 +42,7 @@ jobs:
               while exc is not None and id(exc) not in seen:
                   seen.add(id(exc))
                   msg=str(exc).lower()
-                  tags=[tag for tag in ('connection refused','timed out','timeout','quota','rate limit','invalid','not configured','not found','unavailable','stale','ticker','assets','limit','yield','openclaw','schema','validation','permission','401','403','429','503') if tag in msg]
+                  tags=[tag for tag in ('empty response','valid json','json','unknown option','unknown model','unauthorized','auth','model','gateway','context length','502','504','connection refused','timed out','timeout','quota','rate limit','invalid','not configured','not found','unavailable','stale','ticker','assets','limit','yield','openclaw','schema','validation','permission','401','403','429','503') if tag in msg]
                   print('EXCEPTION',json.dumps({'type':type(exc).__name__,'status_code':getattr(exc,'status_code',None),'tags':tags,'frames':[{'file':Path(f.filename).name,'line':f.lineno,'function':f.name} for f in traceback.extract_tb(exc.__traceback__)]}),flush=True)
                   exc=exc.__cause__ or exc.__context__
           import re
@@ -53,7 +53,7 @@ jobs:
                   frame=re.search(r'File "[^"]*/([^/"]+)", line (\d+), in ([\w<>]+)',line)
                   if frame: safe.append({'file':frame[1],'line':int(frame[2]),'function':frame[3]})
                   if re.search(r'Exception|Error|Traceback|failed|refused|timeout',line,re.I):
-                      tags=[tag for tag in ('connection refused','timed out','timeout','quota','rate limit','invalid','not configured','not found','unavailable','stale','ticker','assets','limit','yield','openclaw','schema','validation','permission','401','403','429','503') if tag in line.lower()]
+                      tags=[tag for tag in ('empty response','valid json','json','unknown option','unknown model','unauthorized','auth','model','gateway','context length','502','504','connection refused','timed out','timeout','quota','rate limit','invalid','not configured','not found','unavailable','stale','ticker','assets','limit','yield','openclaw','schema','validation','permission','401','403','429','503') if tag in line.lower()]
                       types=re.findall(r'\b\w*(?:Exception|Error)\b',line)
                       safe.append({'types':types,'tags':tags})
               print('ORIGINAL_FAILURE_JOURNAL',json.dumps({'unit':unit,'returncode':journal.returncode,'diagnostics':safe}),flush=True)
