@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from importlib.util import module_from_spec, spec_from_file_location
+from datetime import date
 import json
 from pathlib import Path
 
@@ -58,7 +59,7 @@ def _write_detail(root: Path, ticker: str, research: str, senior: str) -> None:
         "ticker": ticker,
         "routes": ROUTES,
         "market": {
-            "as_of": "2026-09-30T00:00:00+00:00",
+            "as_of": date.today().isoformat() + "T00:00:00+00:00",
             "source": "b3_cotahist",
         },
         "deepseek_status": research,

@@ -20,7 +20,8 @@ def compare(provider=None,**kwargs):
 
 
 def test_different_expiries_keep_own_horizon_and_distinguish_risk_models():
-    result=compare()
+    # The fake spot is dated October 1; evaluate it at the fixture cutoff.
+    result=compare(as_of=datetime(2026,10,3,12,tzinfo=timezone.utc))
     pair=result['put_pair_comparison']
     assert pair['different_expiries'] and pair['ranking']=='NOT_REQUESTED'
     rows=pair['rows']

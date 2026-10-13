@@ -11,6 +11,17 @@ from b3_agent.schemas.position import PortfolioContext, Position
 CUTOFF = datetime(2026,10,3,12,tzinfo=timezone.utc)
 
 
+@pytest.fixture(autouse=True)
+def fixed_screen_clock(monkeypatch):
+    # These market fixtures belong to October 2; wall-clock drift must not
+    # silently turn the current-mode regression into a stale-quote test.
+    class FixtureDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return CUTOFF.astimezone(tz) if tz else CUTOFF.replace(tzinfo=None)
+    monkeypatch.setattr("b3_agent.opportunity_screen.datetime", FixtureDatetime)
+
+
 def history(ticker, *, scale=1, count=70, volume=1000):
     days, day = [], date(2026,10,2)
     while len(days)<count:
