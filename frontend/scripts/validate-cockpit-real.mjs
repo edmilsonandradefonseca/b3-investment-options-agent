@@ -1,0 +1,162 @@
+import {chromium} from '@playwright/test';
+import assert from 'node:assert/strict';
+import {mkdir,writeFile} from 'node:fs/promises';
+import {resolve} from 'node:path';
+const base=process.env.B3_UI_URL||'http://127.0.0.1:5173';
+const api=process.env.B3_API_URL||'http://127.0.0.1:8000';
+const out=resolve(process.env.B3_VISUAL_OUTPUT||'visual-output');
+await mkdir(out,{recursive:true});
+const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
+const context=await browser.newContext({viewport:{width:1440,height:900}});
+await context.addInitScript(url=>localStorage.setItem('b3.apiBaseUrl',url),api);
+const page=await context.newPage(),consoleErrors=[],requests=[];
+page.on('pageerror',e=>consoleErrors.push(e.message));
+page.on('request',r=>{if(r.url().endsWith('/orchestrate')){const b=r.postDataJSON();requests.push(b)}});
+page.on('response',r=>{if(r.url().endsWith('/orchestrate')){try{const b=r.request().postDataJSON(),c=b.context||{};if(c.workspace==='Opportunities')console.log(JSON.stringify({case:'UI_OPPORTUNITIES_HTTP',status:r.status(),candidate_count:Array.isArray(c.opportunity_assets)?c.opportunity_assets.length:0,portfolio_included:c.include_portfolio_stocks===true}));}catch{}}});
+const backend=async(path)=>{const r=await context.request.get(api+path);assert.equal(r.status(),200,`Backend read failed: ${path}`);return r.json()};
+const portfolio=await backend('/portfolio/current');
+assert.ok(portfolio.positions.length>0,'Real portfolio must exist for acceptance');
+const health=await backend('/health');assert.ok(health.status);
+async function nav(label){const button=page.locator('nav').getByRole('button',{name:label,exact:true});if(await button.count())await button.click();else{const routes={'Overview':'overview','History & Learning':'history-learning','Risk & Stress':'risk-stress'};await page.goto(base+'/#/'+routes[label]);}await page.locator('h1').filter({hasText:label}).waitFor();}
+async function screenshot(name){await page.evaluate(()=>window.scrollTo(0,0));await page.screenshot({path:resolve(out,name+'.png'),fullPage:false,animations:'disabled'});}
+async function noOverflow(){const size=await page.evaluate(()=>({scroll:document.documentElement.scrollWidth,width:innerWidth}));assert.ok(size.scroll<=size.width+1,`Global horizontal overflow ${size.scroll}/${size.width}`)}
+try {
+await page.goto(base+'/#/portfolio');
+await page.getByRole('button',{name:'Carregando…',exact:true}).waitFor({state:'hidden',timeout:60000});
+await page.getByRole('heading',{name:'Ações na carteira',exact:true}).waitFor();
+for(const p of portfolio.positions.filter(p=>p.instrument_type==='STOCK').slice(0,3)){
+ const row=page.locator('main tr').filter({has:page.getByRole('button',{name:p.ticker,exact:true})});
+ await row.first().waitFor();assert.ok((await row.first().innerText()).includes(String(p.quantity.toLocaleString('pt-BR'))));
+}
+await page.getByLabel('Buscar posição',{exact:true}).fill('PETR');
+await nav('Options');await nav('Portfolio');assert.equal(await page.getByLabel('Buscar posição',{exact:true}).inputValue(),'PETR','Filter continuity lost');
+await page.getByLabel('Buscar posição',{exact:true}).fill('');
+await nav('Options');await page.getByRole('tab',{name:'Resultados',exact:true}).click();await page.getByRole('heading',{name:'Resultado por ativo e mês',exact:true}).waitFor();
+await page.getByLabel('Filtrar resultado por ativo',{exact:true}).waitFor();
+await page.getByLabel('Filtrar resultado por tipo',{exact:true}).selectOption('STOCK');
+await page.getByLabel('Filtrar resultado por mês',{exact:true}).waitFor();
+await screenshot('options-monthly-results-real');
+await page.getByRole('tab',{name:'Execuções',exact:true}).click();await page.getByRole('tab',{name:'Posições',exact:true}).click();
+await page.getByRole('tab',{name:'Cadeia de opções',exact:true}).click();await page.getByLabel('Ativo da cadeia',{exact:true}).fill('PETR4');
+const chainResponse=page.waitForResponse(r=>r.url().includes('/options/current/PETR4'),{timeout:90000});await page.getByRole('button',{name:'Consultar cadeia',exact:true}).click();const chain=await (await chainResponse).json();assert.ok(chain.options.length>0,'Real OPLAB chain missing');await page.getByRole('button',{name:chain.options[0].contract.option_id,exact:true}).waitFor();await screenshot('oplab-chain-real');await page.getByRole('tab',{name:'Posições',exact:true}).click();
+await nav('Strategy Lab');
+await page.getByText('Comparação estruturada e premissas',{exact:true}).click();
+const comparisonResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().context?.comparison_assets?.join(',')==='ITUB4,BBDC4',{timeout:120000});
+await page.getByTestId('primary-comparison').getByRole('button',{name:'Comparar fatos',exact:true}).click();
+const comparison=await (await comparisonResponse).json();assert.ok(!comparison.error,'Canonical BUY failed');
+assert.equal(comparison.result.stock_purchase_comparison.rows.length,2);
+await page.getByTestId('primary-comparison-result').getByRole('heading',{name:'Compra entre ações · ITUB4 × BBDC4 · comparação lado a lado',exact:true}).waitFor({timeout:10000});
+assert.ok((await page.getByTestId('primary-comparison-result').innerText()).includes('ITUB4'));
+await screenshot('strategy-comparison-real');
+await page.getByText('Premissas e estratégias avançadas: cenários, custos, troca financiada e strikes',{exact:true}).click();
+const scenarioForm=page.locator('form').filter({has:page.getByRole('button',{name:'Comparar',exact:true})});await scenarioForm.getByLabel('Horizonte comum dos cenários',{exact:true}).fill('2026-11-04');
+const scenarioResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().context?.scenario_horizon==='2026-11-04',{timeout:120000});await scenarioForm.getByRole('button',{name:'Comparar',exact:true}).click();const scenarioComparison=await (await scenarioResponse).json();assert.ok(!scenarioComparison.error);assert.ok(scenarioComparison.result.scenario_analysis.alternatives.length===2);await page.getByRole('img',{name:'P&L canônico por cenário e alternativa',exact:true}).waitFor();await screenshot('strategy-scenarios-real');
+await page.getByText('Premissas e estratégias avançadas: cenários, custos, troca financiada e strikes',{exact:true}).click();
+await nav('Opportunities');
+const assetAnalysisResponse=page.waitForResponse(r=>r.url().endsWith('/analysis/live/PETR4'),{timeout:60000});
+const assetSynthesisResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().context?.workspace==='Market Intelligence'&&r.request().postDataJSON().context?.selected_ticker==='PETR4',{timeout:180000});
+await page.getByLabel('Ativo para análise detalhada',{exact:true}).fill('PETR4');
+await page.getByRole('button',{name:'Ver gráfico e análise',exact:true}).click();
+const assetMarket=await (await assetAnalysisResponse).json();
+const assetSynthesisHttp=await assetSynthesisResponse;
+const assetSynthesis=await assetSynthesisHttp.json();
+if(assetSynthesisHttp.status()!==200||!assetSynthesis.result){console.log(JSON.stringify({case:'Market Intelligence PETR4',http:assetSynthesisHttp.status(),response_fields:Object.keys(assetSynthesis),error_type:typeof assetSynthesis.detail==='string'?assetSynthesis.detail.split(':')[0].slice(0,100):'unknown'}));}
+assert.equal(assetSynthesisHttp.status(),200,'Market synthesis HTTP failed');
+assert.ok(assetSynthesis.result,'Market synthesis result missing');
+assert.ok(assetMarket.market.price_history.length>0,'Single-ticker analysis must load canonical price history');
+assert.ok(assetMarket.market.current_quote,'Market Intelligence must include a separate current quote');
+assert.equal(assetMarket.market.current_quote.ticker,'PETR4');
+assert.equal(assetMarket.market.current_quote.currency,'BRL');
+assert.ok(assetMarket.market.current_quote.close>0);
+const quoteObserved=new Date(assetMarket.market.current_quote.observation_timestamp);
+const quoteAvailable=new Date(assetMarket.market.current_quote.available_timestamp);
+assert.ok(Number.isFinite(quoteObserved.getTime())&&Number.isFinite(quoteAvailable.getTime()),'Current quote must include timestamps');
+assert.ok(quoteObserved.getTime()<=Date.now()&&quoteAvailable.getTime()<=Date.now(),'Current quote cannot be future-dated');
+assert.ok(Date.now()-quoteObserved.getTime()<=24*60*60*1000,'Current quote must be no older than 24 hours');
+assert.ok(assetMarket.market.history_count>=60,'Asset analysis needs a usable historical sample');
+assert.ok(assetMarket.market.history_latest?.observation_timestamp,'Historical close must remain separate from current quote');
+assert.ok(Date.now()-new Date(assetMarket.market.history_latest.observation_timestamp).getTime()<=7*24*60*60*1000,'Historical sample needs a recent tail');
+const currentQuoteCard=page.locator('.metric').filter({hasText:'Cotação atual'});
+await currentQuoteCard.waitFor({timeout:30000});
+assert.ok((await currentQuoteCard.innerText()).includes(assetMarket.market.current_quote.source),'Visible quote must show its source and timestamp');
+assert.ok(!assetSynthesis.error,'Asset synthesis must complete');
+assert.equal(assetSynthesis.result.derived_synthesis_status,'COMPLETED','Asset analysis must run the senior synthesis');
+const joaoPerspective=assetSynthesis.result.workspace_intelligence?.derived_intelligence?.joao_resolve;
+assert.ok(joaoPerspective?.status==='READY'||joaoPerspective?.status==='UNAVAILABLE','Asset analysis must attempt the João perspective');
+await page.getByRole('heading',{name:'Market Intelligence',exact:true}).waitFor();
+await page.getByRole('button',{name:'Ativo · gráfico e indicadores',exact:true}).waitFor();
+const priceHistory=page.locator('section.panel').filter({has:page.getByRole('heading',{name:/Histórico de preços/})});await priceHistory.getByText(/\d+ de \d+ registros/).waitFor({timeout:30000});await priceHistory.getByRole('img',{name:/Preço e volume em/}).waitFor({timeout:30000});
+await screenshot('opportunities-petr4-asset-analysis');
+await page.getByRole('heading',{name:'Leitura técnica',exact:true}).waitFor();
+const technicalRead=page.locator('.analysis-summary').filter({has:page.getByRole('heading',{name:'Leitura técnica',exact:true})});
+assert.ok((await technicalRead.innerText()).includes('Força relativa'));
+const indicatorHelpButton=page.getByRole('button',{name:'Como interpretar RSI, SMA e os demais',exact:true});
+await indicatorHelpButton.waitFor();
+await indicatorHelpButton.click();
+const indicatorHelp=page.locator('#technical-indicator-help');
+await indicatorHelp.waitFor();
+const indicatorHelpText=await indicatorHelp.innerText();
+for(const term of ['RSI (14)','SMA (20), SMA (50) e SMA (200)','MACD','Volatilidade anualizada','Drawdown máximo na amostra','Indisponível'])assert.ok(indicatorHelpText.includes(term),`Indicator help missing ${term}`);
+await page.getByRole('button',{name:'Ocultar explicação',exact:true}).click();
+await indicatorHelp.waitFor({state:'hidden'});
+await page.getByRole('heading',{name:'Notícias e eventos verificados',exact:true}).waitFor();
+const assetTask=[...requests].reverse().find(r=>r.context?.workspace==='Market Intelligence'&&r.context?.selected_ticker==='PETR4');
+assert.ok(assetTask?.task.includes('toda a carteira carregada'),'Asset analysis must ask the orchestrator to consider portfolio context');
+
+await nav('Opportunities');
+const opportunityForm=page.locator('form').filter({has:page.getByRole('button',{name:'Buscar novas oportunidades',exact:true})});await opportunityForm.getByLabel('Ações candidatas acompanhadas',{exact:true}).fill('ITUB4, BBDC4');assert.ok((await opportunityForm.innerText()).includes('todas as ações do snapshot vigente'));await opportunityForm.locator('select').first().selectOption('LOWEST_REALIZED_VOLATILITY_60D');
+const opportunityRunStatus=page.locator('.opportunity-run-status');
+const automaticOpportunityRequests=requests.filter(r=>r.context?.workspace==='Opportunities'&&r.context?.include_portfolio_stocks===true);
+assert.equal(automaticOpportunityRequests.length,1,'A portfolio snapshot must trigger exactly one automatic Opportunities review');
+await opportunityRunStatus.getByText(/Busca concluída|Falha na nova busca/).waitFor({timeout:180000});
+const automaticReviewCount=automaticOpportunityRequests.length;
+await nav('Portfolio');await nav('Opportunities');
+assert.equal(requests.filter(r=>r.context?.workspace==='Opportunities'&&r.context?.include_portfolio_stocks===true).length,automaticReviewCount,'Changing workspaces must not duplicate the snapshot review');
+const requestsBeforeManual=requests.filter(r=>r.context?.workspace==='Opportunities'&&r.context?.include_portfolio_stocks===true).length;
+const opportunityResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().context?.workspace==='Opportunities',{timeout:300000});
+await page.getByRole('button',{name:'Buscar novas oportunidades',exact:true}).click();
+const opportunityHttp=await opportunityResponse;const opportunityRequest=opportunityHttp.request().postDataJSON();const opportunity=await opportunityHttp.json();assert.equal(opportunityRequest.context.include_portfolio_stocks,true);let opportunityCoverage='LIVE_API';
+if(opportunity?.result?.opportunity_screen){assert.deepEqual(opportunity.result.opportunity_screen.candidate_universe,['ITUB4','BBDC4']);assert.equal(opportunity.result.opportunity_screen.rows.length,opportunity.result.opportunity_screen.requested_universe.length);assert.equal(opportunityRequest.context.include_portfolio_stocks,true);assert.equal(opportunity.result.derived_synthesis_status,'COMPLETED','A busca real precisa incluir a síntese sênior');const opportunitySynthesis=opportunity.result.synthesis||{};const opportunityProposal=opportunity.result.decision_proposal||opportunity.result.proposal||{};const opportunityNarrative=[opportunitySynthesis.summary,opportunityProposal.thesis,opportunityProposal.rationale,opportunity.result.summary].find(value=>typeof value==='string'&&value.trim());assert.ok(opportunityNarrative,'A síntese de Opportunities não pode ser vazia');assert.ok(opportunity.result.opportunity_research_scope?.policy_version,'A cobertura de pesquisa precisa ser explícita');await opportunityRunStatus.getByText('Busca concluída',{exact:true}).waitFor({timeout:180000});}
+else{opportunityCoverage='UI_FIXTURE_ONLY';const detail=opportunity?.detail;const detailPreview=typeof detail==='string'?detail.replace(/\b[A-Z]{4}\d{1,2}\b/g,'<ticker>').replace(/\b(?:R\$|BRL)\s*[\d.,]+/gi,'<amount>').replace(/\b\d[\d.,]*/g,'<number>').replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi,'<email>').replace(/(?:\/[\w.-]+)+/g,'<path>').replace(/\s+/g,' ').slice(0,240):null;const allowedErrorFields=new Set(['body','query','path','context','workspace','task','ticker','selected_ticker','dashboard_page','use_cases','opportunity_assets','opportunity_objective','include_portfolio_stocks','research_mode','analysis_mode']);const validation=Array.isArray(detail)?detail.slice(0,12).map(item=>({type:typeof item?.type==='string'?item.type:'unknown',loc:Array.isArray(item?.loc)?item.loc.filter(part=>typeof part==='string'&&allowedErrorFields.has(part)):[]})):null;console.log(JSON.stringify({case:'opportunities_active_api',status:'BLOCKED',http:opportunityHttp.status(),response_keys:Object.keys(opportunity??{}),detail_kind:Array.isArray(detail)?'validation_list':typeof detail,detail_preview:detailPreview,validation}));await opportunityRunStatus.getByText('Falha na nova busca',{exact:true}).waitFor({timeout:15000});const fixture={status:'COMPLETED',result:{as_of:'2026-10-05T12:00:00Z',derived_synthesis_status:'COMPLETED',synthesis:{summary:'Fixture de interface: API ativa incompatível; nenhum dado financeiro real foi usado.'},opportunity_screen:{policy_version:'UI_FIXTURE_NO_FINANCIAL_DATA',objective:'COMPARE_ONLY',status:'COMPARED_WITHOUT_RANKING',candidate_universe:['ITUB4','BBDC4'],portfolio_stock_universe:[],portfolio_option_underlying_universe:[],portfolio_scope:{status:'UNAVAILABLE',snapshot_as_of:null,stock_ticker_count:0,option_position_count:null},requested_universe:['ITUB4','BBDC4'],ranked_count:0,rows:['ITUB4','BBDC4'].map(ticker=>({ticker,scope_role:'CANDIDATE',discovery_eligible:true,rank:null,current_price:null,volatility_60d:null,liquidity_proxy_20d:null,history_count:0,exclusions:['FIXTURE_NO_FINANCIAL_DATA'],source_refs:[],portfolio:{held:null,stock_quantity:null,open_option_count:null,open_options:null,short_put_assignment_capital_brl:null,short_call_units:null,covered_call_units:null,covered_call_status:'PORTFOLIO_UNKNOWN',snapshot_as_of:null}})),limitations:['Fixture visual sem preços, carteira ou recomendação.']},asset_evidence:{},personal_history:{},source_refs:[]},sources:[],audit:[],error:null};await page.route('**/orchestrate',async route=>{if(route.request().postDataJSON().context?.workspace==='Opportunities')await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(fixture)});else await route.continue()});const fixtureResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().context?.opportunity_assets?.join(',')==='ITUB4,BBDC4',{timeout:30000});await page.getByRole('button',{name:'Buscar novas oportunidades',exact:true}).click();const fixturePayload=await (await fixtureResponse).json();assert.equal(fixturePayload.result.opportunity_screen.policy_version,'UI_FIXTURE_NO_FINANCIAL_DATA');await opportunityRunStatus.getByText('Busca concluída',{exact:true}).waitFor({timeout:15000});await page.locator('.opportunity-decision').getByText('Fixture de interface: API ativa incompatível; nenhum dado financeiro real foi usado.',{exact:true}).waitFor({timeout:15000});}
+assert.equal(requests.filter(r=>r.context?.workspace==='Opportunities'&&r.context?.include_portfolio_stocks===true).length,requestsBeforeManual+1,'Manual refresh must make one integrated Opportunities request');
+assert.equal(opportunityCoverage,'LIVE_API','Opportunities closure requires real backend data; UI fixture is not acceptance');
+await page.getByRole('heading',{name:'Decisão para agora',exact:true}).waitFor({timeout:10000});assert.equal(await opportunityRunStatus.getAttribute('aria-busy'),'false');assert.ok((await opportunityRunStatus.innerText()).includes('Início'));assert.ok((await opportunityRunStatus.innerText()).includes('Término'));
+await page.getByRole('button',{name:'Abrir análise',exact:true}).first().waitFor();await page.getByRole('button',{name:'Abrir análise',exact:true}).first().click();await page.getByRole('heading',{name:/análise da oportunidade/}).waitFor();await page.getByRole('heading',{name:/Exposição no snapshot/}).waitFor();
+await screenshot(`opportunity-detail-${opportunityCoverage.toLowerCase()}`);await page.getByRole('button',{name:'Voltar à lista de oportunidades',exact:true}).click();
+await page.route('**/orchestrate',async route=>{const body=route.request().postDataJSON();if(body.context?.workspace==='Opportunities')await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({detail:'fixture: source unavailable'})});else await route.continue()});
+await page.getByRole('button',{name:'Buscar novas oportunidades',exact:true}).click();await opportunityRunStatus.getByText('Falha na nova busca',{exact:true}).waitFor({timeout:15000});assert.equal(await opportunityRunStatus.getAttribute('aria-busy'),'false');await page.getByRole('button',{name:'Abrir análise',exact:true}).first().waitFor();
+await page.unroute('**/orchestrate');
+await page.route('**/orchestrate',async route=>{if(route.request().postDataJSON().context?.workspace==='Opportunities')await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({status:'COMPLETED',sources:[],audit:[]})});else await route.continue()});
+await page.getByRole('button',{name:'Buscar novas oportunidades',exact:true}).click();await opportunityRunStatus.getByText('Falha na nova busca',{exact:true}).waitFor({timeout:15000});assert.equal(await opportunityRunStatus.getAttribute('aria-busy'),'false');await page.getByRole('button',{name:'Abrir análise',exact:true}).first().waitFor();
+await page.unroute('**/orchestrate');
+await nav('Risk & Stress');await page.getByLabel('Ativo do stress',{exact:true}).fill('PETR4');
+const stressResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().context?.ticker_price_shocks,{timeout:60000});
+await page.getByRole('button',{name:'Simular impacto',exact:true}).click();const stress=await (await stressResponse).json();assert.ok(!stress.error);assert.ok(stress.result.scenario_result);await page.getByRole('heading',{name:'Impacto por posição',exact:true}).waitFor();
+await nav('History & Learning');await page.getByLabel('Ativo do histórico',{exact:true}).fill('PETR4');
+const historyResponse=page.waitForResponse(r=>r.url().includes('/history/context?'),{timeout:30000});await page.getByRole('button',{name:'Consultar histórico',exact:true}).click();assert.equal((await historyResponse).status(),200);await page.getByText('Operações pessoais · evidência disponível',{exact:true}).first().waitFor();
+for(const [label,title] of [['Learnings','Aprendizados · LIMITED'],['Similarity','Similaridade · LIMITED']]){await page.getByRole('tab',{name:label,exact:true}).click();const response=page.waitForResponse(r=>r.url().includes('/history/context?'));await page.getByRole('button',{name:'Consultar histórico',exact:true}).click();const value=await (await response).json();assert.equal(value.learning_sample_size,0);await page.getByText(title,{exact:true}).waitFor();await screenshot(label.toLowerCase()+'-limited-real')}
+await page.getByRole('tab',{name:'Operations',exact:true}).click();
+await nav('Market Intelligence');await page.getByRole('button',{name:'Contexto de mercado',exact:true}).click();
+for(const label of ['Regime','Factors','Research & Events']){await page.getByRole('tab',{name:label,exact:true}).click();const response=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().context?.workspace==='Market Intelligence',{timeout:195000});await page.getByRole('button',{name:'Analisar contexto',exact:true}).click();const value=await (await response).json();assert.ok(value.result.workspace_intelligence);assert.equal(value.result.derived_synthesis_status,'COMPLETED');assert.ok(!value.error);const proposal=value.result.proposal||value.result.decision_proposal||{};assert.ok(proposal.thesis&&proposal.rationale,'Missing senior market narrative');assert.ok(value.result.telemetry.stages.reason,'Missing senior reasoning stage');await page.locator('.context-evidence').waitFor();const exposure=page.locator('section.panel[aria-labelledby="market-portfolio-exposure"]');await exposure.waitFor();assert.equal(await exposure.locator('tbody tr').count(),portfolio.positions.length,'Market overview must preserve every current portfolio position');assert.ok((await exposure.innerText()).includes('Snapshot'));await screenshot('market-'+label.toLowerCase().replaceAll(/[^a-z]+/g,'-')+'-real')}
+await page.getByRole('button',{name:'Ativo · gráfico e indicadores',exact:true}).click();
+await page.getByLabel('Ativo B3',{exact:true}).fill('PETR4');
+const marketResponse=page.waitForResponse(r=>r.url().endsWith('/analysis/live/PETR4'),{timeout:60000});await page.locator('main').getByRole('button',{name:'Analisar',exact:true}).click();const market=await (await marketResponse).json();assert.ok(market.market.price_history.length>0);
+await page.getByRole('img',{name:/Preço e volume em/}).waitFor({timeout:30000});
+for(const range of ['1S','1M','1A']){await page.getByRole('button',{name:range,exact:true}).click();await page.getByRole('heading',{name:/Histórico de preços/}).waitFor();}
+await page.getByLabel('Volume',{exact:true}).uncheck();await page.getByLabel('Volume',{exact:true}).check();await page.getByLabel('Zoom no período',{exact:true}).check();
+const routes=['Overview','Portfolio','Options','Opportunities','Strategy Lab','Market Intelligence','History & Learning','Risk & Stress'];
+for(const [width,height] of [[1920,1080],[1440,900],[1366,768]]){
+ await page.setViewportSize({width,height});
+ for(const label of routes){await nav(label);await noOverflow();await screenshot(`${label.toLowerCase().replaceAll(/[^a-z]+/g,'-')}-${width}`)}
+ await page.getByRole('button',{name:'Recolher menu',exact:true}).click();await noOverflow();await screenshot(`sidebar-collapsed-${width}`);await page.getByRole('button',{name:'Recolher menu',exact:true}).click();
+ await page.getByRole('button',{name:'Fechar Copilot',exact:true}).click();await noOverflow();await screenshot(`copilot-closed-${width}`);await page.getByRole('button',{name:/Copilot \+/}).click();
+}
+await nav('Portfolio');const copilotResponse=page.waitForResponse(r=>r.url().endsWith('/orchestrate')&&r.request().postDataJSON().task==='Resuma a concentração da carteira.',{timeout:60000});await page.locator('.chat-form textarea').fill('Resuma a concentração da carteira.');await page.getByRole('button',{name:'Enviar',exact:true}).click();const copilot=await (await copilotResponse).json();assert.ok(!copilot.error);assert.equal(copilot.result.portfolio_context.positions.length,portfolio.positions.length);await page.locator('.copilot').getByRole('heading',{name:'Carteira considerada',exact:true}).waitFor();await screenshot('copilot-context-real');
+await nav('Strategy Lab');await page.locator('.chat-form textarea').fill('Está online?');await page.getByRole('button',{name:'Enviar',exact:true}).click();await page.locator('.copilot .analysis-summary p').filter({hasText:/Sim. Estou conectado ao B3 Runtime/}).waitFor();
+assert.equal(consoleErrors.length,0,`Browser errors: ${consoleErrors.join('; ')}`);
+assert.ok(requests.some(r=>r.context?.ticker_price_shocks?.PETR4===-0.1),'Percentage unit conversion incorrect');
+assert.ok(requests.some(r=>r.context?.comparison_assets?.join(',')==='ITUB4,BBDC4'&&r.context.analysis_mode==='deterministic'));
+const report={status:'PASS',real_backend:true,resolutions:[1920,1440,1366],screens:routes,interaction_checks:['route','portfolio coherence','filter continuity','option limited state','OPLAB chain with source Greeks','UC06 limited state','UC08 and UC09 real zero sample','macro and stored event queries','buy comparison','canonical scenario chart','opportunity detail','stress','personal history','price ranges','volume','zoom','copilot close/open','copilot health','UC12 contextual canonical portfolio answer'],page_errors:consoleErrors,raw_payloads_uploaded:false};
+await writeFile(resolve(out,'acceptance.json'),JSON.stringify(report,null,2));
+console.log(JSON.stringify(report));
+} catch(error){await screenshot('failure-current-screen');await writeFile(resolve(out,'failure.json'),JSON.stringify({status:'FAIL',url:page.url(),reason:error.message,page_errors:consoleErrors},null,2));throw error} finally{await browser.close()}

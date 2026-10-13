@@ -32,6 +32,29 @@ class FakeMarketProvider:
         ]
 
 
+class FakeCurrentMarketProvider:
+    name = "oplab"
+
+    def get_current_quote(self, ticker):
+        now = datetime(2026, 9, 27, 15, 59, tzinfo=timezone.utc)
+        return StockMarketData(
+            instrument_id=ticker,
+            ticker=ticker,
+            observation_timestamp=now,
+            available_timestamp=now,
+            source=self.name,
+            ingested_at=now,
+            source_record_id=f"{ticker}:current",
+            quality_flags=("current_quote",),
+            open=30.0,
+            high=31.0,
+            low=29.5,
+            close=30.5,
+            volume=2_000_000,
+            currency="BRL",
+        )
+
+
 class FakeOptionsProvider:
     name = "oplab"
 
@@ -97,6 +120,7 @@ def test_live_provider_service_builds_deterministic_options_analysis():
     service = LiveProviderService(
         market_provider=FakeMarketProvider(),
         options_provider=FakeOptionsProvider(),
+        current_market_provider=FakeCurrentMarketProvider(),
     )
 
     result = service.load("petr4", as_of=as_of)
@@ -104,11 +128,13 @@ def test_live_provider_service_builds_deterministic_options_analysis():
     assert result.ticker == "PETR4"
     assert result.source_refs == ("brapi", "oplab")
     assert len(result.market_records) == 1
+    assert result.current_stock_quote is not None
+    assert result.current_stock_quote.close == 30.5
     assert len(result.option_contracts) == 2
     assert len(result.option_quotes) == 2
     assert len(result.options_analysis.puts) == 1
     assert len(result.options_analysis.calls) == 1
-    assert result.options_analysis.calls[0].current_price == 29.0
+    assert result.options_analysis.calls[0].current_price == 30.5
     assert result.options_analysis.assumptions["live_provider_snapshot"] is True
 
 
@@ -122,8 +148,75 @@ def test_live_provider_fetches_oplab_chain_once(monkeypatch):
     adapter = OplabOptionsAdapter()
     monkeypatch.setattr(adapter, "_get_payload", lambda ticker: calls.append(ticker) or payload)
     result = LiveProviderService(
-        market_provider=FakeMarketProvider(), options_provider=adapter
+        market_provider=FakeMarketProvider(),
+        options_provider=adapter,
+        current_market_provider=FakeCurrentMarketProvider(),
     ).load("PETR4", as_of=as_of)
     assert calls == ["PETR4"]
     assert result.option_contracts[0].option_id == result.option_quotes[0].option_id
     assert len(result.options_analysis.calls) == 1
+
+
+class FailingCurrentMarketProvider:
+    name = "oplab"
+
+    def get_current_quote(self, ticker):
+        raise ValueError("current quote unavailable")
+
+
+def test_live_provider_does_not_substitute_history_when_current_quote_fails():
+    as_of = datetime(2026, 9, 27, 16, 0, tzinfo=timezone.utc)
+    service = LiveProviderService(
+        market_provider=FakeMarketProvider(),
+        options_provider=FakeOptionsProvider(),
+        current_market_provider=FailingCurrentMarketProvider(),
+    )
+
+    result = service.load("PETR4", as_of=as_of)
+
+    assert result.current_stock_quote is None
+    assert result.options_analysis.assumptions["current_stock_price_source"] == "unavailable"
+    assert "current_stock_quote_error" in result.options_analysis.assumptions
+    assert result.options_analysis.calls == ()
+    assert result.options_analysis.assumptions is not None
+    assert any(
+        item == "missing_current_price:PETRJ320"
+        for item in result.options_analysis.assumptions["rejected_quotes"]
+    )
+
+class ForbiddenOptionalMarketProvider:
+    name = "must-not-be-requested"
+
+    def get_current_quote(self, ticker):
+        raise AssertionError("history-only load must not request a current quote")
+
+
+class ForbiddenOptionsProvider:
+    name = "must-not-be-requested"
+
+    def get_options(self, ticker, as_of):
+        raise AssertionError("history-only load must not request an option chain")
+
+    def get_option_quotes(self, ticker, as_of):
+        raise AssertionError("history-only load must not request option quotes")
+
+
+def test_history_only_load_skips_current_quote_and_option_chain():
+    as_of = datetime(2026, 9, 27, 16, 0, tzinfo=timezone.utc)
+    result = LiveProviderService(
+        market_provider=FakeMarketProvider(),
+        options_provider=ForbiddenOptionsProvider(),
+        current_market_provider=ForbiddenOptionalMarketProvider(),
+    ).load(
+        "PETR4",
+        as_of=as_of,
+        include_current_quote=False,
+        include_options=False,
+    )
+
+    assert len(result.market_records) == 1
+    assert result.current_stock_quote is None
+    assert result.option_contracts == ()
+    assert result.option_quotes == ()
+    assert result.source_refs == ("brapi",)
+    assert result.reuse_telemetry["option_chain"] == {}

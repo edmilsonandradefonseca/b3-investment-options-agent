@@ -1,0 +1,238 @@
+name: B3 local worker and schedule diagnostics
+on:
+  push:
+    branches: [feature/react-functional-v43-integration]
+    paths:
+      - .github/workflows/b3-local-worker-diagnostics.yml
+      - scripts/run_nightly_intelligence.py
+      - tests/test_nightly_intelligence.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  wait-for-ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Require green CI for this revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os, time
+          from urllib.request import Request, urlopen
+          url = f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/actions/runs?head_sha={os.environ['GITHUB_SHA']}&event=pull_request&per_page=20"
+          for attempt in range(72):
+              request = Request(url, headers={"Authorization":"Bearer " + os.environ["GH_TOKEN"],"Accept":"application/vnd.github+json"})
+              with urlopen(request,timeout=15) as response:
+                  runs=json.load(response)["workflow_runs"]
+              ci=[run for run in runs if run["name"]=="CI"]
+              if ci and ci[0]["status"]=="completed":
+                  assert ci[0]["conclusion"]=="success", "CI failed; runner update refused"
+                  print("CI_GATE=PASS",flush=True)
+                  break
+              time.sleep(5)
+          else:
+              raise RuntimeError("CI completion not observed; runner update refused")
+          PY
+  diagnose:
+    needs: wait-for-ci
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 100
+    steps:
+      - name: Install approved revision without restarting the API service
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_dir=/opt/b3-investment-options-agent
+          test "$(git -C "$runtime_dir" branch --show-current)" = "feature/react-functional-v43-integration"
+          test -z "$(git -C "$runtime_dir" status --porcelain --untracked-files=no)"
+          git -C "$runtime_dir" fetch origin feature/react-functional-v43-integration
+          git -C "$runtime_dir" merge --ff-only "$GITHUB_SHA"
+          test "$(git -C "$runtime_dir" rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "TESTED_REVISION_INSTALLED=$GITHUB_SHA"
+      - name: Run focused nightly identity regressions on Ubuntu
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /opt/b3-investment-options-agent
+          .venv/bin/python -m pytest tests/test_nightly_intelligence.py
+      - name: Execute the nightly collector as its configured service user
+        shell: bash
+        run: |
+          set -euo pipefail
+          service=b3-nightly-intelligence.service
+          service_user="$(systemctl show "$service" --property=User --value)"
+          if test -z "$service_user"; then service_user=root; fi
+          test "$service_user" = "$USER"
+          test "$(systemctl show "$service" --property=ActiveState --value)" != "active"
+          runtime_dir=/opt/b3-investment-options-agent
+          cd "$runtime_dir"
+          export B3_AGENT_PROJECT_ROOT="$runtime_dir"
+          export B3_AGENT_TIMEZONE=America/Sao_Paulo
+          export B3_NIGHTLY_MAX_LOCAL_ANALYSIS_ENQUEUES=5
+          for env_file in /opt/joao-runtime/joao.env /etc/b3-runtime.env /opt/b3-runtime/b3.env; do
+            if test -r "$env_file"; then
+              set -a
+              . "$env_file"
+              set +a
+            fi
+          done
+          data_dir="$("$runtime_dir/.venv/bin/python" -c 'from b3_agent.config import settings; print(settings.data_dir)')"
+          summary="$data_dir/derived/nightly_intelligence/runner_latest.json"
+          before="$(stat -c %Y "$summary" 2>/dev/null || echo 0)"
+          private_log="/tmp/b3-nightly-${GITHUB_RUN_ID}.log"
+          exit_status=0
+          timeout 5400 "$runtime_dir/.venv/bin/python" "$runtime_dir/scripts/run_nightly_intelligence.py" >"$private_log" 2>&1 || exit_status=$?
+          after="$(stat -c %Y "$summary" 2>/dev/null || echo 0)"
+          python3 - "$summary" "$private_log" "$exit_status" "$before" "$after" <<'PY'
+          import json, re, sys
+          from pathlib import Path
+          summary_path, log_path = Path(sys.argv[1]), Path(sys.argv[2])
+          process_exit, before, after = map(int, sys.argv[3:])
+          safe = {
+              "case": "NIGHTLY_LIVE_ACCEPTANCE",
+              "process_exit_status": process_exit,
+              "summary_refreshed": after > before,
+              "summary_exists": summary_path.is_file(),
+          }
+          if summary_path.is_file() and after > before:
+              payload = json.loads(summary_path.read_text(encoding="utf-8"))
+              identity = payload.get("identity_filter") or {}
+              safe.update({
+                  "status": payload.get("status"),
+                  "accepted_ticker_count": identity.get("accepted_ticker_count"),
+                  "rejected_identity_count": identity.get("rejected_identity_count"),
+                  "nightly_failed_count": payload.get("failed"),
+                  "dividend_status_counts": payload.get("issuer_dividend_refresh", {}).get("result_status_counts", {}),
+                  "official_sources": payload.get("official_sources", {}),
+                  "target_discovery_status_counts": payload.get("institution_target_discovery", {}).get("result_status_counts", {}),
+                  "target_refresh": payload.get("institution_target_refresh", {}),
+              })
+          elif log_path.is_file():
+              log = log_path.read_text(encoding="utf-8", errors="replace")
+              frames = re.findall(r'File "([^"]+)", line (\d+), in ([^\n]+)', log)
+              exceptions = re.findall(r'^([A-Za-z_][A-Za-z_0-9]*(?:Error|Exception))(?::|$)', log, flags=re.MULTILINE)
+              safe["failure_class"] = exceptions[-1] if exceptions else "SUMMARY_NOT_WRITTEN"
+              safe["frames"] = [{"file": Path(file).name, "line": int(line), "function": function.strip()} for file, line, function in frames[-6:]]
+          print(json.dumps(safe, sort_keys=True))
+          assert process_exit == 0, "nightly collector returned non-zero; safe failure metadata emitted"
+          assert after > before, "nightly collector did not refresh the run summary"
+          payload = json.loads(summary_path.read_text(encoding="utf-8"))
+          assert payload.get("status") in {"PASS", "PASS_WITH_REJECTED_IDENTITIES"}
+          PY
+          rm -f "$private_log"
+      - name: Read scheduler, persistence and worker metadata without private content
+        if: ${{ always() }}
+        run: |
+          python3 - <<'PY'
+          import json, subprocess
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          pairs = [
+              ("b3-continuous-intelligence.timer", "b3-continuous-intelligence.service"),
+              ("b3-local-relevance-screen.timer", "b3-local-relevance-screen.service"),
+              ("b3-local-evidence-analyst.timer", "b3-local-evidence-analyst.service"),
+              ("b3-nightly-intelligence.timer", "b3-nightly-intelligence.service"),
+              ("b3-cvm-reconciliation.timer", "b3-cvm-reconciliation.service"),
+          ]
+
+          def show(unit, properties):
+              completed = subprocess.run(
+                  ["systemctl", "show", unit, "--property=" + ",".join(properties)],
+                  text=True, capture_output=True, timeout=10,
+              )
+              values = dict(line.split("=", 1) for line in completed.stdout.splitlines() if "=" in line)
+              return values if completed.returncode == 0 else {"query_error": "UNIT_UNAVAILABLE"}
+
+          for timer, service in pairs:
+              print(json.dumps({
+                  "case": "TIMER_RUNTIME",
+                  "unit": timer,
+                  **show(timer, ["UnitFileState", "ActiveState", "NextElapseUSecRealtime", "LastTriggerUSec"]),
+              }, sort_keys=True))
+              print(json.dumps({
+                  "case": "SCHEDULED_SERVICE_LAST_RUN",
+                  "unit": service,
+                  **show(service, ["ActiveState", "SubState", "Result", "ExecMainStatus", "ExecMainStartTimestamp", "ExecMainExitTimestamp"]),
+              }, sort_keys=True))
+
+          timer_units = [timer for timer, _ in pairs]
+          listed = subprocess.run(
+              ["systemctl", "list-timers", "--all", "--no-pager", "--no-legend", *timer_units],
+              text=True, capture_output=True, timeout=15,
+          )
+          print(json.dumps({"case": "TIMER_CALENDARS", "lines": [line.strip() for line in listed.stdout.splitlines() if line.strip()]}))
+
+          data = Path("/opt/b3-runtime/data/derived")
+          manifests = {
+              "continuous_intelligence": data / "continuous_intelligence" / "latest.json",
+              "nightly_intelligence": data / "nightly_intelligence" / "latest.json",
+              "cvm_reconciliation": data / "cvm_reconciliation" / "latest.json",
+          }
+          allowed = {
+              "continuous_intelligence": ["status", "completed_at", "documents", "new_evidence", "duplicates", "material", "candidate", "non_material", "relevance_enqueued", "dossier_enqueued"],
+              "nightly_intelligence": ["as_of", "ticker_count", "completed", "queued_local_analysis", "skipped", "deferred", "coverage_insufficient", "failed", "local_analysis_enqueues"],
+              "cvm_reconciliation": ["status", "completed_at", "records", "added", "duplicates", "unmatched"],
+          }
+          for name, path in manifests.items():
+              if not path.is_file():
+                  print(json.dumps({"case": "PERSISTED_RUN_MANIFEST", "name": name, "status": "MISSING"}))
+                  continue
+              try:
+                  payload = json.loads(path.read_text(encoding="utf-8"))
+                  summary = {key: payload[key] for key in allowed[name] if key in payload and isinstance(payload[key], (str, int, float, bool, type(None)))}
+                  summary["manifest_mtime_utc"] = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).isoformat()
+                  print(json.dumps({"case": "PERSISTED_RUN_MANIFEST", "name": name, **summary}, sort_keys=True))
+              except (OSError, ValueError):
+                  print(json.dumps({"case": "PERSISTED_RUN_MANIFEST", "name": name, "status": "UNREADABLE"}))
+
+          for name in ["continuous_intelligence/evidence", "cvm_reconciliation/evidence"]:
+              path = data / name
+              files = list(path.glob("*.json")) if path.is_dir() else []
+              newest = max((item.stat().st_mtime for item in files), default=None)
+              print(json.dumps({
+                  "case": "PERSISTED_EVIDENCE_COUNT",
+                  "store": name,
+                  "file_count": len(files),
+                  "newest_file_mtime_utc": datetime.fromtimestamp(newest, timezone.utc).isoformat() if newest else None,
+              }, sort_keys=True))
+
+          for service in ["b3-nightly-intelligence.service"]:
+              state = show(service, ["Result", "ExecMainStatus"])
+              if state.get("Result") == "failed" or state.get("ExecMainStatus") not in {"0", ""}:
+                  journal = subprocess.run(
+                      ["journalctl", "-u", service, "-n", "120", "--no-pager", "-o", "cat"],
+                      text=True, capture_output=True, timeout=15,
+                  ).stdout
+                  import re
+                  frames = re.findall(r'File "([^"]+)", line (\d+), in ([^\n]+)', journal)
+                  errors = re.findall(r'^([A-Za-z_][A-Za-z_0-9]*(?:Error|Exception))(?::|$)', journal, flags=re.MULTILINE)
+                  print(json.dumps({
+                      "case": "FAILED_NIGHTLY_TRACE_METADATA",
+                      "service": service,
+                      "failure_class": errors[-1] if errors else "NO_EXCEPTION_CLASS_IN_JOURNAL",
+                      "frames": [{"file": Path(file).name, "line": int(line), "function": function} for file, line, function in frames[-8:]],
+                  }, sort_keys=True))
+
+          root = data / "local_evidence_analyst"
+          for path in root.joinpath("runs").glob("*.json") if root.joinpath("runs").is_dir() else []:
+              dossier = json.loads(path.read_text())
+              if not any("conteudos.xpi.com.br/acoes/relatorios/" in str(ref) for ref in dossier.get("evidence_refs", [])):
+                  continue
+              analysis = dossier.get("analysis") or {}
+              required = {"summary": "str", "risks": "list", "catalysts": "list", "contradictions": "list", "questions_for_senior_review": "list", "escalation_recommended": "bool", "evidence_refs": "list"}
+              print(json.dumps({
+                  "case": "TARGET_DOSSIER_METADATA",
+                  "status": dossier.get("status"),
+                  "quality_flags": dossier.get("quality_flags"),
+                  "model": dossier.get("model"),
+                  "eval_count": dossier.get("eval_count"),
+                  "num_predict": dossier.get("num_predict"),
+                  "thinking_chars": dossier.get("thinking_chars"),
+                  "input_chars": dossier.get("input_chars"),
+                  "raw_chars": len(dossier.get("raw_analysis") or ""),
+                  "field_types": {key: type(analysis.get(key)).__name__ for key in required},
+              }))
+          PY

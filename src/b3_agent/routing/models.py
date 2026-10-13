@@ -16,6 +16,7 @@ class RouteTarget(str, Enum):
     PORTFOLIO_ENGINE = "portfolio_engine"
     OPTIONS_ENGINE = "options_engine"
     STRESS_ENGINE = "stress_engine"
+    STRATEGY_ENGINE = "strategy_engine"
     MACRO_JOB = "macro_job"
     DEEPSEEK_BACKGROUND = "deepseek-r1:8b"
     OPENCLAW = "openclaw"

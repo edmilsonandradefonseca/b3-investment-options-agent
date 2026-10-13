@@ -1,0 +1,69 @@
+name: B3 daily OHLCV history refresh (Ubuntu)
+
+on:
+  push:
+    branches: [feature/react-functional-v43-integration]
+    paths:
+      - .github/workflows/b3-market-history-refresh.yml
+      - scripts/refresh_market_history.py
+      - scripts/install_market_history_refresh_timer.sh
+      - tests/test_market_history_refresh.py
+      - src/b3_agent/ingestion/cotahist.py
+      - src/b3_agent/repositories/market_data.py
+      - src/b3_agent/jobs/continuous_intelligence.py
+      - src/b3_agent/strategy_live.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: b3-market-history-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Validate and refresh shared market history
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Test COTAHIST ingestion and ticker selection
+        id: tests
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: |
+          set -euo pipefail
+          /opt/b3-investment-options-agent/.venv/bin/python -m py_compile scripts/refresh_market_history.py
+          /opt/b3-investment-options-agent/.venv/bin/python -m pytest -q \
+            tests/test_cotahist_import.py tests/test_market_history_refresh.py
+
+      - name: Run immediate official B3 OHLCV refresh into shared Parquet
+        id: refresh
+        env:
+          B3_AGENT_PROJECT_ROOT: /opt/b3-investment-options-agent
+          B3_AGENT_DATA_DIR: /opt/b3-runtime/data
+          B3_AGENT_TIMEZONE: America/Sao_Paulo
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: |
+          set -euo pipefail
+          timeout 50m /opt/b3-investment-options-agent/.venv/bin/python \
+            scripts/refresh_market_history.py
+
+      - name: Install collector and enable weekday 19:30 BRT systemd timer
+        id: install_timer
+        if: always() && steps.tests.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -D -m 0644 \
+            "$GITHUB_WORKSPACE/scripts/refresh_market_history.py" \
+            /opt/b3-investment-options-agent/scripts/refresh_market_history.py
+          install -D -m 0644 \
+            "$GITHUB_WORKSPACE/scripts/install_market_history_refresh_timer.sh" \
+            /opt/b3-investment-options-agent/scripts/install_market_history_refresh_timer.sh
+          B3_REPO=/opt/b3-investment-options-agent \
+            bash "$GITHUB_WORKSPACE/scripts/install_market_history_refresh_timer.sh"

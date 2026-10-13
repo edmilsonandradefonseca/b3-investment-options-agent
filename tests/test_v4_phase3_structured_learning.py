@@ -18,6 +18,26 @@ from b3_agent.schemas.learning import LearningScope, LearningStatus
 BASE = datetime(2026, 4, 1, 15, 0, tzinfo=timezone.utc)
 
 
+@pytest.mark.parametrize('change', ['unknown_pnl','nonfinite_pnl','future_outcome','provisional','duplicate_operation'])
+def test_learning_never_counts_unknown_future_or_duplicate_outcomes(change):
+    from dataclasses import replace
+    exp = make_experience(1)
+    cutoff = BASE + timedelta(days=50)
+    items = [exp]
+    if change == 'unknown_pnl':
+        items = [replace(exp, outcome=replace(exp.outcome, realized_pnl=None))]
+    elif change == 'nonfinite_pnl':
+        items = [replace(exp, outcome=replace(exp.outcome, realized_pnl=float('nan')))]
+    elif change == 'future_outcome':
+        items = [replace(exp, outcome=replace(exp.outcome, finalized_at=cutoff + timedelta(days=1)))]
+    elif change == 'provisional':
+        items = [replace(exp, outcome=replace(exp.outcome, status=OutcomeStatus.PROVISIONAL))]
+    else:
+        items.append(replace(exp, experience_id='OTHER-AGGREGATE'))
+    with pytest.raises(ValueError):
+        LearningEngine().learn(items, as_of=cutoff)
+
+
 def make_experience(index: int, *, win: bool = True, subject: str = "B3-PETR4", strategy: str = "SHORT_PUT"):
     opened = BASE + timedelta(days=index * 3)
     closed = opened + timedelta(days=10)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 from typing import Iterable
@@ -87,8 +88,31 @@ class OptionTransactionLedger:
 
     def append(self, transactions: Iterable[OptionTransaction]) -> int:
         inserted = 0
+        occurrences: Counter[str] = Counter()
+        # Allocate the compatible first fingerprint to legacy rows before newly
+        # recognized rows, even when the new row appears first in the PDF.
+        def identity_order(transaction: OptionTransaction) -> tuple:
+            parts = transaction.transaction_id.split(":")
+            if len(parts) >= 4 and parts[0] == "btg-note":
+                additional = parts[2] == "additional"
+                ordinal = parts[3] if additional else parts[2]
+                if ordinal.isdigit():
+                    return (0, parts[1], additional, int(ordinal))
+            return (1, transaction.transaction_id, False, 0)
+
         with self._connect() as connection:
-            for transaction in transactions:
+            for transaction in sorted(transactions, key=identity_order):
+                fingerprint = self.fingerprint(transaction)
+                if transaction.source_type == "BROKERAGE_NOTE":
+                    # Distinct fills in one note may have identical economics.
+                    # Keep the first fingerprint compatible with existing rows;
+                    # further occurrences are stable across copies of the note.
+                    occurrences[fingerprint] += 1
+                    occurrence = occurrences[fingerprint]
+                    if occurrence > 1:
+                        fingerprint = hashlib.sha256(
+                            f"{fingerprint}|occurrence:{occurrence}".encode("utf-8")
+                        ).hexdigest()
                 cursor = connection.execute(
                     """
                     INSERT OR IGNORE INTO option_transactions (
@@ -109,7 +133,7 @@ class OptionTransactionLedger:
                         transaction.note_number,
                         transaction.source_type,
                         transaction.source_id,
-                        self.fingerprint(transaction),
+                        fingerprint,
                     ),
                 )
                 inserted += cursor.rowcount

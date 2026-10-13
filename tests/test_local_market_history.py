@@ -113,3 +113,73 @@ def test_local_history_survives_wrapped_provider_request_failure(tmp_path):
 
     assert len(rows) == 2
     assert rows[-1].source == "b3_cotahist"
+
+
+def test_oplab_precedes_brapi_when_local_archive_is_empty(tmp_path):
+    oplab = RecordingProvider([
+        record(date(2026, 9, 28), source="oplab", close=32.0)
+    ])
+    brapi = RecordingProvider([
+        record(date(2026, 9, 28), source="brapi", close=31.0)
+    ])
+    service = LocalFirstMarketDataAdapter(
+        archive_dir=tmp_path / "archive",
+        brapi_cache_dir=tmp_path / "brapi",
+        brapi_provider=brapi,
+        oplab_provider=oplab,
+    )
+
+    rows = service.get_market_data(
+        "PETR4", date(2026, 9, 28), date(2026, 9, 28)
+    )
+
+    assert len(rows) == 1
+    assert rows[0].source == "oplab"
+    assert rows[0].close == 32.0
+    assert oplab.calls == [("PETR4", date(2026, 9, 28), date(2026, 9, 28))]
+    assert brapi.calls == []
+
+
+def test_brapi_is_fallback_when_oplab_market_history_fails(tmp_path):
+    oplab = RecordingProvider(error=ValueError("oplab unavailable"))
+    brapi = RecordingProvider([
+        record(date(2026, 9, 28), source="brapi", close=31.0)
+    ])
+    service = LocalFirstMarketDataAdapter(
+        archive_dir=tmp_path / "archive",
+        brapi_cache_dir=tmp_path / "brapi",
+        brapi_provider=brapi,
+        oplab_provider=oplab,
+    )
+
+    rows = service.get_market_data(
+        "PETR4", date(2026, 9, 28), date(2026, 9, 28)
+    )
+
+    assert len(rows) == 1
+    assert rows[0].source == "brapi"
+    assert oplab.calls == [("PETR4", date(2026, 9, 28), date(2026, 9, 28))]
+    assert brapi.calls == [("PETR4", date(2026, 9, 28), date(2026, 9, 28))]
+
+
+def test_weekend_request_fills_latest_published_weekday_after_local_archive(tmp_path):
+    oplab_record = record(date(2026, 10, 2), source="oplab", close=32.0)
+    oplab = RecordingProvider([oplab_record])
+    brapi = RecordingProvider()
+    repository = MarketDataRepository(tmp_path / "archive")
+    repository.write([record(date(2026, 9, 25))])
+    service = LocalFirstMarketDataAdapter(
+        archive_dir=tmp_path / "archive",
+        brapi_cache_dir=tmp_path / "brapi",
+        brapi_provider=brapi,
+        oplab_provider=oplab,
+    )
+
+    rows = service.get_market_data(
+        "PETR4", date(2026, 9, 25), date(2026, 10, 3)
+    )
+
+    assert oplab.calls == [("PETR4", date(2026, 9, 26), date(2026, 10, 3))]
+    assert [row.source for row in rows] == ["b3_cotahist", "oplab"]
+    assert rows[-1].observation_timestamp.date() == date(2026, 10, 2)
+    assert brapi.calls == []

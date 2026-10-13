@@ -3,11 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from hashlib import sha256
-from math import sqrt
+from math import sqrt, isfinite
 from statistics import fmean, median
 from collections.abc import Iterable
 
 from b3_agent.experience.model import Experience
+from b3_agent.experience.retrieval import experience_available_for_analysis, learning_available_for_analysis
 from b3_agent.schemas.learning import (
     EvidenceDirection,
     Learning,
@@ -74,7 +75,7 @@ class LearningUpdateResult:
 class LearningEngine:
     """Deterministic V1 learning updater over validated personal experiences."""
 
-    ENGINE_VERSION = "learning-engine-v1"
+    ENGINE_VERSION = "learning-engine-v2-outcome-admission"
 
     def __init__(self, policy: LearningPolicy | None = None):
         self.policy = policy or LearningPolicy()
@@ -99,6 +100,23 @@ class LearningEngine:
             raise ValueError("experiences must not be empty")
         if as_of.tzinfo is None or as_of.utcoffset() is None:
             raise ValueError("as_of must be timezone-aware")
+        if any(not experience_available_for_analysis(item, as_of=as_of) for item in ordered):
+            raise ValueError("learning requires final, valid outcomes available at as_of")
+        if any(item.outcome.realized_pnl is None or not isfinite(item.outcome.realized_pnl) for item in ordered):
+            raise ValueError("learning requires known finite realized_pnl; UNKNOWN is not a loss")
+        if any(item.outcome.realized_return is not None and not isfinite(item.outcome.realized_return) for item in ordered):
+            raise ValueError("learning requires finite realized_return when supplied")
+        for identity in ("experience_id", "operation_id", "outcome_id"):
+            if identity == "experience_id":
+                values = [item.experience_id for item in ordered]
+            elif identity == "operation_id":
+                values = [item.operation.operation_id for item in ordered]
+            else:
+                values = [item.outcome.outcome_id for item in ordered]
+            if len(set(values)) != len(values):
+                raise ValueError(f"duplicate {identity} cannot increase learning sample")
+        if previous is not None and not learning_available_for_analysis(previous, as_of=as_of):
+            raise ValueError("previous learning version must be available at as_of")
 
         subject_ids = {item.operation.underlying_id for item in ordered}
         strategy_types = {item.operation.strategy_type for item in ordered}

@@ -1,0 +1,23 @@
+name: B3 real broad asynchronous worker
+on:
+  push:
+    branches: [feature/react-functional-v43-integration]
+    paths:
+      - scripts/validate_broad_async_worker_real.py
+      - .github/workflows/b3-broad-async-worker.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: b3-broad-async-worker
+  cancel-in-progress: false
+jobs:
+  broad-worker:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Replay real news and issuer bundles without exposing private analyses
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: timeout 1320s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_broad_async_worker_real.py

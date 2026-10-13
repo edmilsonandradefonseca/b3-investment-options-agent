@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import date, datetime
 
 from b3_agent.providers.brapi.adapter import BrapiAdapter
+from b3_agent.orchestration.live_providers import LiveProviderService
 from b3_agent.stock_opportunity_service import StockOpportunityService
 from b3_agent.schemas.valuation import ValuationRange
 from b3_agent.opportunity_pipeline import StockOpportunityInput
@@ -24,14 +25,14 @@ def load_brapi_stock_input(
 ) -> StockOpportunityInput:
     """Acquire BRAPI observations and return the typed deterministic stock input.
 
-    Acquisition stays behind the BRAPI adapter. This function does not rank,
+    Default acquisition uses the V4.4 policy; the legacy function name is retained. This function does not rank,
     reason, call an LLM, or make a portfolio decision.
     """
     normalized_ticker = ticker.upper().strip()
     if not normalized_ticker:
         raise ValueError("ticker must not be empty")
 
-    records = (adapter or BrapiAdapter()).get_market_data(
+    records = (adapter or LiveProviderService().market_provider).get_market_data(
         normalized_ticker, start, end
     )
     if not records:
@@ -52,7 +53,7 @@ def load_brapi_stock_input(
     normalized_records = tuple(
         replace(record, ticker=normalized_ticker) for record in effective_records
     )
-    refs = tuple(dict.fromkeys(("brapi", *source_refs)))
+    refs = tuple(dict.fromkeys((*[r.source for r in effective_records], *source_refs)))
     return StockOpportunityInput(
         records=normalized_records,
         valuation=valuation,

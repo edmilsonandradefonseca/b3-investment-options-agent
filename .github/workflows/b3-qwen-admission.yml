@@ -1,0 +1,23 @@
+name: B3 isolated Qwen local worker admission
+on:
+  push:
+    branches: [feature/react-functional-v43-integration]
+    paths: [.github/workflows/b3-qwen-admission.yml, scripts/validate_qwen_local_worker_real.py]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  admission:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test two reviewed reports with Qwen without changing the production queue
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: timeout 1400s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_qwen_local_worker_real.py
+      - name: Diagnose chart contract separately from model admission
+        if: always()
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: timeout 90s /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_progressive_workspace_real.py

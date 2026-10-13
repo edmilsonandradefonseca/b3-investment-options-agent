@@ -1,0 +1,60 @@
+name: B3 Opportunities failure diagnosis
+on:
+  pull_request:
+    paths: ['.github/workflows/b3-opportunities-failure.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: b3-opportunities-failure-diagnosis
+  cancel-in-progress: false
+jobs:
+  diagnose:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Diagnose installed daily review without exposing portfolio or credentials
+        run: |
+          cd /opt/b3-investment-options-agent
+          .venv/bin/python - <<'PY'
+          import json, os, subprocess, sys, traceback, runpy, socket
+          from pathlib import Path
+          pid = subprocess.check_output(['systemctl','show','b3-runtime.service','--property=MainPID','--value'],text=True).strip()
+          if pid.isdigit() and int(pid):
+              for entry in Path('/proc/'+pid+'/environ').read_bytes().split(b'\0'):
+                  if b'=' in entry:
+                      key,value=entry.split(b'=',1)
+                      if key.startswith((b'B3_',b'OPENCLAW_',b'OLLAMA_')):
+                          os.environ[key.decode()]=value.decode()
+          sys.path.insert(0,str(Path('src').resolve()))
+          from b3_agent.server import _opportunity_review_store
+          print('SAVED_STATUS',json.dumps(_opportunity_review_store().status()),flush=True)
+          for port in (8000,18789,11434,8093,6333,7687):
+              try:
+                  with socket.create_connection(('127.0.0.1',port),timeout=2): print('PORT',port,'OPEN',flush=True)
+              except OSError: print('PORT',port,'CLOSED',flush=True)
+          def describe(exc):
+              seen=set()
+              while exc is not None and id(exc) not in seen:
+                  seen.add(id(exc))
+                  msg=str(exc).lower()
+                  tags=[tag for tag in ('empty response','valid json','json','unknown option','unknown model','unauthorized','auth','model','gateway','context length','502','504','connection refused','timed out','timeout','quota','rate limit','invalid','not configured','not found','unavailable','stale','ticker','assets','limit','yield','openclaw','schema','validation','permission','401','403','429','503') if tag in msg]
+                  print('EXCEPTION',json.dumps({'type':type(exc).__name__,'status_code':getattr(exc,'status_code',None),'tags':tags,'frames':[{'file':Path(f.filename).name,'line':f.lineno,'function':f.name} for f in traceback.extract_tb(exc.__traceback__)]}),flush=True)
+                  exc=exc.__cause__ or exc.__context__
+          import re
+          for unit in ('b3-runtime.service','b3-opportunities-daily.service'):
+              journal=subprocess.run(['journalctl','-u',unit,'--since','2026-10-13 11:39:00','--until','2026-10-13 11:43:00','--no-pager','-o','cat'],text=True,capture_output=True,timeout=20)
+              safe=[]
+              for line in journal.stdout.splitlines():
+                  frame=re.search(r'File "[^"]*/([^/"]+)", line (\d+), in ([\w<>]+)',line)
+                  if frame: safe.append({'file':frame[1],'line':int(frame[2]),'function':frame[3]})
+                  if re.search(r'Exception|Error|Traceback|failed|refused|timeout',line,re.I):
+                      tags=[tag for tag in ('empty response','valid json','json','unknown option','unknown model','unauthorized','auth','model','gateway','context length','502','504','connection refused','timed out','timeout','quota','rate limit','invalid','not configured','not found','unavailable','stale','ticker','assets','limit','yield','openclaw','schema','validation','permission','401','403','429','503') if tag in line.lower()]
+                      types=re.findall(r'\b\w*(?:Exception|Error)\b',line)
+                      safe.append({'types':types,'tags':tags})
+              print('ORIGINAL_FAILURE_JOURNAL',json.dumps({'unit':unit,'returncode':journal.returncode,'diagnostics':safe}),flush=True)
+          PY

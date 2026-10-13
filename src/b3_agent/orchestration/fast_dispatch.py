@@ -13,6 +13,7 @@ from b3_agent.portfolio.pnl import PnlEngine
 from b3_agent.portfolio.snapshot import load_active_snapshots
 from b3_agent.routing import FastRouter, RouteDecision, RouteTarget
 from b3_agent.scenario import ScenarioStressEngine
+from b3_agent.strategy_live import LiveStrategyComparisonService
 from b3_agent.schemas.position import PortfolioContext
 from b3_agent.schemas.scenario import ScenarioDefinition
 
@@ -63,6 +64,8 @@ class FastRouteDispatcher:
             return self._market_snapshot(decision)
         if decision.target == RouteTarget.STRESS_ENGINE:
             return self._stress_snapshot(decision, task)
+        if decision.target == RouteTarget.STRATEGY_ENGINE:
+            return self._strategy_comparison(decision)
 
         return None
 
@@ -185,27 +188,143 @@ class FastRouteDispatcher:
             raise ValueError("market lookup requires an explicit B3 ticker")
 
         service = LiveProviderService()
+        current = service.current_market_provider.get_current_quote(ticker)
         end = datetime.now(timezone.utc).date()
         start = end - timedelta(days=14)
         records = tuple(service.market_provider.get_market_data(ticker, start, end))
-        if not records:
-            raise RuntimeError(f"No market data available for {ticker}")
-
-        latest = max(records, key=lambda item: item.observation_timestamp)
+        history_latest = (
+            max(records, key=lambda item: item.observation_timestamp)
+            if records
+            else None
+        )
+        sources = tuple(
+            dict.fromkeys(
+                (
+                    current.source,
+                    *(item.source for item in records),
+                )
+            )
+        )
         return self._response(
             decision,
             status="COMPLETED",
             result={
                 "ticker": ticker,
-                "as_of": latest.observation_timestamp,
-                "quality_status": "VALIDATED",
-                "latest_daily_market_record": asdict(latest),
+                "as_of": current.observation_timestamp,
+                "quality_status": current.quality_status,
+                "current_market_quote": asdict(current),
+                "latest_daily_market_record": (
+                    asdict(history_latest)
+                    if history_latest is not None
+                    else None
+                ),
                 "history_count": len(records),
-                "limitations": [
-                    "This deterministic route returns the latest available daily record; it does not infer an intraday quote."
-                ],
+                "limitations": [],
             },
-            sources=tuple(dict.fromkeys(item.source for item in records)),
+            sources=sources,
+        )
+
+    def _strategy_comparison(
+        self,
+        decision: RouteDecision,
+    ) -> OrchestratorResponse:
+        context = decision.metadata
+        raw_put_ids = context.get("put_candidate_option_ids")
+        if raw_put_ids is not None:
+            if not isinstance(raw_put_ids, (list, tuple)):
+                raise ValueError("put_candidate_option_ids must be a list of exact option identifiers")
+            ticker = str(
+                context.get("comparison_ticker")
+                or context.get("selected_ticker")
+                or context.get("ticker")
+                or ""
+            ).upper().strip()
+            if not ticker:
+                raise ValueError("multi-strike PUT comparison requires an explicit underlying ticker")
+            raw_horizon = context.get("scenario_horizon")
+            horizon = str(raw_horizon).strip() if raw_horizon not in (None, "") else None
+            raw_shocks = context.get("scenario_shocks_pct")
+            if raw_shocks in (None, ""):
+                shocks = None
+            elif isinstance(raw_shocks, (list, tuple)):
+                shocks = [float(item) for item in raw_shocks]
+            else:
+                raise ValueError("scenario_shocks_pct must be a list of numeric percentages")
+            portfolio = self._portfolio()
+            result = LiveStrategyComparisonService().compare_put_candidates(
+                ticker=ticker,
+                option_ids=tuple(str(item) for item in raw_put_ids),
+                scenario_horizon=horizon,
+                scenario_shocks_pct=shocks,
+                scenario_objective=str(context.get("scenario_objective") or "COMPARE_ONLY"),
+                portfolio=portfolio,
+            )
+            sources = tuple(str(item) for item in result.pop("source_refs", ()))
+            return self._response(
+                decision,
+                status="COMPLETED",
+                result=result,
+                sources=sources,
+            )
+
+        raw_assets = context.get("comparison_assets")
+        if not isinstance(raw_assets, (list, tuple)) or len(raw_assets) != 2:
+            raise ValueError("strategy comparison requires two explicit assets")
+
+        assets = tuple(str(item).upper().strip() for item in raw_assets)
+        strategies = (
+            str(context.get("strategy_a") or "").strip(),
+            str(context.get("strategy_b") or "").strip(),
+        )
+
+        if context.get('as_of') is not None and all(LiveStrategyComparisonService.normalize_strategy(strategy)=='SELL_PUT' for strategy in strategies):
+            raise ValueError('Two-PUT comparison requires current chain evidence; historical contract availability is not established')
+
+        raw_amount = context.get("comparison_amount")
+        amount = None
+        if raw_amount not in (None, ""):
+            amount = float(raw_amount)
+
+        option_ids = (
+            str(context.get("option_a") or "").upper().strip() or None,
+            str(context.get("option_b") or "").upper().strip() or None,
+        )
+
+        portfolio = self._portfolio()
+        raw_scenario_horizon = context.get("scenario_horizon")
+        scenario_horizon = (
+            str(raw_scenario_horizon).strip()
+            if raw_scenario_horizon not in (None, "")
+            else None
+        )
+        raw_shocks = context.get("scenario_shocks_pct")
+        if raw_shocks in (None, ""):
+            scenario_shocks = None
+        elif isinstance(raw_shocks, (list, tuple)):
+            scenario_shocks = [float(item) for item in raw_shocks]
+        else:
+            raise ValueError("scenario_shocks_pct must be a list of numeric percentages")
+        scenario_objective = str(
+            context.get("scenario_objective") or "COMPARE_ONLY"
+        ).upper().strip()
+        result = LiveStrategyComparisonService().compare(
+            assets=(assets[0], assets[1]),
+            strategies=strategies,
+            option_ids=option_ids,
+            amount=amount,
+            scenario_horizon=scenario_horizon,
+            scenario_shocks_pct=scenario_shocks,
+            scenario_objective=scenario_objective,
+            put_objective=str(context.get('put_objective') or 'COMPARE_ONLY'),
+            economic_inputs=context.get('economic_inputs'),
+            portfolio=portfolio,
+        )
+        sources = tuple(str(item) for item in result.pop("source_refs", ()))
+        return self._response(
+            decision,
+            status="COMPLETED",
+            result=result,
+            sources=sources,
         )
 
     def _stress_snapshot(

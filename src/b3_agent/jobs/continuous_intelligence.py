@@ -245,28 +245,9 @@ class ContinuousIntelligenceJob:
 
 
 def _monitored_tickers() -> tuple[str, ...]:
-    tickers: list[str] = []
-    snapshots = load_active_snapshots(settings.data_dir)
-    portfolio = snapshots.get("portfolio_context")
-    if portfolio is not None:
-        for position in portfolio.positions:
-            value = (
-                position.underlying_ticker
-                if position.instrument_type == "OPTION"
-                and position.underlying_ticker
-                else position.ticker
-            )
-            ticker = str(value).upper().strip()
-            if ticker and ticker not in tickers:
-                tickers.append(ticker)
+    from b3_agent.intelligence.collection_universe import CollectionUniverseStore
 
-    configured = os.getenv("B3_INTEL_WATCHLIST", "")
-    for value in configured.split(","):
-        ticker = value.upper().strip()
-        if ticker and ticker not in tickers:
-            tickers.append(ticker)
-    return tuple(tickers)
-
+    return CollectionUniverseStore(settings.data_dir).effective_tickers()
 
 def _official_event(evidence: Evidence) -> dict[str, Any]:
     metadata = evidence.metadata

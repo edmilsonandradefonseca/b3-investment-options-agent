@@ -11,6 +11,7 @@ BTG_UNDERLYING_ALIASES: dict[str, str] = {
     "GGBRPN": "GGBR4",
     "BRADPN": "BBDC4",
     "CMIGPN": "CMIG4",
+    "VALEON": "VALE3",
 }
 
 

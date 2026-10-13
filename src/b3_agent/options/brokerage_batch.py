@@ -8,6 +8,8 @@ from pathlib import Path
 
 from b3_agent.options.brokerage_notes import BrokerageNoteParser
 from b3_agent.repositories.option_ledger import OptionTransactionLedger
+from b3_agent.repositories.transaction import TransactionRepository
+from b3_agent.storage.sqlite import SQLiteStore
 from b3_agent.repositories.source_manifest import (
     SourceManifestRecord,
     SourceManifestRepository,
@@ -46,13 +48,19 @@ class BrokerageBatchIngestionService:
         return digest.hexdigest()
 
     def _ingest_pdf_path(self, path: Path, source_name: str) -> dict[str, object]:
-        transactions = BrokerageNoteParser().parse(path)
-        if not transactions:
+        parser = BrokerageNoteParser()
+        transactions = parser.parse(path)
+        stock_transactions = parser.parse_stocks(path)
+        if not transactions and not stock_transactions:
             raise BrokerageBatchIngestionError(
-                f"{source_name}: nenhuma operação de opção encontrada"
+                f"{source_name}: nenhuma operação de ação ou opção encontrada"
             )
 
-        note_number = transactions[0].note_number
+        first_source_ref = transactions[0].source_ref if transactions else stock_transactions[0].source_ref
+        note_number = (
+            transactions[0].note_number if transactions
+            else first_source_ref.split(":")[2]
+        )
         fingerprint = self._fingerprint(path)
         safe_name = Path(source_name).name
         archived_name = (
@@ -62,11 +70,17 @@ class BrokerageBatchIngestionService:
         if not archived_path.exists():
             archived_path.write_bytes(path.read_bytes())
 
-        inserted = self.ledger.append(transactions)
+        inserted_options = self.ledger.append(transactions)
+        transaction_database = self.data_dir / "b3_agent.db"
+        SQLiteStore(transaction_database).initialize()
+        inserted_stocks = TransactionRepository(str(transaction_database)).append_many(stock_transactions)
+        inserted = inserted_options + inserted_stocks
         trade_dates = [item.as_of for item in transactions if item.as_of is not None]
+        trade_dates.extend(item.executed_at.date() for item in stock_transactions)
+        all_transactions = (*transactions, *stock_transactions)
         coverage_start = min(trade_dates) if trade_dates else None
         coverage_end = max(trade_dates) if trade_dates else None
-        source_ref = transactions[0].source_ref.split(f":{safe_name}")[0]
+        source_ref = first_source_ref.split(f":{safe_name}")[0]
 
         self.manifest.upsert(
             SourceManifestRecord(
@@ -76,7 +90,7 @@ class BrokerageBatchIngestionService:
                 source_ref=source_ref,
                 file_name=safe_name,
                 imported_at=datetime.now(timezone.utc),
-                record_count=len(transactions),
+                record_count=len(all_transactions),
                 coverage_start=coverage_start,
                 coverage_end=coverage_end,
                 scope="PERIOD_ONLY",
@@ -87,7 +101,7 @@ class BrokerageBatchIngestionService:
         return {
             "file": source_name,
             "note_number": note_number,
-            "parsed_count": len(transactions),
+            "parsed_count": len(all_transactions),
             "inserted_count": inserted,
         }
 

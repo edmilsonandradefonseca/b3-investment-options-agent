@@ -1,5 +1,7 @@
 from datetime import date
 
+import pytest
+
 from b3_agent.options.brokerage_notes import BrokerageNoteParser
 from b3_agent.repositories.option_ledger import OptionTransactionLedger
 
@@ -36,6 +38,50 @@ def test_parse_btg_brokerage_note():
     assert transactions[1].option_ticker == transactions[2].option_ticker
 
 
+def test_parse_option_purchase_keeps_unit_price_and_total_from_brokerage_note():
+    text = """
+NOTA DE CORRETAGEM
+34515456
+17/09/2026
+Q Negociação C/V Tipo Mercado Prazo Especificação do título Obs. (*) Quantidade Preço / Ajuste Valor Operação / Ajuste D/C
+1-BOVESPA C OPCAO DE COMPRA 10/26 PCARJ40 ON 52000 0,02 1.040,00 D
+"""
+    transaction = BrokerageNoteParser().parse_text(text)[0]
+
+    assert transaction.option_ticker == "PCARJ40"
+    assert transaction.side == "BUY"
+    assert transaction.quantity == 52000
+    assert transaction.execution_price == 0.02
+    assert transaction.total_amount == 1040.0
+
+
+
+def test_parse_btg_stock_trade_rows_with_price_and_total_value():
+    text = NOTE_TEXT + (
+        "1-BOVESPA C VISTA PETR4 PN N2 100 32,05 3.205,00 D\n"
+        "1-BOVESPA V VISTA ITUB4 PN N1 50 38,10 1.905,00 C\n"
+    )
+    rows = BrokerageNoteParser().parse_stock_text(text, source_file="nota.pdf")
+
+    assert len(rows) == 2
+    assert rows[0].ticker == "PETR4"
+    assert rows[0].instrument_type == "STOCK"
+    assert rows[0].action == "BUY"
+    assert rows[0].quantity == 100
+    assert rows[0].price == 32.05
+    assert rows[0].source_ref == "BTG:NotaCorretagem:34515456:nota.pdf"
+    assert rows[1].ticker == "ITUB4"
+    assert rows[1].action == "SELL"
+    assert rows[1].quantity == 50
+    assert rows[1].price == 38.10
+
+
+def test_unsupported_cash_market_row_rejects_partial_stock_import():
+    text = NOTE_TEXT + "1-BOVESPA C VISTA PETR4 PN UNKNOWN 100 32,05 3.205,00 D\n"
+    with pytest.raises(ValueError, match="avoid partial stock execution history"):
+        BrokerageNoteParser().parse_stock_text(text)
+
+
 def test_ledger_is_append_only_and_deduplicates(tmp_path):
     transactions = BrokerageNoteParser().parse_text(
         NOTE_TEXT,
@@ -49,6 +95,59 @@ def test_ledger_is_append_only_and_deduplicates(tmp_path):
     rows = ledger.list_by_ticker("ASAIK102")
     assert len(rows) == 2
     assert [row.quantity for row in rows] == [-3000, -4000]
+
+
+def test_blank_share_class_and_day_trade_preserve_existing_ids(tmp_path):
+    parser = BrokerageNoteParser()
+    legacy = parser.parse_text(NOTE_TEXT)
+    extra = "1-BOVESPA C OPCAO DE VENDA 05/26 ITUBQ406W4 PN D 1000 1,38 1.380,00 D"
+    blank_class = "1-BOVESPA V OPCAO DE VENDA 06/26 ABEVR161 100 0,13 13,00 C"
+    text = NOTE_TEXT.replace("1-BOVESPA C", extra + "\n1-BOVESPA C", 1)
+    rows = parser.parse_text(text + blank_class + "\n")
+    assert len(rows) == 5
+    assert rows[0].quantity == 1000
+    assert rows[0].total_amount == 1380
+    assert [row.transaction_id for row in rows[1:4]] == [
+        row.transaction_id for row in legacy
+    ]
+    assert rows[-1].quantity == -100
+    assert rows[-1].total_amount == -13
+    ledger = OptionTransactionLedger(tmp_path / "options.sqlite3")
+    assert ledger.append(legacy) == 3
+    assert ledger.append(rows) == 2
+    assert ledger.append(parser.parse_text(text + blank_class + "\n", source_file="copy.pdf")) == 0
+
+
+def test_unsupported_option_row_rejects_entire_note():
+    text = NOTE_TEXT + "1-BOVESPA V OPCAO DE VENDA 06/26 ABEVR161 ON UNKNOWN 100 0,13 13,00 C\n"
+    with pytest.raises(ValueError, match="avoid partial execution history"):
+        BrokerageNoteParser().parse_text(text)
+
+
+def test_identical_fills_in_same_note_survive_copy_reimport(tmp_path):
+    parser = BrokerageNoteParser()
+    line = "1-BOVESPA V OPCAO DE COMPRA 11/26 ASAIK102 ON 4000 1,03 4.120,00 C"
+    rows = parser.parse_text(NOTE_TEXT + line + "\n")
+    ledger = OptionTransactionLedger(tmp_path / "options.sqlite3")
+    # A pre-fix ledger already has the first occurrence. Restore the missing
+    # distinct fill while retaining the economic fingerprint of existing rows.
+    assert ledger.append(rows[:3]) == 3
+    assert ledger.append(rows) == 1
+    assert ledger.append(parser.parse_text(NOTE_TEXT + line + "\n", source_file="copy.pdf")) == 0
+    assert len(ledger.list_all()) == 4
+
+
+def test_previously_skipped_identical_fill_before_legacy_row_is_recovered(tmp_path):
+    parser = BrokerageNoteParser()
+    legacy_rows = parser.parse_text(NOTE_TEXT)
+    old_line = "1-BOVESPA C OPCAO DE COMPRA 10/26 ASAIJ970 ON 3000 0,94 2.820,00 D"
+    new_line = old_line.replace("ON 3000", "ON D 3000")
+    text = NOTE_TEXT.replace(old_line, new_line + "\n" + old_line)
+    ledger = OptionTransactionLedger(tmp_path / "options.sqlite3")
+    assert ledger.append(legacy_rows) == 3
+    assert ledger.append(parser.parse_text(text)) == 1
+    assert ledger.append(parser.parse_text(text)) == 0
+    assert len(ledger.list_all()) == 4
 
 
 def test_brokerage_upload_endpoint_parses_and_persists_note(monkeypatch, tmp_path):
@@ -66,6 +165,11 @@ def test_brokerage_upload_endpoint_parses_and_persists_note(monkeypatch, tmp_pat
         "parse",
         lambda self, path: transactions,
     )
+    monkeypatch.setattr(
+        server.BrokerageNoteParser,
+        "parse_stocks",
+        lambda self, path: (),
+    )
 
     response = TestClient(server.app).post(
         "/imports/brokerage-notes",
@@ -82,6 +186,44 @@ def test_brokerage_upload_endpoint_parses_and_persists_note(monkeypatch, tmp_pat
     ledger = OptionTransactionLedger(tmp_path / "options.sqlite3")
     assert len(ledger.list_all()) == 3
 
+
+
+
+def test_brokerage_upload_persists_stock_rows_in_options_results_ledger(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+    from b3_agent import server
+
+    options = BrokerageNoteParser().parse_text(NOTE_TEXT, source_file="nota.pdf")
+    stock_note = NOTE_TEXT + "1-BOVESPA C VISTA PETR4 PN N2 100 32,05 3.205,00 D\n"
+    stocks = BrokerageNoteParser().parse_stock_text(stock_note, source_file="nota.pdf")
+    monkeypatch.setattr(
+        server,
+        "settings",
+        type("TestSettings", (), {"data_dir": tmp_path})(),
+    )
+    monkeypatch.setattr(server.BrokerageNoteParser, "parse", lambda self, path: options)
+    monkeypatch.setattr(server.BrokerageNoteParser, "parse_stocks", lambda self, path: stocks)
+
+    client = TestClient(server.app)
+    response = client.post(
+        "/imports/brokerage-notes",
+        files={"file": ("nota.pdf", b"%PDF-1.4 fake", "application/pdf")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["parsed_count"] == 4
+    assert response.json()["inserted_count"] == 4
+    ledger = client.get("/options/ledger")
+    assert ledger.status_code == 200
+    stock_row = next(
+        row for row in ledger.json()["operations"]
+        if row["instrument_type"] == "STOCK"
+    )
+    assert stock_row["option_ticker"] == "PETR4"
+    assert stock_row["side"] == "BUY"
+    assert stock_row["quantity"] == 100
+    assert stock_row["execution_price"] == 32.05
+    assert stock_row["cash_flow"] == -3205.0
 
 
 def test_brokerage_batch_endpoint_processes_zip(monkeypatch, tmp_path):

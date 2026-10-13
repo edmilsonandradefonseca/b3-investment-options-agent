@@ -1,15 +1,18 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from collections.abc import Callable, Iterable
-from typing import TypedDict
+from typing import Protocol, TypedDict
+from hashlib import sha256
+import json
 
 from langgraph.graph import END, START, StateGraph
 
 from b3_agent.experience import ExperienceAssessmentEngine, ExperienceEngine, ExperienceRanker
 from b3_agent.experience.events import OutcomeFinalized
 from b3_agent.experience.model import Experience
+from b3_agent.experience.retrieval import experience_available_for_analysis, learning_available_for_analysis
 from b3_agent.knowledge.learning_semantic import LearningSemanticIndex
 from b3_agent.knowledge.projection import MemoryProjectionBridge
 from b3_agent.learning import LearningEngine, LearningUpdateResult
@@ -34,9 +37,29 @@ class PreAnalysisExperienceContext:
     assessment: ExperienceAssessment
     learnings: tuple[Learning, ...]
 
+    def as_payload(self) -> dict:
+        visible = []
+        for learning in self.learnings[:20]:
+            item = asdict(learning)
+            item["evidence_links"] = item["evidence_links"][:20]
+            item["evidence_details_omitted"] = max(0, len(learning.evidence_links)-20)
+            item["source_refs"] = item["source_refs"][:20]
+            item["source_details_omitted"] = max(0, len(learning.source_refs)-20)
+            visible.append(item)
+        return {
+            "status": "AVAILABLE" if self.retrieval.matches else "NO_ELIGIBLE_PRECEDENTS",
+            "assessment": asdict(self.assessment), "retrieval": asdict(self.retrieval),
+            "learnings": visible, "learning_details_omitted": max(0, len(self.learnings)-20),
+        }
+
 
 class ExperienceContextService:
-    """Build the V4 PRE-ANALYSIS experience context before specialist reasoning."""
+    """Build the V4 PRE-ANALYSIS experience context before specialist reasoning.
+
+    Injected loaders must resolve actual canonical versions and enforce their
+    commit/ingestion availability at as_of. Domain finalized/updated timestamps
+    alone cannot prove when a historical object became available to the system.
+    """
 
     def __init__(
         self,
@@ -66,7 +89,10 @@ class ExperienceContextService:
         top_k: int = 10,
     ) -> PreAnalysisExperienceContext:
         experiences = tuple(self.experience_loader(snapshot.subject_id, as_of))
-        learnings = tuple(self.learning_loader(snapshot.subject_id, as_of))
+        learnings = tuple(
+            item for item in self.learning_loader(snapshot.subject_id, as_of)
+            if learning_available_for_analysis(item, as_of=as_of, subject_id=snapshot.subject_id)
+        )
 
         semantic_results = ()
         if self.semantic_index is not None:
@@ -105,6 +131,41 @@ class PostOutcomeResult:
     learning_update: LearningUpdateResult
 
 
+@dataclass(frozen=True)
+class CanonicalPostOutcomeCommit:
+    event: OutcomeFinalized
+    input_fingerprint: str
+    committed_at: datetime
+    result: PostOutcomeResult
+
+
+class CanonicalPostOutcomeStore(Protocol):
+    """Adapter to the actual canonical owner, never a memory projection store.
+
+    commit must atomically persist the experience/learning version and consume
+    the event key, comparing expected_previous for optimistic concurrency.
+    Repeated event keys return the original commit; conflicting payloads,
+    duplicate economic identities and stale previous versions must fail.
+    The owner must independently establish terminal/source/coverage authority.
+    This protocol does not create a database or authorize source inference.
+    """
+    def load(self, event: OutcomeFinalized) -> CanonicalPostOutcomeCommit | None: ...
+
+    def commit(
+        self, *, event: OutcomeFinalized, input_fingerprint: str,
+        result: PostOutcomeResult, expected_previous: Learning | None,
+    ) -> CanonicalPostOutcomeCommit: ...
+
+
+def _post_outcome_fingerprint(event, experience):
+    def encode(value):
+        if isinstance(value, datetime):
+            return value.isoformat()
+        raise TypeError(f"Unsupported canonical value: {type(value).__name__}")
+    payload = json.dumps([asdict(event), asdict(experience)], sort_keys=True, allow_nan=False, default=encode)
+    return sha256(payload.encode("utf-8")).hexdigest()
+
+
 class PostOutcomeLearningService:
     """Canonical V4 POST-OUTCOME path triggered by OutcomeFinalized."""
 
@@ -116,12 +177,14 @@ class PostOutcomeLearningService:
         projection_bridge: MemoryProjectionBridge,
         cohort_loader: CohortLoader,
         previous_learning_loader: PreviousLearningLoader,
+        canonical_store: CanonicalPostOutcomeStore | None = None,
     ) -> None:
         self.experience_engine = experience_engine
         self.learning_engine = learning_engine
         self.projection_bridge = projection_bridge
         self.cohort_loader = cohort_loader
         self.previous_learning_loader = previous_learning_loader
+        self.canonical_store = canonical_store
 
     def handle(
         self,
@@ -133,10 +196,23 @@ class PostOutcomeLearningService:
         outcome: Outcome,
         exit_snapshot: FeatureSnapshot | None = None,
     ) -> PostOutcomeResult:
+        if self.canonical_store is None:
+            raise RuntimeError("POST-OUTCOME requires an authoritative canonical store adapter")
+        if event != OutcomeFinalized.from_outcome(outcome):
+            raise ValueError("OutcomeFinalized identity/version/time mismatch")
         if event.operation_id != operation.operation_id:
             raise ValueError("OutcomeFinalized operation_id mismatch")
-        if event.outcome_id != outcome.outcome_id:
-            raise ValueError("OutcomeFinalized outcome_id mismatch")
+        if entry_snapshot.as_of != operation.opened_at:
+            raise ValueError("entry snapshot must represent the operation entry time")
+        if entry_snapshot.subject_id not in {operation.underlying_id, *operation.instrument_ids}:
+            raise ValueError("entry snapshot subject does not belong to operation")
+        for linked, actual, label in (
+            (operation.entry_snapshot_id, entry_snapshot.snapshot_id, "entry snapshot"),
+            (operation.outcome_id, outcome.outcome_id, "outcome"),
+            (operation.exit_snapshot_id, exit_snapshot.snapshot_id if exit_snapshot else None, "exit snapshot"),
+        ):
+            if linked is not None and linked != actual:
+                raise ValueError(f"operation {label} link mismatch")
 
         experience = self.experience_engine.assemble(
             operation=operation,
@@ -145,6 +221,12 @@ class PostOutcomeLearningService:
             outcome=outcome,
             exit_snapshot=exit_snapshot,
         )
+        if not experience_available_for_analysis(experience, as_of=event.occurred_at):
+            raise ValueError("POST-OUTCOME requires a final valid experience available at event time")
+        fingerprint = _post_outcome_fingerprint(event, experience)
+        existing = self.canonical_store.load(event)
+        if existing is not None:
+            return self._project_committed(existing, event, fingerprint, experience)
 
         cohort = list(self.cohort_loader(operation, regime))
         if all(item.experience_id != experience.experience_id for item in cohort):
@@ -162,17 +244,37 @@ class PostOutcomeLearningService:
             previous=previous,
         )
 
-        self.projection_bridge.project_operation(
-            operation=operation,
-            outcome=outcome,
-            regime=regime,
-        )
-        self.projection_bridge.project_learning(update.learning)
-
-        return PostOutcomeResult(
+        proposed = PostOutcomeResult(
             experience=experience,
             learning_update=update,
         )
+        committed = self.canonical_store.commit(
+            event=event, input_fingerprint=fingerprint, result=proposed,
+            expected_previous=previous,
+        )
+        return self._project_committed(committed, event, fingerprint, experience)
+
+    def _project_committed(self, committed, event, fingerprint, experience):
+        if not isinstance(committed, CanonicalPostOutcomeCommit):
+            raise ValueError("canonical commit receipt is required before projection")
+        if committed.event != event or committed.input_fingerprint != fingerprint:
+            raise ValueError("canonical commit event/input conflict")
+        if committed.result.experience != experience:
+            raise ValueError("canonical commit experience mismatch")
+        if committed.committed_at.tzinfo is None or committed.committed_at.utcoffset() is None or committed.committed_at < event.occurred_at:
+            raise ValueError("canonical commit timestamp must follow the event")
+        learning = committed.result.learning_update.learning
+        if not learning_available_for_analysis(learning, as_of=event.occurred_at) or learning.last_updated_at != event.occurred_at:
+            raise ValueError("canonical commit learning version is not available at event time")
+        if experience.experience_id not in learning.source_refs or learning.sample_size != committed.result.learning_update.statistics.sample_size:
+            raise ValueError("canonical commit learning evidence/sample mismatch")
+        self.projection_bridge.project_operation(
+            operation=committed.result.experience.operation,
+            outcome=committed.result.experience.outcome,
+            regime=committed.result.experience.market_regime,
+        )
+        self.projection_bridge.project_learning(committed.result.learning_update.learning)
+        return committed.result
 
 
 

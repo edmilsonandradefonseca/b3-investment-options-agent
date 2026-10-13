@@ -39,7 +39,8 @@ def test_dossier_queue_defer_returns_request_to_pending(tmp_path):
     queue.defer(request, reason="busy")
 
     pending = queue.pending()
-    assert len(pending) == 1
+    assert pending == []  # Stored as PENDING, but waits for the busy backoff.
+    assert queue.outstanding_count() == 1
     payload = json.loads(
         (queue.queue_dir / f"{request.analysis_id}.json").read_text(encoding="utf-8")
     )

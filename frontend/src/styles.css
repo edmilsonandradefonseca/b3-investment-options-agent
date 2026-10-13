@@ -97,3 +97,48 @@
 .table-wrap{overflow:auto;max-width:100%}.data-table{width:100%;border-collapse:collapse;font-size:9px}.data-table th,.data-table td{border-bottom:1px solid #16344a;padding:8px;text-align:left;vertical-align:top;max-width:260px;overflow:hidden;text-overflow:ellipsis}.data-table th{position:sticky;top:0;background:#0b2030;color:#7fa0b6;text-transform:capitalize}.data-table td{color:#c7d7e3}.muted{color:#617a8d}
 .inline-json{max-height:210px;overflow:auto;white-space:pre-wrap;font-size:9px;color:#abc2d2;background:#06141f;border-radius:7px;padding:9px}.source-strip{display:flex;align-items:center;gap:6px;flex-wrap:wrap;border-top:1px solid #17364b;margin-top:14px;padding-top:12px}.source-strip b{font-size:9px;color:#7592a7}
 @media(max-width:1450px){.structured-grid{grid-template-columns:1fr}.body{grid-template-columns:245px minmax(620px,1fr) 330px}}
+/* Functional V1.1 desktop surfaces */
+:root{font-size:15px;color:#e8f2fb}body{min-width:1180px}.body{grid-template-columns:230px minmax(620px,1fr) 330px}.topbar{height:66px}.brand{width:auto}.brand small,.connections small{font-size:13px;color:#afc5d8}.sidebar{padding:18px 12px}.nav-item{font-size:15px;margin-bottom:7px}.nav-item strong{font-size:15px}.nav-icon{font-size:21px}.connections h3{font-size:17px}.connections .load{font-size:14px;background:#1765bb;color:#fff}.connections .load.secondary{background:#183850;color:#fff;opacity:1;border:1px solid #6d98bb}.connections details{overflow:auto;max-height:210px;font-size:13px}.connections pre{white-space:pre-wrap}.workspace{padding:24px}.workspace-head h1{font-size:28px}.workspace-head p,.muted{font-size:14px;color:#adc3d4;line-height:1.55}.cards{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:12px}.metric span,.metric small{font-size:13px;color:#acc2d4}.metric strong{font-size:21px}.panel{margin:12px 0;padding:18px}.panel h2{font-size:19px;margin:0 0 14px}.panel button,.toolbar button,.copilot>button,.lab-form button{background:#155ca4;color:#fff;border:1px solid #61a0d4;border-radius:8px;padding:10px 14px;cursor:pointer;font-size:14px}.refresh,.backend-button{font-size:14px}.table-wrap{overflow:auto}.table-wrap table{width:100%;border-collapse:collapse;font-size:14px}.table-wrap th,.table-wrap td{padding:11px 12px;border-bottom:1px solid #244258;text-align:right;white-space:nowrap}.table-wrap th:first-child,.table-wrap td:first-child{text-align:left}.table-wrap th{color:#b9d0e3}.table-wrap tr:hover{background:#113450;cursor:pointer}.toolbar{display:flex;gap:16px;align-items:end;justify-content:space-between;margin-bottom:15px}.toolbar form{display:flex;gap:10px;align-items:end}.toolbar label,.lab-form label{display:grid;gap:6px;color:#d4e4f0;font-size:14px}.toolbar input,.lab-form input,.lab-form select{background:#0c2738;color:#fff;border:1px solid #6a8ba3;padding:10px;border-radius:7px;font-size:14px}.toolbar .selected{background:#2273ca}.lab-form{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:14px}.lab-form button{align-self:end}.workspace-tabs button{font-size:14px;min-width:190px}.copilot{gap:14px}.copilot-head strong{font-size:19px}.context{font-size:14px;padding:12px;background:#123047;border-radius:8px}.conversation{overflow:auto;flex:1;min-height:100px}.answer-card{max-height:none;margin-bottom:10px;font-size:14px}.chat-form textarea{font-size:14px;padding-right:12px}.chat-form>button{width:auto;height:auto;padding:8px 12px;font-size:13px}.output{margin:12px 0;font-size:14px}.output details{border-top:1px solid #315068;padding:10px 0}.output summary{font-weight:700;cursor:pointer}.output pre,.event pre{font:13px/1.5 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;color:#c8d9e7}.state-banner{font-size:14px}.transaction-modal h2{font-size:20px}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid #8bc9ff;outline-offset:2px}
+
+/* Contrast for every actionable button and upload label. */
+.app-shell button,.app-shell .connections label.load,.app-shell .workspace-tabs button{color:#fff!important;font-weight:650}
+.app-shell button:disabled{color:#fff!important;opacity:.65}
+.app-shell .nav-item.active,.app-shell .nav-item:hover{color:#fff!important}
+
+/* Options: compact controls, a broad monthly chart and readable positions. */
+.option-filters{display:grid;grid-template-columns:repeat(5,minmax(130px,1fr));gap:10px;margin-bottom:12px}
+.option-filters label{display:grid;gap:6px;font-size:13px;color:#c5d9ea}
+.option-filters select{min-width:0;background:#0c2738;color:#fff;border:1px solid #6a8ba3;padding:9px;border-radius:7px}
+.options-workspace .panel{margin:10px 0}
+.option-bars{min-height:168px;display:flex;align-items:end;gap:7px;padding:14px 5px 4px;overflow-x:auto;border-bottom:1px solid #426078}
+.options-workspace .panel .option-month{display:flex;flex:1 0 60px;min-width:60px;align-items:center;flex-direction:column;justify-content:end;gap:7px;background:transparent;border:0;padding:4px;color:#c9e0f0;font-size:11px}
+.option-month span{font-size:11px;white-space:nowrap}.option-month i{width:65%;min-height:5px;border-radius:4px 4px 0 0}.option-month.active{outline:2px solid #58a6ff;border-radius:7px}
+.options-workspace .table-wrap{max-height:430px;overflow:auto}.options-workspace .table-wrap th{position:sticky;top:0;background:#102b3c;z-index:1}
+@media(max-width:1450px){.option-filters{grid-template-columns:repeat(3,minmax(130px,1fr))}}
+.llm-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.llm-columns>div{background:#0a2234;border:1px solid #27516c;border-radius:9px;padding:15px;max-height:360px;overflow:auto}
+.llm-columns h3{font-size:16px;margin:0 0 8px}.llm-columns p{white-space:pre-wrap;line-height:1.55;overflow-wrap:anywhere}
+.llm-columns li{margin:7px 0}.llm-columns details{margin-top:12px}
+
+.human-output{display:grid;gap:12px}
+.analysis-status{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.analysis-status span{font-size:12px;color:#9db5c8;border:1px solid #29485f;border-radius:999px;padding:4px 8px}
+.analysis-summary,.analysis-section{border:1px solid #23455e;border-radius:9px;background:#0a2131;padding:14px}
+.analysis-summary h3,.analysis-section h4{margin:0 0 8px;color:#eaf5ff}
+.analysis-summary p,.analysis-section p,.analysis-section li{font-size:14px;line-height:1.55;color:#d2e2ee}
+.analysis-section ul{margin:0;padding-left:20px}
+.analysis-sources,.technical-output{border-top:1px solid #315068;padding-top:10px}
+.technical-output>summary,.analysis-sources>summary{cursor:pointer;font-weight:700;color:#bcd2e3}
+.technical-output pre{max-height:420px;overflow:auto;margin-top:10px}
+
+.evidence-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:10px}
+.evidence-card{border:1px solid rgba(148,163,184,.28);border-radius:12px;padding:14px;background:rgba(15,23,42,.24)}
+.evidence-card h5{margin:0 0 10px;font-size:18px}
+.evidence-card dl{margin:0;display:grid;gap:7px}
+.evidence-card dl div{display:flex;justify-content:space-between;gap:14px;border-bottom:1px solid rgba(148,163,184,.12);padding-bottom:5px}
+.evidence-card dt{color:var(--muted,#94a3b8)}
+.evidence-card dd{margin:0;text-align:right;font-weight:600}
+
+.research-policy{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}.research-policy small{color:var(--muted)}
+
+.price-chart{margin-top:10px}.price-chart svg{display:block;width:100%;height:auto;min-height:180px;overflow:visible}.price-chart svg text{fill:#9fb6c8;font-size:10px}.chart-grid{stroke:#24445c;stroke-width:1;stroke-dasharray:4 5}.chart-line{fill:none;stroke:#45c6ff;stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}.chart-dates{display:flex;justify-content:space-between;color:#91a9bb;font-size:11px}.indicator-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:12px}.indicator-grid>div{border:1px solid #1c3d55;border-radius:8px;padding:10px;background:#081925}.indicator-grid span{display:block;color:#8da7bb;font-size:11px}.indicator-grid strong{display:block;margin-top:7px;font-size:14px;color:#e4f1fa}.research-event{border-top:1px solid #1b3a50;padding:12px 0}.research-event h3{font-size:14px;margin:0 0 5px}.research-event a{color:#b7dcff}.research-event small{color:#92a9bc}.research-event p{margin:7px 0 0;color:#cfdeea;font-size:13px;line-height:1.5}@media(max-width:1300px){.indicator-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}

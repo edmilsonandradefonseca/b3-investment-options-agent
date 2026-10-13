@@ -1,0 +1,154 @@
+name: B3 focused backend closure (Ubuntu)
+on:
+  push:
+    branches: [feature/react-functional-v43-integration]
+    paths:
+      - src/b3_agent/providers/bradesco_dividends.py
+      - src/b3_agent/providers/b3_yield_curve.py
+      - src/b3_agent/schemas/yield_curve.py
+      - pyproject.toml
+      - tests/test_bradesco_dividends.py
+      - scripts/validate_backend_active_http.py
+      - .github/workflows/b3-backend-closure.yml
+      - src/b3_agent/server.py
+      - src/b3_agent/strategy_live.py
+      - tests/test_strategy_live.py
+      - src/b3_agent/routing/lab_option_management.py
+      - src/b3_agent/routing/lab_position.py
+      - tests/test_lab_option_management.py
+      - scripts/validate_lab_position_active.py
+      - src/b3_agent/opportunity_screen.py
+      - src/b3_agent/opportunity_materiality.py
+      - src/b3_agent/stock_opportunity_service.py
+      - frontend/src/App.tsx
+      - frontend/scripts/validate-cockpit-real.mjs
+      - scripts/validate_stock_screen_real.py
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: b3-backend-closure
+  cancel-in-progress: false
+jobs:
+  closure:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Require green CI for this revision
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os, time
+          from urllib.request import Request, urlopen
+          url = f"https://api.github.com/repos/{os.environ['GITHUB_REPOSITORY']}/actions/runs?head_sha={os.environ['GITHUB_SHA']}&event=pull_request&per_page=20"
+          for attempt in range(72):
+              request = Request(url, headers={"Authorization":"Bearer " + os.environ["GH_TOKEN"],"Accept":"application/vnd.github+json"})
+              with urlopen(request,timeout=15) as response:
+                  runs=json.load(response)["workflow_runs"]
+              ci=[run for run in runs if run["name"]=="CI"]
+              if ci and ci[0]["status"]=="completed":
+                  assert ci[0]["conclusion"]=="success", "CI failed; installation refused"
+                  print("CI_GATE=PASS",flush=True)
+                  break
+              time.sleep(5)
+          else:
+              raise RuntimeError("CI completion not observed; installation refused")
+          PY
+      - name: Verify issuer timezone regression on Ubuntu
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: |
+          /opt/b3-investment-options-agent/.venv/bin/python -m pip install -e "$GITHUB_WORKSPACE"
+          /opt/b3-investment-options-agent/.venv/bin/python -m pytest tests/test_bradesco_dividends.py tests/test_stored_dividends.py tests/test_dividend_evidence.py tests/test_lab_position.py tests/test_lab_clarification.py tests/test_lab_option_management.py tests/test_strategy_live.py
+      - name: Install tested revision and request service restart
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_dir=/opt/b3-investment-options-agent
+          test "$(git -C "$runtime_dir" branch --show-current)" = "feature/react-functional-v43-integration"
+          test -z "$(git -C "$runtime_dir" status --porcelain --untracked-files=no)"
+          git -C "$runtime_dir" fetch origin feature/react-functional-v43-integration
+          preserved_root="$(mktemp -d /var/tmp/b3-runtime-untracked.XXXXXX)"
+          merge_completed=0
+          restore_on_failure() {
+            if [ "$merge_completed" -ne 1 ]; then
+              for path in scripts/install_market_history_refresh_timer.sh scripts/refresh_market_history.py; do
+                if [ -e "$preserved_root/$path" ] && [ ! -e "$runtime_dir/$path" ]; then
+                  mkdir -p "$runtime_dir/$(dirname "$path")"
+                  mv "$preserved_root/$path" "$runtime_dir/$path"
+                fi
+              done
+            fi
+          }
+          trap restore_on_failure EXIT
+          for path in scripts/install_market_history_refresh_timer.sh scripts/refresh_market_history.py; do
+            if [ -e "$runtime_dir/$path" ] && ! git -C "$runtime_dir" ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
+              mkdir -p "$preserved_root/$(dirname "$path")"
+              mv "$runtime_dir/$path" "$preserved_root/$path"
+            fi
+          done
+          git -C "$runtime_dir" merge --ff-only "$GITHUB_SHA"
+          merge_completed=1
+          for path in scripts/install_market_history_refresh_timer.sh scripts/refresh_market_history.py; do
+            if [ -e "$preserved_root/$path" ]; then
+              if cmp -s "$preserved_root/$path" "$runtime_dir/$path"; then
+                rm "$preserved_root/$path"
+              else
+                echo "PRESERVED_LOCAL_FILE=$preserved_root/$path"
+              fi
+            fi
+          done
+          rmdir -p "$preserved_root/scripts" 2>/dev/null || true
+          test "$(git -C "$runtime_dir" rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "TESTED_REVISION_INSTALLED=$GITHUB_SHA"
+          "$runtime_dir/.venv/bin/python" -m pip install -e "$runtime_dir"
+          if python3 - "$runtime_dir" <<'PY'
+          import os, subprocess, sys
+          from pathlib import Path
+          root = Path(sys.argv[1])
+          pid = int(subprocess.check_output([
+              "systemctl", "show", "b3-runtime.service", "--property=MainPID", "--value"
+          ], text=True, timeout=10))
+          if pid <= 0:
+              sys.exit(1)
+          boot = next(int(line.split()[1]) for line in Path("/proc/stat").read_text().splitlines()
+                      if line.startswith("btime "))
+          fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+          started = boot + int(fields[19]) / os.sysconf("SC_CLK_TCK")
+          candidate = (root / "src/b3_agent/strategy_live.py").stat().st_mtime
+          sys.exit(0 if started >= candidate else 1)
+          PY
+          then
+            echo "RUNTIME_REVISION_ALREADY_ACTIVE=PASS"
+            echo "RUNTIME_RESTART=NOT_REQUIRED"
+          elif sudo -n systemctl restart b3-runtime.service; then
+            echo "RUNTIME_RESTART=PERFORMED"
+          else
+            echo "RUNTIME_RESTART=BLOCKED_AUTHENTICATION_REQUIRED"
+            echo "Run sudo systemctl restart b3-runtime.service on Ubuntu, then rerun this workflow. Activation is NOT certified."
+            exit 1
+          fi
+          ready=0
+          for attempt in {1..20}; do
+            if curl -fsS --max-time 2 http://127.0.0.1:8000/health >/dev/null; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          test "$ready" -eq 1
+          systemctl is-active b3-runtime.service
+          systemctl show b3-runtime.service --property=MainPID --property=ActiveEnterTimestamp
+      - name: Accept active HTTP dividends, BUY comparison and Opportunities
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_backend_active_http.py
+      - name: Accept current Lab position selection in active process
+        env:
+          PYTHONPATH: /opt/b3-investment-options-agent/src
+        run: /opt/b3-investment-options-agent/.venv/bin/python scripts/validate_lab_position_active.py

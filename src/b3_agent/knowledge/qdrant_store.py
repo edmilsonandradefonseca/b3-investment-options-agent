@@ -32,6 +32,7 @@ class QdrantVectorStore:
         collection_name: str = "b3_evidence",
         vector_size: int = 8,
         hybrid: bool = False,
+        read_only: bool = False,
     ) -> None:
         if not collection_name.strip():
             raise ValueError("collection_name must not be empty")
@@ -41,12 +42,15 @@ class QdrantVectorStore:
         self.collection_name = collection_name
         self.vector_size = vector_size
         self.hybrid = hybrid
+        self.read_only = read_only
         self._ensure_collection()
 
     def _ensure_collection(self) -> None:
         if self.client.collection_exists(self.collection_name):
             self._validate_existing_collection()
             return
+        if self.read_only:
+            raise RuntimeError("B3 evidence collection is unavailable; read-only retrieval cannot create it")
         if self.hybrid:
             self.client.create_collection(
                 collection_name=self.collection_name,
@@ -110,6 +114,8 @@ class QdrantVectorStore:
         chunks: Sequence[EvidenceChunk],
         embeddings: Sequence[Embedding],
     ) -> None:
+        if self.read_only:
+            raise RuntimeError("read-only Qdrant adapter cannot upsert")
         if len(chunks) != len(embeddings):
             raise ValueError("chunks and embeddings must have the same length")
         if not chunks:
@@ -205,6 +211,8 @@ class QdrantVectorStore:
         return _results(response.points)
 
     def delete(self, chunk_ids: Sequence[str]) -> None:
+        if self.read_only:
+            raise RuntimeError("read-only Qdrant adapter cannot delete")
         if not chunk_ids:
             return
         self.client.delete(

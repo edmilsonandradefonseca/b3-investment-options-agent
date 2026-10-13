@@ -1,0 +1,63 @@
+name: B3 React cockpit visual acceptance (Ubuntu)
+on:
+  push:
+    branches: [feature/react-functional-v43-integration]
+    paths:
+      - frontend/**
+      - scripts/validate_lab_position_active.py
+      - scripts/validate_lab_put_scenario_active.py
+      - scripts/validate_lab_call_coverage_active.py
+      - src/b3_agent/strategy_live.py
+      - .github/workflows/b3-react-cockpit-visual.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: b3-react-cockpit-visual
+  cancel-in-progress: false
+jobs:
+  real-browser:
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build and verify decision presentation
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+          node scripts/check-decision-rendering.mjs
+      - name: Install isolated browser for UI acceptance
+        working-directory: frontend
+        run: npx playwright install --only-shell chromium
+      - name: Walk real API UI and capture desktop screens
+        working-directory: frontend
+        env:
+          B3_UI_URL: http://127.0.0.1:5173
+          B3_API_URL: http://127.0.0.1:8000
+          B3_VISUAL_OUTPUT: visual-output
+        run: |
+          set -euo pipefail
+          curl -fsS --max-time 15 http://127.0.0.1:8000/health >/dev/null
+          npm run preview -- --host 127.0.0.1 --port 5173 > /tmp/b3-react-cockpit-preview.log 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if curl -fsS --max-time 2 http://127.0.0.1:5173 >/dev/null; then break; fi
+            sleep 1
+          done
+          node scripts/check-strategy-session.mjs
+          node scripts/validate-cockpit-real.mjs
+      - name: Retain requested visual evidence without raw backend responses
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: b3-react-cockpit-screens
+          path: frontend/visual-output
+          retention-days: 3
+          if-no-files-found: warn

@@ -6,10 +6,11 @@ from datetime import datetime
 from b3_agent.schemas.market import StockMarketData
 from b3_agent.schemas.quant import QuantFeatures
 def _prices(records: Sequence[StockMarketData]) -> list[float]:
-    return [
-        r.adjusted_close if r.adjusted_close is not None else r.close
-        for r in records
-    ]
+    adjusted = bool(records) and all(
+        r.adjusted_close is not None and math.isfinite(r.adjusted_close)
+        and r.adjusted_close > 0 for r in records
+    )
+    return [r.adjusted_close if adjusted else r.close for r in records]
 def _sma(values: Sequence[float], window: int) -> float | None:
     if len(values) < window:
         return None
@@ -126,18 +127,8 @@ def _aligned_returns(
     asset_records: Sequence[StockMarketData],
     benchmark_records: Sequence[StockMarketData],
 ) -> tuple[list[float], list[float]]:
-    asset = {
-        r.observation_timestamp: (
-            r.adjusted_close if r.adjusted_close is not None else r.close
-        )
-        for r in asset_records
-    }
-    benchmark = {
-        r.observation_timestamp: (
-            r.adjusted_close if r.adjusted_close is not None else r.close
-        )
-        for r in benchmark_records
-    }
+    asset = {r.observation_timestamp: price for r, price in zip(asset_records, _prices(asset_records))}
+    benchmark = {r.observation_timestamp: price for r, price in zip(benchmark_records, _prices(benchmark_records))}
     timestamps = sorted(set(asset) & set(benchmark))
     asset_prices = [asset[t] for t in timestamps]
     benchmark_prices = [benchmark[t] for t in timestamps]
@@ -199,16 +190,8 @@ def compute_quant_features(
     latest_log_return = None
     if len(ordered) >= 2:
         previous = ordered[-2]
-        previous_price = (
-            previous.adjusted_close
-            if previous.adjusted_close is not None
-            else previous.close
-        )
-        current_price = (
-            latest.adjusted_close
-            if latest.adjusted_close is not None
-            else latest.close
-        )
+        previous_price = prices[-2]
+        current_price = prices[-1]
         time_delta = (
             latest.observation_timestamp
             - previous.observation_timestamp
@@ -237,17 +220,8 @@ def compute_quant_features(
     average_volume = (
         sum(r.volume for r in ordered[-20:]) / min(20, len(ordered))
     )
-    average_dollar_volume = (
-        sum(
-            (
-                r.adjusted_close
-                if r.adjusted_close is not None
-                else r.close
-            ) * r.volume
-            for r in ordered[-20:]
-        )
-        / min(20, len(ordered))
-    )
+    # Traded notional uses actual daily close, independent of return adjustments.
+    average_dollar_volume = sum(r.close * r.volume for r in ordered[-20:]) / min(20, len(ordered))
     return QuantFeatures(
         instrument_id=latest.instrument_id,
         ticker=latest.ticker,

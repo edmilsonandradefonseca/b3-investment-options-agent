@@ -10,6 +10,7 @@ class FakeLLM:
 
     def complete_json(self, *, instructions, input_text, schema_name, schema):
         self.calls.append({
+            "instructions": instructions,
             "schema_name": schema_name,
             "input": json.loads(input_text),
             "schema": schema,
@@ -86,3 +87,22 @@ def test_synthesis_receives_derived_intelligence_as_separate_context():
     assert payload["retrieved_evidence"] == [{"source_ref": "CVM:1"}]
     assert payload["derived_intelligence"]["local_evidence_dossier"]["status"] == "READY"
     assert "local_evidence_dossier" not in payload["deterministic_facts"]
+
+
+def test_synthesis_prompt_assigns_clear_roles_and_requires_decision_relevant_evidence():
+    llm = FakeLLM()
+    SynthesisAgent(llm).synthesize(
+        AgentContext(
+            request="Analyze PETR4",
+            deterministic_context={"market_analysis": {"price": 51.2}},
+            retrieved_evidence=({"source_ref": "research:PETR4"},),
+        )
+    )
+
+    instructions = llm.calls[0]["instructions"]
+    assert "serviços determinísticos B3 são a fonte de verdade" in instructions
+    assert "João Resolve e a pesquisa interpretam contexto" in instructions
+    assert "histórico pessoal apenas quando houver execuções/outcomes pertinentes" in instructions
+    assert "preço versus médias, RSI, MACD, volatilidade e drawdown" in instructions
+    assert "VALIDATED' ou 'PASS' descreve somente a validação recebida" in instructions
+    assert "dado específico ausente, por que importa" in instructions
