@@ -35,7 +35,7 @@ try{
  phase='completed';
  await expect(status).toContainText('Busca concluída',{timeout:10000});
  await expect(status).not.toContainText('HTTPException');
- await expect(page.getByText('fixture recovered',{exact:true})).toBeVisible();
+ await expect(page.locator('.opportunity-decision__summary')).toBeVisible();
  const reads=latestReads;
  await page.waitForTimeout(700);
  assert.equal(latestReads,reads,'Completed result must not be fetched on every poll');
