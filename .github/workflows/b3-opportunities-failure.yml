@@ -45,12 +45,16 @@ jobs:
                   tags=[tag for tag in ('connection refused','timed out','timeout','quota','rate limit','invalid','not configured','not found','unavailable','stale','ticker','assets','limit','yield','openclaw','schema','validation','permission','401','403','429','503') if tag in msg]
                   print('EXCEPTION',json.dumps({'type':type(exc).__name__,'status_code':getattr(exc,'status_code',None),'tags':tags,'frames':[{'file':Path(f.filename).name,'line':f.lineno,'function':f.name} for f in traceback.extract_tb(exc.__traceback__)]}),flush=True)
                   exc=exc.__cause__ or exc.__context__
-          try:
-              runpy.run_path('scripts/run_daily_opportunities.py',run_name='__main__')
-          except SystemExit as exc:
-              print('REVIEW_EXIT',exc.code,flush=True)
-              if exc.code: raise
-          except Exception as exc:
-              describe(exc)
-              raise SystemExit(1)
+          import re
+          for unit in ('b3-runtime.service','b3-opportunities-daily.service'):
+              journal=subprocess.run(['journalctl','-u',unit,'--since','2026-10-13 11:39:00','--until','2026-10-13 11:43:00','--no-pager','-o','cat'],text=True,capture_output=True,timeout=20)
+              safe=[]
+              for line in journal.stdout.splitlines():
+                  frame=re.search(r'File "[^"]*/([^/"]+)", line (\d+), in ([\w<>]+)',line)
+                  if frame: safe.append({'file':frame[1],'line':int(frame[2]),'function':frame[3]})
+                  if re.search(r'Exception|Error|Traceback|failed|refused|timeout',line,re.I):
+                      tags=[tag for tag in ('connection refused','timed out','timeout','quota','rate limit','invalid','not configured','not found','unavailable','stale','ticker','assets','limit','yield','openclaw','schema','validation','permission','401','403','429','503') if tag in line.lower()]
+                      types=re.findall(r'\b\w*(?:Exception|Error)\b',line)
+                      safe.append({'types':types,'tags':tags})
+              print('ORIGINAL_FAILURE_JOURNAL',json.dumps({'unit':unit,'returncode':journal.returncode,'diagnostics':safe}),flush=True)
           PY
