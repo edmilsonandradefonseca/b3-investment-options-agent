@@ -1,0 +1,56 @@
+name: B3 Opportunities failure diagnosis
+on:
+  pull_request:
+    paths: ['.github/workflows/b3-opportunities-failure.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: b3-opportunities-failure-diagnosis
+  cancel-in-progress: false
+jobs:
+  diagnose:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Diagnose installed daily review without exposing portfolio or credentials
+        run: |
+          cd /opt/b3-investment-options-agent
+          .venv/bin/python - <<'PY'
+          import json, os, subprocess, sys, traceback, runpy, socket
+          from pathlib import Path
+          pid = subprocess.check_output(['systemctl','show','b3-runtime.service','--property=MainPID','--value'],text=True).strip()
+          if pid.isdigit() and int(pid):
+              for entry in Path('/proc/'+pid+'/environ').read_bytes().split(b'\0'):
+                  if b'=' in entry:
+                      key,value=entry.split(b'=',1)
+                      if key.startswith((b'B3_',b'OPENCLAW_',b'OLLAMA_')):
+                          os.environ[key.decode()]=value.decode()
+          sys.path.insert(0,str(Path('src').resolve()))
+          from b3_agent.server import _opportunity_review_store
+          print('SAVED_STATUS',json.dumps(_opportunity_review_store().status()),flush=True)
+          for port in (8000,18789,11434,8093,6333,7687):
+              try:
+                  with socket.create_connection(('127.0.0.1',port),timeout=2): print('PORT',port,'OPEN',flush=True)
+              except OSError: print('PORT',port,'CLOSED',flush=True)
+          def describe(exc):
+              seen=set()
+              while exc is not None and id(exc) not in seen:
+                  seen.add(id(exc))
+                  msg=str(exc).lower()
+                  tags=[tag for tag in ('connection refused','timed out','timeout','quota','rate limit','invalid','not configured','not found','unavailable','stale','ticker','assets','limit','yield','openclaw','schema','validation','permission','401','403','429','503') if tag in msg]
+                  print('EXCEPTION',json.dumps({'type':type(exc).__name__,'status_code':getattr(exc,'status_code',None),'tags':tags,'frames':[{'file':Path(f.filename).name,'line':f.lineno,'function':f.name} for f in traceback.extract_tb(exc.__traceback__)]}),flush=True)
+                  exc=exc.__cause__ or exc.__context__
+          try:
+              runpy.run_path('scripts/run_daily_opportunities.py',run_name='__main__')
+          except SystemExit as exc:
+              print('REVIEW_EXIT',exc.code,flush=True)
+              if exc.code: raise
+          except Exception as exc:
+              describe(exc)
+              raise SystemExit(1)
+          PY
