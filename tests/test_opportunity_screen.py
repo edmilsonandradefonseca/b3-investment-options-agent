@@ -15,7 +15,10 @@ CUTOFF = datetime(2026,10,3,12,tzinfo=timezone.utc)
 def fixed_screen_clock(monkeypatch):
     # These market fixtures belong to October 2; wall-clock drift must not
     # silently turn the current-mode regression into a stale-quote test.
-    class FixtureDatetime(datetime):
+    class FixtureMeta(type):
+        def __instancecheck__(cls, value):
+            return isinstance(value, datetime)
+    class FixtureDatetime(datetime, metaclass=FixtureMeta):
         @classmethod
         def now(cls, tz=None):
             return CUTOFF.astimezone(tz) if tz else CUTOFF.replace(tzinfo=None)
