@@ -63,7 +63,7 @@ function isCompletedOpportunityReview(response:OrchestrateResponse|null|undefine
  return typeof screen.policy_version==='string'&&typeof scope.policy_version==='string'&&typeof narrative==='string';
 }
 export default function App(){
- const inspectionSequence=useRef(0), expectedHash=useRef<string|null>(null), opportunitySearchInFlight=useRef(false), opportunityAutoReviews=useRef(new Set<string>()), opportunityReviewSequence=useRef(0), connectionRef=useRef(false);
+ const inspectionSequence=useRef(0), expectedHash=useRef<string|null>(null), opportunitySearchInFlight=useRef(false), opportunityAutoReviews=useRef(new Set<string>()), opportunityReviewSequence=useRef(0), connectionRef=useRef(false), opportunitySyncedStatus=useRef('');
  const [copilotOpen,setCopilotOpen]=useState(true),[sidebarCollapsed,setSidebarCollapsed]=useState(false),[marketTab,setMarketTab]=useState('regime');
  const [researchMode,setResearchMode]=useState("stored_first");
  const [opportunityRun,setOpportunityRun]=useState<OpportunityRunState>({status:'idle',startedAt:null,finishedAt:null,sources:[],message:null});
@@ -269,26 +269,38 @@ export default function App(){
   }
  }
  useEffect(()=>{
-  if(page!=='Opportunities'||opportunityRun.status!=='running')return;
+  if(page!=='Opportunities')return;
   let cancelled=false;
   const poll=async()=>{
    try{
     const state=await b3Api.opportunityReviewStatus();
-    if(cancelled||state.status==='RUNNING'||state.status==='NOT_STARTED')return;
+    if(cancelled||opportunitySearchInFlight.current||state.status==='NOT_STARTED')return;
+    // Synchronize externally scheduled reviews even after a prior failure.
+    // An older saved result must never replace a newer manual search.
+    if(state.started_at&&opportunityRun.startedAt&&Date.parse(state.started_at)<Date.parse(opportunityRun.startedAt))return;
+    const signature=[state.run_id,state.status,state.finished_at].join('|');
+    if(opportunitySyncedStatus.current===signature)return;
+    if(state.status==='RUNNING'){
+     setOpportunityRun(previous=>({...previous,status:'running',startedAt:state.started_at,finishedAt:null,message:'A revisão diária está em andamento; acompanhando a mesma execução.'}));
+     opportunitySyncedStatus.current=signature;
+     return;
+    }
     if(state.status==='COMPLETED'){
      const latest=await b3Api.latestOpportunityReview();
-     if(cancelled)return;
+     if(cancelled||opportunitySearchInFlight.current||latest.run_id!==state.run_id)return;
+     if(!latest.response?.result)return;
      if(latest.response?.result)setWorkspaceResults(previous=>({...previous,Opportunities:latest.response}));
      setOpportunityRun(previous=>({...previous,status:'complete',startedAt:state.started_at,finishedAt:state.finished_at,sources:latest.response?.sources??previous.sources,message:null}));
     }else if(state.status==='FAILED'){
      setOpportunityRun(previous=>({...previous,status:'error',startedAt:state.started_at,finishedAt:state.finished_at,message:`A revisão falhou: ${state.error||'erro não informado'}. O último resultado válido foi preservado.`}));
     }
+    opportunitySyncedStatus.current=signature;
    }catch{/* Keep showing the last known status during a temporary API interruption. */}
   };
-  const timer=window.setInterval(()=>{void poll()},5000);
+  const timer=window.setInterval(()=>{void poll()},opportunityRun.status==='running'?5000:15000);
   void poll();
   return()=>{cancelled=true;window.clearInterval(timer)};
- },[page,opportunityRun.status]);
+ },[page,opportunityRun.status,opportunityRun.startedAt]);
  function openInStrategyLab(response:OrchestrateResponse|null=null){
   ++inspectionSequence.current;
   navigate('Strategy Lab');setBusy(false);setNotice('');

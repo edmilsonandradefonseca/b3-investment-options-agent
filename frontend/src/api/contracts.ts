@@ -52,6 +52,7 @@ export type OpportunityReviewStatus = {
 };
 
 export type OpportunityReviewLatest = {
+  run_id?: string | null;
   status: "AVAILABLE" | "NOT_AVAILABLE";
   generated_at: string | null;
   response: OrchestrateResponse | null;

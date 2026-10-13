@@ -1,0 +1,31 @@
+name: B3 Opportunities frontend recovery regression
+on:
+  push:
+    branches: [feature/react-functional-v43-integration]
+    paths: ['frontend/src/App.tsx', 'frontend/src/api/contracts.ts', 'frontend/scripts/check-opportunity-recovery.mjs', '.github/workflows/b3-opportunities-recovery.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fixture-recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps --only-shell chromium
+      - name: Verify stale failure recovery without another analysis
+        run: |
+          python3 -m http.server 4173 --directory dist > /tmp/b3-opportunities-ui.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          node scripts/check-opportunity-recovery.mjs
