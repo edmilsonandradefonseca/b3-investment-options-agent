@@ -6,6 +6,10 @@ on:
       - docs/FRONTEND_DECISION_WORKSPACES_SPEC_V1.2.md
       - scripts/audit_v44_runtime.py
       - .github/workflows/b3-v44-review.yml
+  pull_request:
+    paths:
+      - scripts/audit_v44_runtime.py
+      - .github/workflows/b3-v44-review.yml
   workflow_dispatch:
 permissions:
   contents: read
@@ -14,9 +18,12 @@ concurrency:
   cancel-in-progress: false
 jobs:
   runtime:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, Linux, X64]
-    timeout-minutes: 5
+    timeout-minutes: 7
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Identify active runtime and public data contracts
         run: python3 scripts/audit_v44_runtime.py
