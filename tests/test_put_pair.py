@@ -19,9 +19,16 @@ def compare(provider=None,**kwargs):
     return service(provider).compare(assets=('WEGE3','WEGE3'),strategies=('Vender PUT','Vender PUT'),option_ids=('WEGEV500','WEGEV490'),**kwargs)
 
 
-def test_different_expiries_keep_own_horizon_and_distinguish_risk_models():
-    # The fake spot is dated October 1; evaluate it at the fixture cutoff.
-    result=compare(as_of=datetime(2026,10,3,12,tzinfo=timezone.utc))
+def test_different_expiries_keep_own_horizon_and_distinguish_risk_models(monkeypatch):
+    # This exercises the current-chain path, which deliberately forbids replay.
+    # Keep the fake spot fresh rather than weakening the production PIT gate.
+    original = FakeCurrentQuoteProvider.get_current_quote
+    def fresh_spot(self, ticker):
+        observed = datetime.now(timezone.utc) - timedelta(minutes=1)
+        return replace(original(self, ticker), observation_timestamp=observed,
+                       available_timestamp=observed, ingested_at=observed)
+    monkeypatch.setattr(FakeCurrentQuoteProvider, 'get_current_quote', fresh_spot)
+    result=compare()
     pair=result['put_pair_comparison']
     assert pair['different_expiries'] and pair['ranking']=='NOT_REQUESTED'
     rows=pair['rows']
