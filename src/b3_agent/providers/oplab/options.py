@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
-import json
 import os
 import urllib.request
+
+from b3_agent.providers.http_retry import request_json
 
 from b3_agent.schemas.option import OptionContract, OptionQuote
 
@@ -33,8 +34,14 @@ class OplabOptionsAdapter:
                 "Accept": "application/json",
             },
         )
-        with urllib.request.urlopen(request, timeout=15) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        payload = request_json(
+            request,
+            provider="oplab",
+            timeout_env="B3_OPLAB_TIMEOUT_SECONDS",
+            default_timeout=30.0,
+            retry_http_codes={408, 425, 429, 500, 502, 503, 504},
+            opener=urllib.request.urlopen,
+        )
 
         if not isinstance(payload, list):
             raise ValueError(

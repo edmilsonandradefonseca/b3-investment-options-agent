@@ -21,7 +21,7 @@ from b3_agent.knowledge.neo4j_store import Neo4jKnowledgeGraphStore
 from b3_agent.knowledge.obsidian import ObsidianKnowledgeStore
 from b3_agent.knowledge.qdrant_store import QdrantVectorStore
 from b3_agent.knowledge.retrieval import ObsidianRetriever, VectorEvidenceRetriever
-from b3_agent.llm.client import OpenAIResponsesClient
+from b3_agent.llm.client import OpenAIResponsesClient, OpenClawStructuredClient
 from b3_agent.portfolio.snapshot import load_active_snapshots
 from b3_agent.schemas.opportunity import OpportunitySet
 from b3_agent.schemas.position import PortfolioContext
@@ -86,6 +86,31 @@ def _legacy_test_context(vault_path: Path):
     return retriever, graph, ObsidianMemoryManager(store, retriever, graph)
 
 
+def _build_llm_client():
+    provider = settings.llm_provider.strip().lower()
+
+    if provider == "openclaw":
+        return OpenClawStructuredClient(
+            agent=settings.openclaw_agent,
+            model=settings.openclaw_model,
+            timeout=settings.openclaw_timeout_seconds,
+            executable=settings.openclaw_bin,
+        )
+
+    if provider == "openai_api":
+        if not settings.allow_openai_api_fallback:
+            raise RuntimeError(
+                "Direct OpenAI API fallback is disabled; set "
+                "B3_ALLOW_OPENAI_API_FALLBACK=true to enable it explicitly"
+            )
+        return OpenAIResponsesClient(model=settings.llm_model)
+
+    raise RuntimeError(
+        f"Unsupported B3_AGENT_LLM_PROVIDER={settings.llm_provider!r}; "
+        "expected 'openclaw' or 'openai_api'"
+    )
+
+
 def configure_default_workflow(
     *,
     vault_path: Path | None = None,
@@ -95,13 +120,15 @@ def configure_default_workflow(
     """Compose and register the V4 production workflow.
 
     Production defaults to the shared 768d embedding service, the B3-owned
-    hybrid Qdrant collection and the Neo4j B3Entity namespace. vault_path is
-    retained only for deterministic legacy tests and is not a production path.
+    hybrid Qdrant collection and the Neo4j B3Entity namespace. Senior LLM
+    reasoning defaults to the isolated OpenClaw b3-investment agent. Direct
+    OpenAI API usage is an opt-in fallback only. vault_path is retained only
+    for deterministic legacy tests and is not a production path.
     """
     if not settings.llm_enabled:
         raise RuntimeError("B3_AGENT_LLM_ENABLED is false; cannot compose the reasoning workflow")
 
-    llm = OpenAIResponsesClient(model=settings.llm_model)
+    llm = _build_llm_client()
     memory_manager = None
     if vault_path is not None:
         retriever, graph, memory_manager = _legacy_test_context(vault_path)

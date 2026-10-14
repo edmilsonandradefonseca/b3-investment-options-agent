@@ -4,7 +4,9 @@ set -euo pipefail
 REPO="${B3_REPO:-/opt/b3-investment-options-agent}"
 SERVICE_USER="${SUDO_USER:-${USER}}"
 SERVICE_GROUP="$(id -gn "${SERVICE_USER}")"
-ENV_FILE="${B3_SHARED_PLATFORM_ENV:-/opt/joao-runtime/joao.env}"
+SHARED_ENV_FILE="${B3_SHARED_PLATFORM_ENV:-/opt/joao-runtime/joao.env}"
+RUNTIME_ENV_FILE="${B3_RUNTIME_ENV_FILE:-/etc/b3-runtime.env}"
+RUNTIME_ENV_FILE_2="${B3_RUNTIME_ENV_FILE_2:-/opt/b3-runtime/b3.env}"
 
 if [[ ! -x "${REPO}/.venv/bin/python" ]]; then
   echo "Missing Python virtualenv at ${REPO}/.venv/bin/python" >&2
@@ -25,7 +27,9 @@ WorkingDirectory=${REPO}
 Environment=B3_AGENT_PROJECT_ROOT=${REPO}
 Environment=B3_AGENT_TIMEZONE=America/Sao_Paulo
 Environment=B3_NIGHTLY_MAX_DEEPSEEK_CALLS=5
-EnvironmentFile=-${ENV_FILE}
+EnvironmentFile=-${SHARED_ENV_FILE}
+EnvironmentFile=-${RUNTIME_ENV_FILE}
+EnvironmentFile=-${RUNTIME_ENV_FILE_2}
 ExecStart=${REPO}/.venv/bin/python ${REPO}/scripts/run_nightly_intelligence.py
 Nice=10
 CPUWeight=20
@@ -52,6 +56,12 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now b3-nightly-intelligence.timer
 
 echo "===== B3 NIGHTLY TIMER INSTALLED ====="
+echo "shared env:  ${SHARED_ENV_FILE}"
+echo "runtime env: ${RUNTIME_ENV_FILE}"
+echo "runtime env2:${RUNTIME_ENV_FILE_2}"
 systemctl status b3-nightly-intelligence.timer --no-pager
 echo
 systemctl list-timers b3-nightly-intelligence.timer --no-pager
+echo
+echo "===== SERVICE ENV FILES ====="
+systemctl cat b3-nightly-intelligence.service --no-pager | grep -E 'Environment(File)?='

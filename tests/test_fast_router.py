@@ -37,3 +37,43 @@ def test_ambiguous_input_escalates_safely():
     d = FastRouter().route("o que você acha disso?")
     assert d.target == RouteTarget.OPENCLAW
     assert d.match == MatchClass.AMBIGUOUS
+
+
+def test_portfolio_dashboard_metadata_routes_exactly():
+    d = FastRouter().route(
+        "UC-01 Portfolio Intelligence",
+        metadata={"dashboard_page": "Portfolio", "use_cases": ["UC-01"]},
+    )
+    assert d.target == RouteTarget.PORTFOLIO_ENGINE
+    assert d.match == MatchClass.MATCH_EXACT
+
+
+def test_options_dashboard_metadata_routes_exactly():
+    d = FastRouter().route(
+        "UC-02 Options Position & Lifecycle Intelligence",
+        metadata={"dashboard_page": "Options", "use_cases": ["UC-02"]},
+    )
+    assert d.target == RouteTarget.OPTIONS_ENGINE
+    assert d.match == MatchClass.MATCH_EXACT
+
+
+def test_risk_dashboard_metadata_routes_exactly():
+    d = FastRouter().route(
+        "UC-11 Risk, Scenario & Stress Intelligence",
+        metadata={"dashboard_page": "Risk & Stress", "use_cases": ["UC-11"]},
+    )
+    assert d.target == RouteTarget.STRESS_ENGINE
+    assert d.match == MatchClass.MATCH_EXACT
+
+
+def test_complex_intent_wins_over_dashboard_metadata():
+    d = FastRouter().route(
+        "vale a pena vender PETR4 agora?",
+        metadata={"dashboard_page": "Portfolio", "use_cases": ["UC-01"]},
+    )
+    assert d.target == RouteTarget.OPENCLAW
+
+
+def test_estado_atual_da_carteira_routes_without_dashboard_metadata():
+    d = FastRouter().route("Resuma o estado atual da carteira")
+    assert d.target == RouteTarget.PORTFOLIO_ENGINE

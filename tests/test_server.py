@@ -130,3 +130,47 @@ def test_runtime_status_endpoint(monkeypatch, tmp_path: Path) -> None:
     assert body["health"] == "ok"
     assert body["resources"]["sqlite"] == "ok"
     assert body["services"]["qdrant"]["ownership"] == "shared_external"
+
+
+def test_orchestrate_fast_route_skips_llm_runtime(monkeypatch) -> None:
+    def fail_configure() -> None:
+        raise AssertionError("LLM runtime must not be configured for deterministic fast route")
+
+    def fail_orchestrator(*args, **kwargs):
+        raise AssertionError("senior LLM workflow must not run for deterministic fast route")
+
+    monkeypatch.setattr(
+        server,
+        "_dispatch_fast_route",
+        lambda request: OrchestratorResponse(
+            status="COMPLETED",
+            result={
+                "fast_route": {
+                    "target": "portfolio_engine",
+                    "use_case": "UC-01",
+                },
+                "portfolio_context": {"quality_status": "VALIDATED"},
+            },
+            sources=("BTG:Renda Variavel:Acoes",),
+            audit=({"event": "fast_router_dispatch"},),
+        ),
+    )
+    monkeypatch.setattr(server, "_configure_runtime", fail_configure)
+    monkeypatch.setattr(server, "b3_orchestrator", fail_orchestrator)
+
+    response = client.post(
+        "/orchestrate",
+        json={
+            "task": "Resuma o estado atual da carteira",
+            "context": {
+                "dashboard_page": "Portfolio",
+                "use_cases": ["UC-01"],
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "COMPLETED"
+    assert body["result"]["fast_route"]["target"] == "portfolio_engine"
+    assert body["audit"][0]["event"] == "fast_router_dispatch"

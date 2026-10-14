@@ -93,7 +93,9 @@ function App() {
         audit: [],
         error: errorMessage(error),
       });
-      setServerOnline(false);
+      // An HTTP error proves the backend is reachable. Only transport/fetch
+      // failures should mark the backend itself offline.
+      setServerOnline(error instanceof ApiError);
     } finally {
       setAsking(false);
     }

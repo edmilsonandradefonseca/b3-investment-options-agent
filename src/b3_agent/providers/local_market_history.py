@@ -5,6 +5,7 @@ from pathlib import Path
 
 from b3_agent.providers.brapi.adapter import BrapiAdapter
 from b3_agent.providers.brapi.cache import CachedBrapiAdapter
+from b3_agent.providers.http_retry import ProviderRequestError
 from b3_agent.repositories.market_data import MarketDataRepository
 from b3_agent.schemas.market import StockMarketData
 
@@ -68,7 +69,7 @@ class LocalFirstMarketDataAdapter:
             return
         try:
             remote = self.brapi.get_market_data(ticker, start, end)
-        except (OSError, ValueError):
+        except (OSError, ValueError, ProviderRequestError):
             # Preserve usable offline history during a provider outage or before
             # the first quote of a new session is published.
             return

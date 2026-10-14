@@ -1,4 +1,4 @@
-﻿from dataclasses import dataclass
+from dataclasses import dataclass
 from pathlib import Path
 import os
 
@@ -12,7 +12,13 @@ class Settings:
     logs_dir: Path
     obsidian_vault: Path | None
     llm_enabled: bool
+    llm_provider: str
     llm_model: str
+    openclaw_agent: str
+    openclaw_model: str
+    openclaw_timeout_seconds: float
+    openclaw_bin: str | None
+    allow_openai_api_fallback: bool
     max_llm_cost_usd: float
 
 
@@ -58,6 +64,8 @@ def load_settings() -> Settings:
         else None
     )
 
+    openclaw_bin = os.getenv("B3_OPENCLAW_BIN")
+
     return Settings(
         environment=os.getenv("B3_AGENT_ENV", "development"),
         timezone=os.getenv("B3_AGENT_TIMEZONE", "America/Sao_Paulo"),
@@ -66,7 +74,13 @@ def load_settings() -> Settings:
         logs_dir=logs_dir,
         obsidian_vault=obsidian_vault,
         llm_enabled=_get_bool("B3_AGENT_LLM_ENABLED", False),
+        llm_provider=os.getenv("B3_AGENT_LLM_PROVIDER", "openclaw"),
         llm_model=os.getenv("B3_AGENT_LLM_MODEL", "gpt-5.6-luna"),
+        openclaw_agent=os.getenv("B3_OPENCLAW_AGENT", "b3-investment"),
+        openclaw_model=os.getenv("B3_OPENCLAW_MODEL", "openai/gpt-5.6-luna"),
+        openclaw_timeout_seconds=_get_float("B3_OPENCLAW_TIMEOUT_SECONDS", 180.0),
+        openclaw_bin=openclaw_bin.strip() if openclaw_bin else None,
+        allow_openai_api_fallback=_get_bool("B3_ALLOW_OPENAI_API_FALLBACK", False),
         max_llm_cost_usd=_get_float(
             "B3_AGENT_MAX_LLM_COST_USD",
             1.00,
